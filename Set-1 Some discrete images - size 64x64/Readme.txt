@@ -1,1 +1,0 @@
-These images were created using the Dream3D software and are not to be distributed for any purpose.
