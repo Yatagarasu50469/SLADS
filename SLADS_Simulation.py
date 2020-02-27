@@ -1,20 +1,21 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
+# In[25]:
 
 
 #==================================================================
 #Program: SLADS_TensorFlow_Simulation
 #Author(s): David Helminiak
 #Date Created: 13 February 2019
-#Date Last Modified: March 2019
+#Date Last Modified: May 2019
 #Changelog: 0.1 - Combined Structure            - February 2019
 #           0.2 - Combined Train/Test           - February 2019
 #           0.3 - Gaussian CPU Multi-Threading  - February 2019
 #           0.4 - Restructuring of dir vars     - March 2019
 #           0.5 - Clearer code progress viz     - March 2019
 #           0.6 - Plotting Statistics           - March 2019
+#           0.61 - Initial/Var Mask Generation  - May 2019           
 #           0.7 - Line Scanning
 #           0.8 - .RAW usage
 #           0.9 - Continuous value prediction
@@ -25,7 +26,11 @@
 #ADDITIONAL NOTES:
 #==================================================================
 #Add Breakpoint anywhere in the program: 
-#from IPython.core.debugger import Tracer; Tracer()() 
+#Tracer()()
+#
+#For jupyter-notebook, resize cells to fit to length of window
+#from IPython.core.display import display, HTML
+#display(HTML("<style>.container {width:80% !important;}</style>"))
 #==================================================================
 #==================================================================
 
@@ -42,6 +47,7 @@ import matplotlib.pyplot as plt
 import multiprocessing
 import os
 import PIL
+import PIL.ImageOps  
 import math
 import glob
 import re
@@ -52,7 +58,9 @@ import shutil
 import time
 import warnings
 warnings.filterwarnings("ignore")
+from datetime import datetime
 from IPython import display
+from IPython.core.debugger import Tracer
 from joblib import Parallel, delayed
 from matplotlib.pyplot import figure
 from PIL import Image
@@ -63,12 +71,13 @@ from sklearn import linear_model
 from sklearn.utils import shuffle
 from sklearn.neighbors import NearestNeighbors
 from skimage.measure import compare_ssim
+from sobol import *
 from tqdm.auto import tqdm
 #from tensorflow import keras
 #==================================================================
 
 
-# In[ ]:
+# In[67]:
 
 
 #==================================================================
@@ -197,6 +206,7 @@ class simulationResults: #Object to hold local and global training information v
         self.mseAverageErrors = []
         self.ssimAverageErrors = []
         self.distortionAverageErrors = []
+        self.masks = []
     def saveErrorData(self, mseValue, ssimValue, distortValue): #Store training error information
         self.mseError = mseValue
         self.ssimError = ssimValue
@@ -205,6 +215,8 @@ class simulationResults: #Object to hold local and global training information v
         self.mseAverageErrors.append(mseAverageValue)
         self.ssimAverageErrors.append(ssimAverageValue)
         self.distortionAverageErrors.append(distortionAverageValue)
+    def saveMask(self, Mask): #Store reconstruction mask
+        self.masks.append(Mask)
         
 #Storage location for training information definition
 class TrainingInfo:
@@ -264,8 +276,7 @@ class UpdateERDParams:
 
 #Storage location for batch sampling parameters
 class BatchSamplingParams:
-    def initialize(self,Do,NumSamplesPerIter):
-        self.Do = Do
+    def initialize(self,NumSamplesPerIter):
         self.NumSamplesPerIter = NumSamplesPerIter
 
 #Storage object for image data
@@ -295,8 +306,8 @@ def generateGaussianKernel(sigma,WindowSize):
     Filter=np.ravel(FilterMat)
     return Filter
 
-def computeFullERD(MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType):
-
+def computeFullERD(MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfoObjecto,Resolution,ImageType):
+    
     NeighborValues,NeighborWeights,NeighborDistances = FindNeighbors(TrainingInfoObject,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Resolution)
 
     ReconValues,ReconImage = ComputeRecons(TrainingInfoObject,NeighborValues,NeighborWeights,SizeImage,UnMeasuredIdxs,MeasuredIdxs,MeasuredValues)
@@ -320,11 +331,8 @@ def updateERD(Mask,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Theta,SizeImage,Tr
     updateRadiusMat = np.zeros((SizeImage[0],SizeImage[1]))
     Done=0
     while(Done==0):
-        if BatchSamplingParamsObject.Do == 'N':
-            updateRadiusMat[max(NewIdxs[0]-UpdateRadius,0):min(NewIdxs[0]+UpdateRadius,SizeImage[0])][:,max(NewIdxs[1]-UpdateRadius,0):min(NewIdxs[1]+UpdateRadius,SizeImage[1])]=1
-        else:
-            for b in range(0,BatchSamplingParamsObject.NumSamplesPerIter):
-                updateRadiusMat[max(NewIdxs[b][0]-UpdateRadius,0):min(NewIdxs[b][0]+UpdateRadius,SizeImage[0])][:,max(NewIdxs[b][1]-UpdateRadius,0):min(NewIdxs[b][1]+UpdateRadius,SizeImage[1])]=1
+        for b in range(0,BatchSamplingParamsObject.NumSamplesPerIter):
+            updateRadiusMat[max(NewIdxs[b][0]-UpdateRadius,0):min(NewIdxs[b][0]+UpdateRadius,SizeImage[0])][:,max(NewIdxs[b][1]-UpdateRadius,0):min(NewIdxs[b][1]+UpdateRadius,SizeImage[1])]=1
     
         updateIdxs = np.where(updateRadiusMat[Mask==0]==1)
         
@@ -349,8 +357,7 @@ def updateERD(Mask,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Theta,SizeImage,Tr
 
     # Compute ERD
     SmallERDValues = SmallPolyFeatures.dot(Theta)
-
-    ReconValues[updateIdxs] = SmallReconValues
+    ReconValues[updateIdxs[0]] = SmallReconValues
     ERDValues[updateIdxs] = SmallERDValues
 
     return(ERDValues,ReconValues)
@@ -466,7 +473,7 @@ def computePolyFeatures(Feature):
 
     return PolyFeatures
 
-def performSLADStoFindC(codePath,trainingDataPath,ImageSet,ImageType,ImageExtension,TrainingInfoObject,SizeImage,StopPercentage,Resolution,c_vec,UpdateERDParamsObject,InitialMaskObject,MaskType,reconPercVector,Classify,directImagePath,consoleRows,cPlot,savePlotLocation):
+def performSLADStoFindC(codePath,trainingDataPath,ImageSet,ImageType,ImageExtension,TrainingInfoObject,SizeImage,StopPercentage,Resolution,c_vec,UpdateERDParamsObject,InitialMaskObject,MaskType,reconPercVector,Classify,directImagePath,consoleRows,cPlot,savePlotLocation,lineScanning,BatchSamplingParamsObject):
     sys.path.append('code')
     SimulationRun = 0
     
@@ -478,15 +485,6 @@ def performSLADStoFindC(codePath,trainingDataPath,ImageSet,ImageType,ImageExtens
     SavePathSLADS = trainingDataPath + 'SLADSResults' 
     PlotResult = 'N'
 
-    # Batch Sampling
-    PercOfSamplesPerIter = 0
-    NumSamplesPerIter = int(PercOfSamplesPerIter*SizeImage[0]*SizeImage[1]/100)
-    BatchSample = 'N'
-    BatchSamplingParamsObject = BatchSamplingParams()
-    if BatchSample=='N':
-        BatchSamplingParamsObject.initialize(BatchSample,1)
-    else:
-        BatchSamplingParamsObject.initialize(BatchSample,NumSamplesPerIter)
 
     if not os.path.exists(SavePathSLADS):
         os.makedirs(SavePathSLADS)
@@ -495,8 +493,8 @@ def performSLADStoFindC(codePath,trainingDataPath,ImageSet,ImageType,ImageExtens
     Idx_c = 0
     
     loadPathImage = trainingDataPath + 'Images' + os.path.sep
-    loadPathInitialMask = resultsDataPath + 'InitialSamplingMasks' # Load initial measurement mask
-    Mask = loadOrGenerateInitialMask(loadPathInitialMask,MaskType,InitialMaskObject,SizeImage)
+    loadPathInitialMask = resultsDataPath + 'InitialSamplingMasks'
+    Mask = loadOrGenerateInitialMask(loadPathInitialMask,MaskType,InitialMaskObject,SizeImage,lineScanning)
     imageNames = glob.glob(loadPathImage + '*' + ImageExtension)
     NumImages = np.size(imageNames)
     AvgTDArr = []
@@ -518,7 +516,7 @@ def performSLADStoFindC(codePath,trainingDataPath,ImageSet,ImageType,ImageExtens
 
             SavePath = SavePathSLADS + os.path.sep + 'Image_' + str(ImNum) + '_c_'+ str(c) + os.path.sep
             isRunningParallel = True
-            runSLADSSimulationOnce(NumImages,Mask,codePath,ImageSet,SizeImage,StopCondParamsObject,Theta,TrainingInfoObject,TestingInfoObject,Resolution,ImageType,UpdateERDParamsObject,BatchSamplingParamsObject,SavePath,SimulationRun,ImNum,ImageExtension,PlotResult,Classify,directImagePath,falseFlag,isRunningParallel)
+            runSLADSSimulationOnce(NumImages,Mask,codePath,ImageSet,SizeImage,StopCondParamsObject,Theta,TrainingInfoObject,TestingInfoObject,Resolution,ImageType,UpdateERDParamsObject,BatchSamplingParamsObject,SavePath,SimulationRun,ImNum,ImageExtension,PlotResult,Classify,directImagePath,falseFlag,isRunningParallel,lineScanning)
             
             MeasuredValuesFull=np.load(SavePath + 'MeasuredValues.npy')
             MeasuredIdxsFull=np.load(SavePath + 'MeasuredIdxs.npy')
@@ -597,12 +595,14 @@ def performSLADStoFindC(codePath,trainingDataPath,ImageSet,ImageType,ImageExtens
     return Best_c, NumImages
 
 
-def runSLADSSimulationOnce(NumImages,Mask,codePath,ImageSet,SizeImage,StopCondParamsObject,Theta,TrainingInfoObject,TestingInfoObject,Resolution,ImageType,UpdateERDParamsObject,BatchSamplingParamsObject,SavePath,SimulationRun,ImNum,ImageExtension,PlotResult,Classify,directImagePath,errorPlot,isRunningParallel):
+def runSLADSSimulationOnce(NumImages,Mask,codePath,ImageSet,SizeImage,StopCondParamsObject,Theta,TrainingInfoObject,TestingInfoObject,Resolution,ImageType,UpdateERDParamsObject,BatchSamplingParamsObject,SavePath,SimulationRun,ImNum,ImageExtension,PlotResult,Classify,directImagePath,errorPlot,isRunningParallel,lineScanning):
     sys.path.append('code')
     MeasuredIdxs = np.transpose(np.where(Mask==1))
     UnMeasuredIdxs = np.transpose(np.where(Mask==0))
 
-    ContinuousMeasuredValues = perfromInitialMeasurements(codePath,ImageSet,ImNum,ImageExtension,Mask,SimulationRun,directImagePath)
+    ContinuousMeasuredValues = performInitialMeasurements(codePath,ImageSet,ImNum,ImageExtension,Mask,SimulationRun,directImagePath)
+    if (len(ContinuousMeasuredValues) == 0):
+        sys.exit('Error!!! No values were returned from initial measurements.')
     if Classify=='2C':
         Threshold = filters.threshold_otsu(ContinuousMeasuredValues)
         print('Threhold found using the Otsu method for 2 Class classification = ' + str(Threshold))
@@ -623,10 +623,10 @@ def runSLADSSimulationOnce(NumImages,Mask,codePath,ImageSet,SizeImage,StopCondPa
     with tqdm(total = 100, desc = '% Sampled', leave = True, disable = isRunningParallel) as pbar:
         while (checkStopCondFuncThreshold(StopCondParamsObject,StopCondFuncVal,NumSamples,IterNum,SizeImage) != 1):
             if IterNum==0:
-                Mask,MeasuredValues,ERDValues,ReconValues,ReconImage,NewIdxs,MaxIdxsVect=updateERDandFindNewLocationFirst(Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,NumSamples,UpdateERDParamsObject,BatchSamplingParamsObject)           
+                Mask,MeasuredValues,ERDValues,ReconValues,ReconImage,NewIdxs,MaxIdxsVect=updateERDandFindNewLocationFirst(Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,NumSamples,UpdateERDParamsObject,BatchSamplingParamsObject,lineScanning) 
             else:
-                Mask,MeasuredValues,ERDValues,ReconValues,ReconImage,NewIdxs,MaxIdxsVect=updateERDandFindNewLocationAfter(Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,UpdateERDParamsObject,BatchSamplingParamsObject,StopCondFuncVal,IterNum,NumSamples,NewIdxs,ReconValues,ReconImage,ERDValues,MaxIdxsVect)
-
+                Mask,MeasuredValues,ERDValues,ReconValues,ReconImage,NewIdxs,MaxIdxsVect=updateERDandFindNewLocationAfter(Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,UpdateERDParamsObject,BatchSamplingParamsObject,StopCondFuncVal,IterNum,NumSamples,NewIdxs,ReconValues,ReconImage,ERDValues,MaxIdxsVect,lineScanning)
+                
             NewContinuousValues = performMeasurements(NewIdxs,codePath,ImageSet,ImNum,ImageExtension,MeasuredIdxs,BatchSamplingParamsObject,SimulationRun,directImagePath)
             ContinuousMeasuredValues = np.hstack((ContinuousMeasuredValues,NewContinuousValues))
             if Classify=='2C':           
@@ -638,11 +638,11 @@ def runSLADSSimulationOnce(NumImages,Mask,codePath,ImageSet,SizeImage,StopCondPa
             elif Classify=='N':
                 NewValues=NewContinuousValues    
 
-            Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs = updateMeasurementArrays(NewIdxs,MaxIdxsVect,Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,NewValues,BatchSamplingParamsObject)
+            Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs = updateMeasurementArrays(NewIdxs,MaxIdxsVect,Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,NewValues,BatchSamplingParamsObject,SizeImage,lineScanning)
 
             NumSamples = np.shape(MeasuredValues)[0]
 
-            StopCondFuncVal=computeStopCondFuncVal(ReconValues,MeasuredValues,StopCondParamsObject,ImageType,StopCondFuncVal,MaxIdxsVect,NumSamples,IterNum,BatchSamplingParamsObject)
+            StopCondFuncVal=computeStopCondFuncVal(ReconValues,MeasuredValues,StopCondParamsObject,ImageType,StopCondFuncVal,MaxIdxsVect,NumSamples,IterNum,BatchSamplingParamsObject,lineScanning,SizeImage)
 
             #if PlotResult=='Y' and np.remainder(NumSamples,round(0.01*SizeImage[0]*SizeImage[1])) ==0:
                 #print(str(np.round(NumSamples*100/(SizeImage[0]*SizeImage[1]))) + ' Percent Sampled')
@@ -661,7 +661,7 @@ def runSLADSSimulationOnce(NumImages,Mask,codePath,ImageSet,SizeImage,StopCondPa
         savemat(SavePath + 'ContinuousMeasuredValues.mat',dict(ContinuousMeasuredValues=ContinuousMeasuredValues))
 
         if errorPlot or (PlotResult=='Y'):
-            percentSampled = np.round(NumSamples*100/(SizeImage[0]*SizeImage[1]))
+            percentSampled = NumSamples*100/(SizeImage[0]*SizeImage[1])
             Difference,ReconImage = performReconOnce(SavePath,TrainingInfoObject,Resolution,SizeImage,ImageType,codePath,ImageSet,ImNum,ImageExtension,SimulationRun,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,directImagePath)
             TD = Difference/(SizeImage[0]*SizeImage[1])
             if (SimulationRun==1):
@@ -679,8 +679,10 @@ def runSLADSSimulationOnce(NumImages,Mask,codePath,ImageSet,SizeImage,StopCondPa
 
             if errorPlot:
                 resultObject = simulationResults()
+                resultObject.initialize()
                 resultObject.saveErrorData(MSE, SSIM, TD) #Store resulting error information
- 
+                resultObject.saveMask(Mask) #Store the sampled mask
+                 
             if PlotResult=='Y': 
                 #Set plot formatting
                 font = {'size' : 18}
@@ -756,11 +758,10 @@ def runSLADSOnce(Mask,codePath,SizeImage,StopCondParamsObject,Theta,TrainingInfo
             NewValues=NewContinuousValues    
 
 
-        Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs = updateMeasurementArrays(NewIdxs,MaxIdxsVect,Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,NewValues,BatchSamplingParamsObject)
     
         NumSamples = np.shape(MeasuredValues)[0]
     
-        StopCondFuncVal=computeStopCondFuncVal(ReconValues,MeasuredValues,StopCondParamsObject,ImageType,StopCondFuncVal,MaxIdxsVect,NumSamples,IterNum,BatchSamplingParamsObject)
+        StopCondFuncVal=computeStopCondFuncVal(ReconValues,MeasuredValues,StopCondParamsObject,ImageType,StopCondFuncVal,MaxIdxsVect,NumSamples,IterNum,BatchSamplingParamsObject,lineScanning,SizeImage)
             
         Stop = checkStopCondFuncThreshold(StopCondParamsObject,StopCondFuncVal,NumSamples,IterNum,SizeImage)
         if PlotResult=='Y' and np.remainder(NumSamples,round(0.01*SizeImage[0]*SizeImage[1])) ==0:
@@ -786,7 +787,7 @@ def runSLADSOnce(Mask,codePath,SizeImage,StopCondParamsObject,Theta,TrainingInfo
     sys.path.pop() #Hopefully remove the 'sys.path.append('code') flag at the top of this definition
 
 
-def perfromInitialMeasurements(codePath,ImageSet,ImNum,ImageExtension,Mask,SimulationRun,directImagePath):
+def performInitialMeasurements(codePath,ImageSet,ImNum,ImageExtension,Mask,SimulationRun,directImagePath):
 
     if (SimulationRun==1):
         Img = misc.imread(directImagePath)
@@ -802,56 +803,50 @@ def performMeasurements(NewIdxs,codePath,ImageSet,ImNum,ImageExtension,MeasuredI
         Img=misc.imread(directImagePath)
     else: 
         Img = loadTestImage(codePath,ImageSet,ImNum,ImageExtension,SimulationRun)
-    if BatchSamplingParamsObject.Do == 'N':
-        NewValues = Img[NewIdxs[0],NewIdxs[1]]
-    else:
-        NewValues = Img[NewIdxs[:,0],NewIdxs[:,1]]
+    NewValues = Img[NewIdxs[:,0],NewIdxs[:,1]]
     return NewValues
 
-def updateMeasurementArrays(NewIdxs,MaxIdxsVect,Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,NewValues,BatchSamplingParamsObject):
-    
-    if BatchSamplingParamsObject.Do == 'N':
-        Mask[NewIdxs[0],NewIdxs[1]]=1
-        MeasuredValues = np.hstack((MeasuredValues,NewValues))
-        MeasuredIdxs = np.vstack((MeasuredIdxs,[NewIdxs[0],NewIdxs[1]]))
-        UnMeasuredIdxs = np.delete(UnMeasuredIdxs,(MaxIdxsVect), axis=0)
-    else:
+def updateMeasurementArrays(NewIdxs,MaxIdxsVect,Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,NewValues,BatchSamplingParamsObject,SizeImage,lineScanning):
+    if not lineScanning:
         for i in range(0,BatchSamplingParamsObject.NumSamplesPerIter):
             Mask[NewIdxs[i,0],NewIdxs[i,1]]=1
-        MeasuredValues = np.hstack((MeasuredValues,NewValues))
-        MeasuredIdxs = np.vstack((MeasuredIdxs,NewIdxs))
-        UnMeasuredIdxs = np.delete(UnMeasuredIdxs,(MaxIdxsVect), axis=0)
+    else:
+        for i in range(0,BatchSamplingParamsObject.NumSamplesPerIter*SizeImage[0]):
+            Mask[NewIdxs[i,0],NewIdxs[i,1]]=1
+    MeasuredValues = np.hstack((MeasuredValues,NewValues))
+    MeasuredIdxs = np.vstack((MeasuredIdxs,NewIdxs))
+    UnMeasuredIdxs = np.delete(UnMeasuredIdxs,(MaxIdxsVect), axis=0)
     return(Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs)
 
-def findNewMeasurementIdxs(Mask,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,NumSamples,UpdateERDParamsObject,ReconValues,ReconImage,ERDValues,ActualBatchSamplingParams):
-    
-    if ActualBatchSamplingParams.Do == 'N':
-        MaxIdxsVect = np.argmax(ERDValues)
-        NewIdxs = UnMeasuredIdxs[MaxIdxsVect,:]
-    else:
-        NewIdxs = np.zeros((ActualBatchSamplingParams.NumSamplesPerIter,2),dtype=np.int)
-        MaxIdxsVect = np.zeros((ActualBatchSamplingParams.NumSamplesPerIter,1),dtype=np.int)
-        MaxIdxsVect[0] = np.argmax(ERDValues)
-        NewIdxs[0,:] = UnMeasuredIdxs[MaxIdxsVect[0],:]
-        
-        TempNewIdxs = np.zeros((ActualBatchSamplingParams.NumSamplesPerIter,2),dtype=np.int)
-        TempMaxIdxsVect = np.zeros((ActualBatchSamplingParams.NumSamplesPerIter,1),dtype=np.int)
-        TempMaxIdxsVect[0] = np.argmax(ERDValues)
-        TempNewIdxs[0,:] = UnMeasuredIdxs[MaxIdxsVect[0],:]
-        
-        TempBatchSamplingParams = BatchSamplingParams()
-        TempBatchSamplingParams.initialize('N',1)
-        OrigUnMeasuredIdxs=np.zeros((np.shape(UnMeasuredIdxs)))
-        np.copyto(OrigUnMeasuredIdxs,UnMeasuredIdxs)                
-        for i in range(1,ActualBatchSamplingParams.NumSamplesPerIter):
-            NewValues = ReconValues[TempMaxIdxsVect[i-1]]
-            Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs = updateMeasurementArrays(TempNewIdxs[i-1,:],TempMaxIdxsVect[i-1],Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,NewValues,TempBatchSamplingParams)
-            
-            ERDValues,ReconValues=updateERD(Mask,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,TempNewIdxs[i-1,:],NumSamples,UpdateERDParamsObject,ReconValues,ReconImage,ERDValues,TempMaxIdxsVect[i-1],TempBatchSamplingParams)
-            TempMaxIdxsVect[i] = np.argmax(ERDValues)
-            TempNewIdxs[i,:] = UnMeasuredIdxs[TempMaxIdxsVect[i],:]
-            NewIdxs[i,:] = TempNewIdxs[i,:]
-            MaxIdxsVect[i]=np.where(np.all(OrigUnMeasuredIdxs==TempNewIdxs[i,:],axis=1))
+def findNewMeasurementIdxs(Mask,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,NumSamples,UpdateERDParamsObject,ReconValues,ReconImage,ERDValues,BatchSamplingParams,lineScanning):
+    #Always performing batch sampling even if it is just a value of 1!
+    if not lineScanning:
+        NewIdxs = []
+        MaxIdxsVect = []
+        for i in range(0,BatchSamplingParams.NumSamplesPerIter): #For the number of pixels to sample
+            MaxIdxValue = np.nanargmax(ERDValues) #Choose the maximal ERD pixel
+            ERDValues[MaxIdxValue] = np.nan #Remove the value from future consideration
+            NewIdxs.append(UnMeasuredIdxs[MaxIdxValue].tolist()) #Add the positions to scan to the list
+            MaxIdxsVect.append(MaxIdxValue)
+    else: #lineScanning
+        ERDValuesNP = np.empty([SizeImage[0],SizeImage[1]])
+        ERDValuesNP[:] = np.nan
+        for i in range(0, len(UnMeasuredIdxs)): 
+            ERDValuesNP[UnMeasuredIdxs[i][0], UnMeasuredIdxs[i][1]] = ERDValues[i]
+        rowToScanIdx = np.nanargmax(np.sum(ERDValuesNP,axis=1)) #Choose the row with the greatest ERD, ignore nan rows
+        MaxIdxsVect = []
+        NewIdxs = []
+        for i in range(0,SizeImage[1]): 
+            NewIdxs.append([rowToScanIdx, i])
+        for i in range(0, len(UnMeasuredIdxs)):
+            for j in range(0, len(NewIdxs)):
+                arr = NewIdxs[j]
+                if arr == UnMeasuredIdxs[i].tolist():
+                    MaxIdxsVect.append(i)
+        #for i in range(0,SizeImage[1]):
+            #MaxIdxsVect.append((rowToScanIdx*SizeImage[0])+i)
+    NewIdxs = np.asarray(NewIdxs)
+    MaxIdxsVect = np.asarray(MaxIdxsVect)
     return(NewIdxs,MaxIdxsVect)
 
 def loadTestImage(codePath,ImageSet,ImNum,ImageExtension,SimulationRun):
@@ -879,37 +874,34 @@ def loadTestImage(codePath,ImageSet,ImNum,ImageExtension,SimulationRun):
         sys.exit('Error!!! There are no images in ' + loadPathImage + ' that have the extention ' + ImageExtension)
     return Img
 
-def loadOrGenerateInitialMask(loadPathInitialMask,MaskType,InitialMaskObject,SizeImage):
-    if MaskType=='H':
-        StartingMeasurementMask=InitialMaskObject.MaskType + '_' + str(InitialMaskObject.MaskNumber) + '_' + str(InitialMaskObject.RowSz) + '_' + str(InitialMaskObject.ColSz) + '_Percentage_' + str(InitialMaskObject.Percentage);
-        loadPathInitialMask = loadPathInitialMask + os.path.sep + StartingMeasurementMask                                                               
-        if not os.path.exists(loadPathInitialMask):                                                                                                                          
-            sys.exit('Error!!! Check foder .ResultsAndData/InitialSamplingMasks/ for folder ' + loadPathInitialMask)                                                            
-        Mask = np.load(loadPathInitialMask + os.path.sep + 'SampleMatrix.npy')
-    else:
-        Mask = generateInitialMask(InitialMaskObject,SizeImage)
+def loadOrGenerateInitialMask(loadPathInitialMask,MaskType,InitialMaskObject,SizeImage,lineScanning):
+    StartingMeasurementMask=InitialMaskObject.MaskType + '_' + str(InitialMaskObject.MaskNumber) + '_' + str(InitialMaskObject.RowSz) + '_' + str(InitialMaskObject.ColSz) + '_Percentage_' + str(InitialMaskObject.Percentage) + '_lineScanning_' + str(lineScanning)
+    loadPathInitialMask = loadPathInitialMask + os.path.sep + StartingMeasurementMask
+    if not os.path.exists(loadPathInitialMask):
+        os.mkdir(loadPathInitialMask)
+        Mask = generateInitialMask(InitialMaskObject,SizeImage,lineScanning)
+        np.save(loadPathInitialMask + os.path.sep + 'InitialMask.npy', Mask)
+    Mask = np.load(loadPathInitialMask + os.path.sep + 'InitialMask.npy')                                                         
     return Mask
 
-def computeStopCondFuncVal(ReconValues,MeasuredValues,StopCondParamsObject,ImageType,StopCondFuncVal,MaxIdxsVect,NumSamples,IterNum,BatchSamplingParamsObject):
-    
-    if BatchSamplingParamsObject.Do=='N':
-        Diff=computeDifference(ReconValues[MaxIdxsVect],MeasuredValues[NumSamples-1],ImageType)
-        if IterNum == 0:
-            StopCondFuncVal[IterNum,0] = StopCondParamsObject.Beta*Diff
-        else:
-            StopCondFuncVal[IterNum,0] = ((1-StopCondParamsObject.Beta)*StopCondFuncVal[IterNum-1,0] + StopCondParamsObject.Beta*Diff)
-        StopCondFuncVal[IterNum,1] = NumSamples
-    
+def computeStopCondFuncVal(ReconValues,MeasuredValues,StopCondParamsObject,ImageType,StopCondFuncVal,MaxIdxsVect,NumSamples,IterNum,BatchSamplingParamsObject,lineScanning,SizeImage):  
+    Diff = 0
+    if not lineScanning:
+        samplesHere = BatchSamplingParamsObject.NumSamplesPerIter
+        for i in range(0,samplesHere):
+            Diff=computeDifference(ReconValues[MaxIdxsVect[i]],MeasuredValues[NumSamples-1-(samplesHere-i-1)],ImageType)+Diff
     else:
-        Diff=0
-        for i in range(0,BatchSamplingParamsObject.NumSamplesPerIter):
-            Diff=computeDifference(ReconValues[MaxIdxsVect[i]],MeasuredValues[NumSamples-1-(BatchSamplingParamsObject.NumSamplesPerIter-i-1)],ImageType)+Diff
-        Diff = Diff/BatchSamplingParamsObject.NumSamplesPerIter
-        if IterNum == 0:
-            StopCondFuncVal[IterNum,0] = StopCondParamsObject.Beta*Diff
-        else:
-            StopCondFuncVal[IterNum,0] = ((1-StopCondParamsObject.Beta)*StopCondFuncVal[IterNum-1,0] + StopCondParamsObject.Beta*Diff)
-        StopCondFuncVal[IterNum,1] = NumSamples
+        samplesHere = SizeImage[0]
+        for i in range(0,samplesHere-1):
+            a = ReconValues[MaxIdxsVect[i]]
+            b = MeasuredValues[NumSamples-1-(samplesHere-i-1)]
+            Diff=computeDifference(a,b,ImageType)+Diff      
+    Diff = Diff/BatchSamplingParamsObject.NumSamplesPerIter
+    if IterNum == 0:
+        StopCondFuncVal[IterNum,0] = StopCondParamsObject.Beta*Diff
+    else:
+        StopCondFuncVal[IterNum,0] = ((1-StopCondParamsObject.Beta)*StopCondFuncVal[IterNum-1,0] + StopCondParamsObject.Beta*Diff)
+    StopCondFuncVal[IterNum,1] = NumSamples
     return StopCondFuncVal
 
 def checkStopCondFuncThreshold(StopCondParamsObject,StopCondFuncVal,NumSamples,IterNum,SizeImage):
@@ -941,23 +933,23 @@ def computeBeta(SizeImage):
         Beta = 0.001/(((math.log(SizeImage[0]*SizeImage[1],2)-18)/2)+1)
     return Beta     
 
-def updateERDandFindNewLocationFirst(Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,NumSamples,UpdateERDParamsObject,BatchSamplingParamsObject):
-
+def updateERDandFindNewLocationFirst(Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,NumSamples,UpdateERDParamsObject,BatchSamplingParamsObject,lineScanning):
+    
     ERDValues,ReconValues,ReconImage = computeFullERD(MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType)
 
-    NewIdxs,MaxIdxsVect = findNewMeasurementIdxs(Mask,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,NumSamples,UpdateERDParamsObject,ReconValues,ReconImage,ERDValues,BatchSamplingParamsObject)
+    NewIdxs,MaxIdxsVect = findNewMeasurementIdxs(Mask,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,NumSamples,UpdateERDParamsObject,ReconValues,ReconImage,ERDValues,BatchSamplingParamsObject,lineScanning)
 
     return(Mask,MeasuredValues,ERDValues,ReconValues,ReconImage,NewIdxs,MaxIdxsVect)
 
 
-def updateERDandFindNewLocationAfter(Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,UpdateERDParamsObject,BatchSamplingParamsObject,StopCondFuncVal,IterNum,NumSamples,NewIdxs,ReconValues,ReconImage,ERDValues,MaxIdxsVect):
+def updateERDandFindNewLocationAfter(Mask,MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,UpdateERDParamsObject,BatchSamplingParamsObject,StopCondFuncVal,IterNum,NumSamples,NewIdxs,ReconValues,ReconImage,ERDValues,MaxIdxsVect,lineScanning):
     
     if UpdateERDParamsObject.Do == 'N':
         ERDValues,ReconValues,ReconImage = computeFullERD(MeasuredValues,MeasuredIdxs,UnMeasuredIdxs,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType)
     else:
         ERDValues,ReconValues=updateERD(Mask,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,NewIdxs,NumSamples,UpdateERDParamsObject,ReconValues,ReconImage,ERDValues,MaxIdxsVect,BatchSamplingParamsObject)
     
-    NewIdxs,MaxIdxsVect = findNewMeasurementIdxs(Mask,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,NumSamples,UpdateERDParamsObject,ReconValues,ReconImage,ERDValues,BatchSamplingParamsObject)
+    NewIdxs,MaxIdxsVect = findNewMeasurementIdxs(Mask,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Theta,SizeImage,TrainingInfoObject,Resolution,ImageType,NumSamples,UpdateERDParamsObject,ReconValues,ReconImage,ERDValues,BatchSamplingParamsObject,lineScanning)
 
     return(Mask,MeasuredValues,ERDValues,ReconValues,ReconImage,NewIdxs,MaxIdxsVect)
 
@@ -994,19 +986,57 @@ def findStoppingThreshold(trainingDataPath,NumTrainingImages,Best_c,PercentageIn
     sys.path.pop()
     return Threshold
 
-def generateInitialMask(InitialMaskObject,SizeImage):
-    if InitialMaskObject.MaskType =='R':
-        Mask = np.zeros((SizeImage[0],SizeImage[1]))
-        UnifMatrix = np.random.rand(SizeImage[0],SizeImage[1])
-        Mask = UnifMatrix<(InitialMaskObject.Percentage/100)
-    elif InitialMaskObject.MaskType =='U':
-        Mask = np.zeros((SizeImage[0],SizeImage[1]))
-        ModVal = int(100/InitialMaskObject.Percentage)
-        for r in range(0,SizeImage[0]):
-            for s in range(0,SizeImage[1]): 
-                LinIdx = r*SizeImage[1]+s
-                if np.remainder(LinIdx,ModVal)==0:
-                    Mask[r][s]=1
+def generateInitialMask(InitialMaskObject,SizeImage,lineScanning):
+    Mask = np.zeros((SizeImage[0],SizeImage[1]))
+    seed = int(((datetime.now()).microsecond))
+    if not lineScanning:
+        UnifMatrix = []
+        if InitialMaskObject.MaskType == 'H':
+            samplePoints = round((InitialMaskObject.Percentage/100)*(SizeImage[0]*SizeImage[1]))
+            for i in range(0,samplePoints):
+                row, seed = i4_uniform(0, SizeImage[0]-1, seed)
+                column, seed = i4_uniform(0, SizeImage[1]-1, seed)
+                Mask[row, column] = 1
+        elif InitialMaskObject.MaskType == 'U':
+            UnifMatrix = np.random.rand(SizeImage[0],SizeImage[1])
+            Mask = UnifMatrix<(InitialMaskObject.Percentage/100)
+        else:
+            sys.exit('Error!!! - undefined handeling for the generation of the MaskType indicated')
+        
+    elif lineScanning:
+        linesScanned = []
+        for i in range(0,round(SizeImage[0]*(InitialMaskObject.Percentage/100))):
+            notFound = True
+            while notFound:
+                if InitialMaskObject.MaskType == 'H':
+                    lineNumber, seed = i4_uniform(0, SizeImage[0]-1, seed)
+                    lineNumber = int(lineNumber)
+                elif InitialMaskObject.MaskType == 'U':
+                    lineNumber = random.randint(0,SizeImage[0]-1)
+                else:
+                    sys.exit('Error!!! - undefined handeling for the generation of the MaskType indicated')
+                if lineNumber not in linesScanned:
+                    notFound = False
+                    linesScanned.append(lineNumber)
+        Mask[linesScanned] = 1
+    else:
+        sys.exit('Error!!! - line scanning bypassed in generate initial mask.')
+    Mask = Mask==1
+#random.rand draws also draws from a uniform distribution...simplifying to 'U' and 'H' mask types
+#    if InitialMaskObject.MaskType =='R':
+#        if not lineScanning:
+#            UnifMatrix = np.random.rand(SizeImage[0],SizeImage[1])
+#            Mask = UnifMatrix<(InitialMaskObject.Percentage/100)
+#            
+#    elif InitialMaskObject.MaskType =='U':
+#            Mask = UnifMatrix<(InitialMaskObject.Percentage/100)
+#            ModVal = int(100/InitialMaskObject.Percentage)
+#            for r in range(0,SizeImage[0]):
+#                for s in range(0,SizeImage[1]): 
+#                    LinIdx = r*SizeImage[1]+s
+#                    if np.remainder(LinIdx,ModVal)==0:
+#                        Mask[r][s]=1
+
     return Mask
         
 def plotImage(Image,Num):
@@ -1023,7 +1053,7 @@ def plotAfterSLADS(Im1,Im2):
     plt.title('Reconstructed Image')
 
 def importImages(dirPath, inputExtension, SizeImage):
-    if (inputExtension == ".tif"):
+    if (inputExtension == ".tif") or (inputExtension == ".png"):
         dataFileNames = glob.glob(dirPath + "/*" + inputExtension) #Obtain filenames for each set
         zLen = len(dataFileNames) #Find total number of files imported
         if (zLen == 0):
@@ -1043,7 +1073,7 @@ def importImages(dirPath, inputExtension, SizeImage):
             dataset = np.asarray(dataset,dtype=np.float64).reshape((dataset.size[1],dataset.size[0])) #Flatten the image
             outputName = file
             outputName = outputName[outputName.startswith(dirPath) and len(dirPath):]
-            outputName = re.sub('\.tif$', '', outputName)
+            outputName = re.sub('\.png$', '', outputName)
             datasets.append(imageData(dataset, outputName))
             counter+=1
     return datasets
@@ -1052,8 +1082,8 @@ def importImages(dirPath, inputExtension, SizeImage):
 def gausKern_parhelper(sigmaVal, WindowSize, area): #Parallel loop for generating a Gaussian kernel
     return area*generateGaussianKernel(sigmaVal,WindowSize) #Calculate an "area" that the c value will capture based on a gaussian filter
 
-def stats_parhelper(NumImages, Mask, codePath, TrainingImageSet, SizeImage, StopCondParamsObject, Theta, TrainingInfoObject, TestingInfoObject, Resolution, ImageType, UpdateERDParamsObject, BatchSamplingParamsObject, trainingPlotFeaturesPath, SimulationRun, ImNum, ImageExtension, PlotResult, Classify, directImagePath, errorPlot, isRunningParallel):    
-    return runSLADSSimulationOnce(NumImages, Mask, codePath, TrainingImageSet, SizeImage, StopCondParamsObject, Theta, TrainingInfoObject, TestingInfoObject, Resolution, ImageType, UpdateERDParamsObject, BatchSamplingParamsObject, trainingPlotFeaturesPath, SimulationRun, ImNum, ImageExtension, PlotResult, Classify, directImagePath, errorPlot, isRunningParallel)
+def stats_parhelper(NumImages, Mask, codePath, TrainingImageSet, SizeImage, StopCondParamsObject, Theta, TrainingInfoObject, TestingInfoObject, Resolution, ImageType, UpdateERDParamsObject, BatchSamplingParamsObject, trainingPlotFeaturesPath, SimulationRun, ImNum, ImageExtension, PlotResult, Classify, directImagePath, errorPlot, isRunningParallel, lineScanning):
+    return runSLADSSimulationOnce(NumImages, Mask, codePath, TrainingImageSet, SizeImage, StopCondParamsObject, Theta, TrainingInfoObject, TestingInfoObject, Resolution, ImageType, UpdateERDParamsObject, BatchSamplingParamsObject, trainingPlotFeaturesPath, SimulationRun, ImNum, ImageExtension, PlotResult, Classify, directImagePath, errorPlot, isRunningParallel, lineScanning)
 
 #Return the save path for output plots from testing of end models
 def testingOutputName(testingFeaturesPath, dataFileName, StopPercentageSLADS, StopPercentageTestingSLADS):
@@ -1068,13 +1098,13 @@ def cls(): #Clear console screen
     os.system('cls' if os.name=='nt' else 'clear')   
 
 
-# In[ ]:
+# In[55]:
 
 
 #MAIN PROGRAM
 #==================================================================
 cls() #Clear the screen
-jNotebook = False #Is the program being run in a jupyter-notebook; Program progress bars will not function correctly if True
+jNotebook = True #Is the program being run in a jupyter-notebook; Program progress bars will not function correctly if True
 
 #GENERAL PARAMETERS: L-01
 #==================================================================
@@ -1084,6 +1114,16 @@ trainingModel = True
 
 #Is testing of a model to be performed
 testingModel = True
+
+#Should full lines be selected for scanning
+lineScanning = True
+
+#If not lineScanning, how many pixels should be sampled at each step
+#If lineScanning, how many lines should be sampled at each step (NOT IMPLEMENTED; LEAVE AS 1 FOR LINE SCANNING) 
+batchSampleSize = 1
+
+#Should the initial masks be overwritten (Change to false for comparative analysis after initial masks exist)
+initialMaskOverwrite = True
 
 #Should the default multithreading be limited
 overrideThreads = False
@@ -1156,12 +1196,14 @@ overrideBestCValue = 4
 #Stopping percentage for SLADS
 #Default uses the same value as the training model
 #StopPercentageTestingSLADSArr = StopPercentageSLADSArr
-StopPercentageTestingSLADSArr = np.array([1, 5, 10, 20, 30, 40, 50, 60, 70, 80])
-
+StopPercentageTestingSLADSArr = np.array([1, 5, 10, 20, 30, 40, 50])
+#StopPercentageTestingSLADSArr = np.array([1, 5])
 #PROGRAM PARAMETERS: L-1
 #==================================================================
 
 # Sweep range for c (to select best c for RD approximation)
+#c_vec = np.asarray([2])
+#c_vec = np.array([2,4,8])
 c_vec = np.array([2,4,8,16,32])
 
 # Sampling mask measurement percentages for training (best left unchanged)
@@ -1186,10 +1228,9 @@ PercentageInitialMask = 1
 
 # Type of initial mask   
 # Choices: 
-    # 'U': Uniform mask; can choose any percentage
-    # 'R': Randomly distributed mask; can choose any percentage
-    # 'H': low-dsicrepacy mask; can only choose 1% mas
-MaskType = 'H'                   
+    # 'U': Random Uniform mask; can choose any percentage
+    # 'H': low-discrepancy mask; can choose any percentage
+MaskType = 'H'
 
 # Desired total distortion (TD) value (to find threshold on stopping function)
 # TD = D(X,\hat(X))/(Number of pixels in image)
@@ -1202,7 +1243,7 @@ DesiredTD=0
 ImageExtension = ".png"
 
 
-# In[ ]:
+# In[56]:
 
 
 #STATIC VARIABLE SETUP
@@ -1235,6 +1276,11 @@ Resolution = 1 #UNKNOWN VARIABLE
 
 falseFlag = False #Hold a False variable for function calls to disable certain parameters
 
+
+BatchSamplingParamsObject = BatchSamplingParams()
+BatchSamplingParamsObject.initialize(batchSampleSize)
+
+
 #Store training information as object
 TrainingInfoObject = TrainingInfo()
 
@@ -1264,20 +1310,32 @@ resultsDataPath = codePath + 'ResultsAndData' + os.path.sep
 if not os.path.exists(resultsDataPath):                                                                                                                          
     sys.exit('Error!!! The folder ' + resultsDataPath + ' does not exist. ')
 
+#Clear initial sampling mask directory if overwrite enabled
+if initialMaskOverwrite:
+    loadPathInitialMask = resultsDataPath + 'InitialSamplingMasks'
+    if os.path.exists(loadPathInitialMask):
+            shutil.rmtree(loadPathInitialMask)
+    os.makedirs(loadPathInitialMask)
+else:
+    StartingMeasurementMask=InitialMaskObject.MaskType + '_' + str(InitialMaskObject.MaskNumber) + '_' + str(InitialMaskObject.RowSz) + '_' + str(InitialMaskObject.ColSz) + '_Percentage_' + str(InitialMaskObject.Percentage) + '_lineScanning_' + str(lineScanning)
+    loadPathInitialMask = loadPathInitialMask + os.path.sep + StartingMeasurementMask + os.path.sep + 'InitialMask.npy'
+    if not os.path.exists(loadPathInitialMask):
+        sys.exit('Error!!! - A suitable initial mask does not exist for the parameters given; enable initialMaskOverwrite to generate one')
+
 TrainingDBName = 'TrainingDB_' + TrainingImageSet
-
-#If split is being conducted
-if splitInputSet:
-    dataPath = resultsDataPath + 'InputData' + os.path.sep + 'InputTrainingDB_' + str(TrainingImageSet) + os.path.sep
-
-if trainingModel: #If training is to be performed, check the relevant directories
     
-    #Path to the input training image database
-    dataPath = resultsDataPath + 'InputData' + os.path.sep + 'InputTrainingDB_' + str(TrainingImageSet) + os.path.sep
-    if not os.path.exists(dataPath):                                                                                                                          
-        sys.exit('Error!!! The folder ' + dataPath + ' does not exist. Check entry for ' + TrainingImageSet)
+#Path to the input training image database
+dataPath = resultsDataPath + 'InputData' + os.path.sep + 'InputTrainingDB_' + str(TrainingImageSet) + os.path.sep
+if not os.path.exists(dataPath):                                                                                                                          
+    sys.exit('Error!!! The folder ' + dataPath + ' does not exist. Check entry for ' + TrainingImageSet)
 
-    #Path to where training resources/features should be saved
+        
+#Path to where training resources/features should be saved
+trainingFeaturesPath = resultsDataPath + 'TrainingSavedFeatures' + os.path.sep
+    
+if trainingModel: #If training is to be performed, check and clean the relevant directories
+    
+    #With regards to where training resources/features should be saved
     trainingFeaturesPath = resultsDataPath + 'TrainingSavedFeatures' + os.path.sep
     if os.path.exists(trainingFeaturesPath):
         shutil.rmtree(trainingFeaturesPath)
@@ -1306,7 +1364,7 @@ if trainingModel: #If training is to be performed, check the relevant directorie
     os.makedirs(trainingDataPath + 'FeaturesRegressCoeffs')
     
 if testingModel: #If testing is to be performed, check the relevant directories
-     
+
     #Path to where training resources/features should be saved
     testingFeaturesPath = resultsDataPath + 'TestingSavedFeatures' + os.path.sep
     if os.path.exists(testingFeaturesPath):
@@ -1375,7 +1433,7 @@ if testingModel: #If testing is to be performed, check the relevant directories
         sys.exit('Error!!! The folder ' + loadPathInitialMask + ' does not exist. Check entry for ' + loadPathInitialMask)
 
 
-# In[ ]:
+# In[57]:
 
 
 #DATA IMPORTATION
@@ -1433,7 +1491,7 @@ if testingModel:
         testingData[i] = misc.imread(testingDataImagesPath+dataset.name+ImageExtension) #Import into final testing dataset
 
 
-# In[ ]:
+# In[58]:
 
 
 #RUN TRAINING
@@ -1453,12 +1511,12 @@ if trainingModel:
             else: 
                 testingImageFiles = glob.glob(testingDataImagesPath + "/*" + ImageExtension) #Obtain filenames for each set
 
-    #For each of the possible sampling percentages
-    for p in tqdm(range(0,len(StopPercentageSLADSArr)), desc = 'Sampling Percentages', leave = True):
+    #For each of the possible training sampling stopping percentages
+    for p in tqdm(range(0,len(StopPercentageSLADSArr)), desc = 'Sampling Percentages', leave = True):        
         
         StopPercentageSLADS = StopPercentageSLADSArr[p]
+        
         #Vector of values to determine for the reconstruction
-
         reconPercVector = np.linspace(PercentageInitialMask, StopPercentageSLADS, num=NumReconsSLADS*(StopPercentageSLADS-PercentageInitialMask), endpoint=False)
 
         #For each of the Sampling mask measurement percentages for training
@@ -1466,6 +1524,8 @@ if trainingModel:
         #Train regression formula on known images with randomly selected sampling densities
         #Estimation of distortion reduction based on a provided weight parameter and the distance between the previous and proposed pixel location
         samplingPercent = (imagePercent/np.size(MeasurementPercentageVector))
+        
+        StopNumRows = StopPercentageSLADSArr[p]*SizeImage[0]
         cPercent = samplingPercent/len(c_vec)
 
         for ImNum in tqdm(range(0,len(trainingData)), desc = 'Training Images', leave = True):
@@ -1482,14 +1542,31 @@ if trainingModel:
                 if not os.path.exists(trainingFeaturesSavePath):
                     os.makedirs(trainingFeaturesSavePath)
 
-                #Create a random uniform, boolean mask at the sampling density specified and apply it to the image
+                #Create a blank mask
                 Mask = np.zeros((SizeImage[0],SizeImage[1]))
-                UnifMatrix = np.random.rand(SizeImage[0],SizeImage[1])
-                Mask = UnifMatrix<(MeasurementPercentageVector[m]/100)
+                
+                if not lineScanning:
+                    #Create a random uniform, boolean mask at the sampling density specified and apply it to the image
+                    UnifMatrix = np.random.rand(SizeImage[0],SizeImage[1])
+                    Mask = UnifMatrix<(MeasurementPercentageVector[m]/100)
+                elif lineScanning:
+                    linesScanned = []
+                    for i in range(0,math.floor(SizeImage[0]*(MeasurementPercentageVector[m]/100))):
+                        notFound = True
+                        while notFound:
+                            lineNumber = random.randint(0,SizeImage[0]-1)
+                            if lineNumber not in linesScanned:
+                                notFound = False
+                                linesScanned.append(lineNumber)
+                    Mask[linesScanned] = True
+                    Mask = Mask==1
+                else:
+                    sys.exit('Error!!! Line scanning parameter was bypassed.')
+                
                 MeasuredIdxs = np.transpose(np.where(Mask==1))
                 UnMeasuredIdxs = np.transpose(np.where(Mask==0))            
                 MeasuredValues = Img[Mask==1]
-
+                
                 # Find neighbors
                 NeighborValues,NeighborWeights,NeighborDistances = FindNeighbors(TrainingInfoObject,MeasuredIdxs,UnMeasuredIdxs,MeasuredValues,Resolution)
 
@@ -1617,8 +1694,8 @@ if trainingModel:
 
     print('\n\n\n\n' + ('-' * int(consoleColumns)))
     print('DETERMINING BEST C')
-    print('-' * int(consoleColumns) + '\n')            
-            
+    print('-' * int(consoleColumns) + '\n')
+    
     #For each of the possible sampling percentages
     for p in tqdm(range(0,len(StopPercentageSLADSArr)), desc = 'Sampling Percentages', leave = True):
         StopPercentageSLADS = StopPercentageSLADSArr[p]
@@ -1628,7 +1705,7 @@ if trainingModel:
 
         # Find the best value of c
         directImagePath = '' #Direct image support not yet supported for training sets
-        Best_c,NumImagesForSLADS = performSLADStoFindC(codePath,trainingDataPath,TrainingImageSet,ImageType,ImageExtension,TrainingInfoObject,SizeImage,StopPercentageSLADS,Resolution,c_vec,UpdateERDParamsObject,InitialMaskObject,MaskType,reconPercVector,Classify,directImagePath,consoleRows,cPlot,trainingStatisticsSavePath)
+        Best_c,NumImagesForSLADS = performSLADStoFindC(codePath,trainingDataPath,TrainingImageSet,ImageType,ImageExtension,TrainingInfoObject,SizeImage,StopPercentageSLADS,Resolution,c_vec,UpdateERDParamsObject,InitialMaskObject,MaskType,reconPercVector,Classify,directImagePath,consoleRows,cPlot,trainingStatisticsSavePath,lineScanning,BatchSamplingParamsObject)
         
         #Set path to where best c value should be kept
         SavePath_bestc = trainingDataPath + 'best_c' + '_StopPerc_' + str(StopPercentageSLADS) + '.npy'
@@ -1668,12 +1745,6 @@ if trainingModel:
             StopCondParamsObject.initialize(Beta,0,50,2,StopPercentageSLADS)
             UpdateERDParamsObject = UpdateERDParams()
             UpdateERDParamsObject.initialize(Update_ERD,MinWindSize,MaxWindSize,1.5)
-            BatchSample = 'N'
-            BatchSamplingParamsObject = BatchSamplingParams()
-            if BatchSample=='N':
-                BatchSamplingParamsObject.initialize(BatchSample,1)
-            else:
-                BatchSamplingParamsObject.initialize(BatchSample,NumSamplesPerIter)
 
             SimulationRun = 1
             PlotResult = 'N'
@@ -1734,7 +1805,7 @@ if trainingModel:
                     Theta = regr.coef_               
 
                 #Perform SLADS on all of the images, saving statistics of interest in parallel
-                trainingResultObject = Parallel(n_jobs=num_threads)(delayed(stats_parhelper)(NumImagesPlot, loadOrGenerateInitialMask(loadPathInitialMask,MaskType,InitialMaskObject,SizeImage), codePath, TestingImageSet, SizeImage, StopCondParamsObject, Theta, TrainingInfoObject, TestingInfoObject, Resolution, ImageType, UpdateERDParamsObject, BatchSamplingParamsObject, trainingPlotFeaturesPath, SimulationRun, i, ImageExtension, PlotResult, Classify, plottingFileNames[i], errorPlot, isRunningParallel) for i in tqdm(range(0,NumImagesPlot), desc = 'Avg. Stats.', leave = False))
+                trainingResultObject = Parallel(n_jobs=num_threads)(delayed(stats_parhelper)(NumImagesPlot, loadOrGenerateInitialMask(loadPathInitialMask,MaskType,InitialMaskObject,SizeImage,lineScanning), codePath, TestingImageSet, SizeImage, StopCondParamsObject, Theta, TrainingInfoObject, TestingInfoObject, Resolution, ImageType, UpdateERDParamsObject, BatchSamplingParamsObject, trainingPlotFeaturesPath, SimulationRun, i, ImageExtension, PlotResult, Classify, plottingFileNames[i], errorPlot, isRunningParallel, lineScanning) for i in tqdm(range(0,NumImagesPlot), desc = 'Avg. Stats.', leave = False))
 
                 mseTrainingResults = []
                 ssimTrainingResults = []
@@ -1755,8 +1826,123 @@ if trainingModel:
             plotErrorData(trainingSpecificStatisticsSavePath, trainingStatisticsSavePathSuffix, trainingResultsAverageObject, xAxisValues, trainingPlotTitle, plotXLabel) #Plot and save the error data obtained during training
             del BigRD,BigPolyFeatures #Clean up workspace a bit
 
+    #Now that the optimal C value has been found for reconstruction
+    #Train the model 1 image at a time, perform a reconstruction and watch statistics over all training images
+    if (trainingErrorPlot):
+        print('\n\n\n\n' + ('-' * int(consoleColumns)))
+        print('PLOTTING MODEL TRAINING CONVERGENCE')
+        print(('-' * int(consoleColumns)) + '\n')   
+        plotXLabel = '# Training Samples' #x label for model training convergence plot
+        errorPlot = True
+
+        #For each of the possible sampling percentages
+        for p in tqdm(range(0,len(StopPercentageSLADSArr)), desc = 'Sampling Percentages', leave = True):
+            StopPercentageSLADS = StopPercentageSLADSArr[p]
+            Beta = computeBeta(SizeImage)
+            StopCondParamsObject = StopCondParams()
+            StopCondParamsObject.initialize(Beta,0,50,2,StopPercentageSLADS)
+            UpdateERDParamsObject = UpdateERDParams()
+            UpdateERDParamsObject.initialize(Update_ERD,MinWindSize,MaxWindSize,1.5)
+            
+            SimulationRun = 1
+            PlotResult = 'N'
+            regr = linear_model.LinearRegression() #Construct a regression model
+            loadPathInitialMask = resultsDataPath + 'InitialSamplingMasks' # Load initial measurement mask
+            FirstLoop = 1
+            trainingStatisticsSavePathSuffix = '_StopPerc_' + str(StopPercentageSLADS)
+
+            if trainingErrorPlotwTesting:
+                NumImagesPlot = len(testingImageFiles)
+                plottingFileNames = testingImageFiles
+                trainingPlotTitle = 'Averaged Total Testing Image Results'
+            else: #Using the training data for watching development of model with respect to # training samples
+                NumImagesPlot = len(trainingImageFiles)
+                plottingFileNames = trainingImageFiles
+                trainingPlotTitle = 'Averaged Total Training Image Results'
+
+            #Create an object to hold progressive development of model
+            trainingResultsAverageObject = simulationResults() 
+            trainingResultsAverageObject.initialize()
+            #For each of the training images add the polynomial features determined for the best c to the model and check reconstruction capability
+            for ImNum in tqdm(range(0,NumTrainingImages), desc = 'Training Images', leave = True): 
+                #Aggregate together the polynomial features determined for the best c at each of the possible sampling densities
+                for m in tqdm(range(0,np.size(MeasurementPercentageVector)), desc = 'Sampling Densities', leave = True): #For each of the proposed sampling densities
+
+                    LoadPath = trainingDataPath + 'FeaturesRegressCoeffs' + os.path.sep + 'Image_' + str(ImNum+1) + '_SampPerc_' + str(MeasurementPercentageVector[m])
+                    LoadPath_c = LoadPath + os.path.sep + 'c_' + str(Best_c) #Only using the best c found during the original training
+                    RD = np.load(LoadPath_c + os.path.sep + 'RD'+ '_StopPerc_'+ str(StopPercentageSLADS)+ '.npy')  #Load the possible reduction in distortion value
+                    PolyFeatures = np.load(LoadPath + os.path.sep + 'PolyFeatures' + '_StopPerc_'+ str(StopPercentageSLADS)+ '.npy')
+                    if ImageType=='D':
+                        if FirstLoop==1:
+                            BigPolyFeatures = np.column_stack((PolyFeatures[:,0:25],PolyFeatures[:,26]))
+                            BigRD = RD
+                            FirstLoop = 0                  
+                        else:
+                            TempPolyFeatures = np.column_stack((PolyFeatures[:,0:25],PolyFeatures[:,26]))                    
+                            BigPolyFeatures = np.row_stack((BigPolyFeatures,TempPolyFeatures))
+                            BigRD = np.append(BigRD,RD)
+                    else: #If image type is continuous
+                        if FirstLoop==1: #If initialization
+                            BigPolyFeatures = PolyFeatures
+                            BigRD = RD
+                            FirstLoop = 0                  
+                        else:
+                            TempPolyFeatures = PolyFeatures               
+                            BigPolyFeatures = np.row_stack((BigPolyFeatures,TempPolyFeatures))
+                            BigRD = np.append(BigRD,RD)                    
+
+                #Perform the regression, fitting the observed polynomial fetures to the expected reduction in distortion
+                regr = linear_model.LinearRegression() #Construct a new regression model
+                regr.fit(BigPolyFeatures, BigRD)
+                Theta = np.zeros((PolyFeatures.shape[1]))    
+                if ImageType=='D':            
+                    Theta[0:24]=regr.coef_[0:24]
+                    Theta[26]=regr.coef_[25]
+                else: #If image type is continuous
+                    Theta = regr.coef_               
+
+                #Perform SLADS on all of the images, saving statistics of interest in parallel
+                trainingResultObject = Parallel(n_jobs=num_threads)(delayed(stats_parhelper)(NumImagesPlot, loadOrGenerateInitialMask(loadPathInitialMask,MaskType,InitialMaskObject,SizeImage,lineScanning), codePath, TestingImageSet, SizeImage, StopCondParamsObject, Theta, TrainingInfoObject, TestingInfoObject, Resolution, ImageType, UpdateERDParamsObject, BatchSamplingParamsObject, trainingPlotFeaturesPath, SimulationRun, i, ImageExtension, PlotResult, Classify, plottingFileNames[i], errorPlot, isRunningParallel, lineScanning) for i in tqdm(range(0,NumImagesPlot), desc = 'Avg. Stats.', leave = False))
+
+                mseTrainingResults = []
+                ssimTrainingResults = []
+                distortTrainingResults = []
+                for result in trainingResultObject: 
+                    mseTrainingResults.append(result.mseError)
+                    ssimTrainingResults.append(result.ssimError)
+                    distortTrainingResults.append(result.totalDistortion)
+                trainingResultsAverageObject.saveAverageErrorData(np.mean(mseTrainingResults), np.mean(ssimTrainingResults), np.mean(distortTrainingResults))
+            xAxisValues = np.linspace(1, len(trainingResultsAverageObject.ssimAverageErrors), len(trainingResultsAverageObject.ssimAverageErrors))         
+            trainingSpecificStatisticsSavePath = trainingStatisticsSavePath + 'StopTrainPerc_' + str(StopPercentageSLADS) + os.path.sep    
+
+            #Directory setup for specific training statistics
+            if os.path.exists(trainingSpecificStatisticsSavePath): 
+                shutil.rmtree(trainingSpecificStatisticsSavePath)
+            os.makedirs(trainingSpecificStatisticsSavePath)
+
+            plotErrorData(trainingSpecificStatisticsSavePath, trainingStatisticsSavePathSuffix, trainingResultsAverageObject, xAxisValues, trainingPlotTitle, plotXLabel) #Plot and save the error data obtained during training
+            del BigRD,BigPolyFeatures #Clean up workspace a bit
+
 
 # In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[59]:
 
 
 #RUN TESTING
@@ -1782,20 +1968,12 @@ if testingModel:
     if not os.path.exists(TrainingDBPath): 
         sys.exit('Error!!! The folder ' + TrainingDBPath + ' does not exist. Check entry for ' + TrainingImageSet)
 
-    # Batch Sampling; If 'Y' set number of samples in each step in L-1 (NumSamplesPerIter)
-    BatchSample = 'N'
-    BatchSamplingParamsObject = BatchSamplingParams()
-    if BatchSample=='N':
-        BatchSamplingParamsObject.initialize(BatchSample,1)
-    else:
-        BatchSamplingParamsObject.initialize(BatchSample,NumSamplesPerIter)
-
     UpdateERDParamsObject = UpdateERDParams()
     UpdateERDParamsObject.initialize(Update_ERD,MinWindSize,MaxWindSize,1.5)
 
     PercentageInitialMask = float(PercentageInitialMask)
 
-    Mask = loadOrGenerateInitialMask(loadPathInitialMask,MaskType,InitialMaskObject,SizeImage)
+    Mask = loadOrGenerateInitialMask(loadPathInitialMask,MaskType,InitialMaskObject,SizeImage,lineScanning)
     np.save(testingFeaturesPath + 'InitialMask', Mask)
     savemat(testingFeaturesPath + 'InitialMask.mat', dict(Mask=Mask))
     
@@ -1827,11 +2005,18 @@ if testingModel:
 
         Beta = computeBeta(SizeImage)
         StopCondParamsObject=StopCondParams()
-
         
         #Create an object to hold progressive development of model
         testingResultsAverageObject = simulationResults() 
         testingResultsAverageObject.initialize()
+        
+        #Create an object to hold all of the testing results for each sampling percentage
+        testingResults = []
+        
+        all_MSE_testingResults = []
+        all_SSIM_testingResults = []
+        all_Distort_testingResults = []
+        all_reconstructionMasks = []
         
         #For each of the possible testing sampling percentages
         for q in tqdm(range(0,len(StopPercentageTestingSLADSArr)), desc = 'Testing Sampling Percentages', leave = True):
@@ -1843,22 +2028,29 @@ if testingModel:
             numberTestFiles = len(dataFileNames)
 
             #Perform SLADS on all of the images, saving statistics of interest in parallel
-            testingResultObject = Parallel(n_jobs=num_threads)(delayed(stats_parhelper)(numberTestFiles, loadOrGenerateInitialMask(loadPathInitialMask,MaskType,InitialMaskObject,SizeImage), codePath, TestingImageSet, SizeImage, StopCondParamsObject, Theta, TrainingInfoObject, TestingInfoObject, Resolution, ImageType, UpdateERDParamsObject, BatchSamplingParamsObject, testingOutputName(testingFeaturesPath, dataFileNames[i], StopPercentageSLADS, StopPercentageTestingSLADS),SimulationRun, i, ImageExtension, PlotResult, Classify, dataFileNames[i], errorPlot, isRunningParallel) for i in tqdm(range(0,numberTestFiles), desc = 'Testing Images', leave = True))
+            testingResultObject = Parallel(n_jobs=num_threads)(delayed(stats_parhelper)(numberTestFiles, loadOrGenerateInitialMask(loadPathInitialMask,MaskType,InitialMaskObject,SizeImage,lineScanning), codePath, TestingImageSet, SizeImage, StopCondParamsObject, Theta, TrainingInfoObject, TestingInfoObject, Resolution, ImageType, UpdateERDParamsObject, BatchSamplingParamsObject, testingOutputName(testingFeaturesPath, dataFileNames[i], StopPercentageSLADS, StopPercentageTestingSLADS),SimulationRun, i, ImageExtension, PlotResult, Classify, dataFileNames[i], errorPlot, isRunningParallel, lineScanning) for i in tqdm(range(0,numberTestFiles), desc = 'Testing Images', leave = True))
             
             #Create holding arrays for the results
-            mseTestingResults = []
-            ssimTestingResults = []
-            distortTestingResults = []
+            MSE_testingResults = []
+            SSIM_testingResults = []
+            Distort_testingResults = []
+            reconstructionMasks = []
             
             #Extract results from returned object
             for result in testingResultObject: 
-                mseTestingResults.append(result.mseError)
-                ssimTestingResults.append(result.ssimError)
-                distortTestingResults.append(result.totalDistortion)
+                MSE_testingResults.append(result.mseError)
+                SSIM_testingResults.append(result.ssimError)
+                Distort_testingResults.append(result.totalDistortion)
+                reconstructionMasks.append(result.masks)
                 
             #Store the Average DMs for all images for a particular testing sampling percentage
-            testingResultsAverageObject.saveAverageErrorData(np.mean(mseTestingResults), np.mean(ssimTestingResults), np.mean(distortTestingResults))
-
+            testingResultsAverageObject.saveAverageErrorData(np.mean(MSE_testingResults), np.mean(SSIM_testingResults), np.mean(Distort_testingResults))
+            
+            all_MSE_testingResults.append(MSE_testingResults)
+            all_SSIM_testingResults.append(SSIM_testingResults)
+            all_Distort_testingResults.append(Distort_testingResults)
+            all_reconstructionMasks.append(reconstructionMasks)
+            
             #Directory setup for individual images final save path
             ImagesFinalSavePath = ImagesSavePath + 'StopTrainPerc_' + str(StopPercentageSLADS) + '_StopTestPerc_' + str(StopPercentageTestingSLADS) + os.path.sep
             if os.path.exists(ImagesFinalSavePath): 
@@ -1887,10 +2079,145 @@ if testingModel:
     #Plot the average DMS together in a single plot for all of the training sampling percentages
     ttPlotAverageErrors(testingStatisticsSavePath, StopPercentageSLADSArr, StopPercentageTestingSLADSArr, trainTestAverageErrors)
 
+    #Plot MSE and SSIM distribution
+    names = []
+    for i in range(0, len(StopPercentageTestingSLADSArr)):
+        names.append(str(StopPercentageTestingSLADSArr[i]) + '%')
+
+    f = plt.figure(figsize=(20,8))
+    plt.hist(all_MSE_testingResults, bins=10, align='left', label=names)
+    plt.legend()
+    plt.legend(bbox_to_anchor=(1, 1), loc='left', ncol=1)
+    plt.ylabel('Frequency')
+    plt.xlabel('MSE')
+    plt.savefig(testingStatisticsSavePath + 'MSE_Distribution' + '.png')
+    
+    f = plt.figure(figsize=(20,8))
+    plt.hist(all_SSIM_testingResults, bins=10, align='left', label=names)
+    plt.legend()
+    plt.legend(bbox_to_anchor=(1, 1), loc='left', ncol=1)
+    plt.ylabel('Frequency')
+    plt.xlabel('SSIM')
+    plt.savefig(testingStatisticsSavePath + 'SSIM_Distribution' + '.png')
+    
+    
+    
 #AFTER INTENDED PROCEDURES (TRAINING/TESTING) HAVE BEEN PERFORMED
 print('\n\n\n' + ('#' * int(consoleColumns)))
 print('PROGRAM COMPLETE')
 print('#' * int(consoleColumns) + '\n')
+
+
+# In[ ]:
+
+
+
+
+
+# In[68]:
+
+
+print('\n\n' + ('#' * int(consoleColumns)))
+print('ANIMATING MODEL')
+print(('#' * int(consoleColumns)) + '\n')
+
+#Set initial percentages and adjustment for each step
+if not lineScanning:
+    StopPercentageTestingSLADS = 1
+    percentageAdjustment = StopPercentageTestingSLADS
+else:
+    StopPercentageTestingSLADS = (SizeImage[0]/(SizeImage[0]*SizeImage[1]))*100
+    percentageAdjustment = StopPercentageTestingSLADS
+
+    
+#Directory setup for animation images
+AnimationImagesSavePath = ImagesSavePath + 'Animation' + os.path.sep
+if os.path.exists(AnimationImagesSavePath): 
+    shutil.rmtree(AnimationImagesSavePath)
+os.makedirs(AnimationImagesSavePath)
+
+#Perform testing for the images up to 50% of the total pixel count for generating an animation
+while(StopPercentageTestingSLADS <= 50):
+    StopPercentageTestingSLADS = float(StopPercentageTestingSLADS)
+    StopCondParamsObject.initialize(Beta,StoppingThrehsold,50,2,StopPercentageTestingSLADS-percentageAdjustment)
+
+    dataFileNames = glob.glob(testingDataImagesPath + "/*" + ImageExtension) #Obtain filenames for each testing set
+    numberTestFiles = len(dataFileNames)
+
+    #Perform SLADS on all of the images, saving statistics of interest in parallel
+    testingResultObject = Parallel(n_jobs=num_threads)(delayed(stats_parhelper)(numberTestFiles, loadOrGenerateInitialMask(loadPathInitialMask,MaskType,InitialMaskObject,SizeImage,lineScanning), codePath, TestingImageSet, SizeImage, StopCondParamsObject, Theta, TrainingInfoObject, TestingInfoObject, Resolution, ImageType, UpdateERDParamsObject, BatchSamplingParamsObject, testingOutputName(testingFeaturesPath, dataFileNames[i], StopPercentageSLADS, StopPercentageTestingSLADS),SimulationRun, i, ImageExtension, PlotResult, Classify, dataFileNames[i], errorPlot, isRunningParallel, lineScanning) for i in tqdm(range(0,numberTestFiles), desc = 'Testing Images', leave = True))
+
+    #Create holding arrays for the results
+    mseTestingResults = []
+    ssimTestingResults = []
+    distortTestingResults = []
+
+    #Extract results from returned object
+    for result in testingResultObject: 
+        mseTestingResults.append(result.mseError)
+        ssimTestingResults.append(result.ssimError)
+        distortTestingResults.append(result.totalDistortion)
+
+    #Obtain filenames for each of the images that were made
+    dataFileNames = glob.glob(testingFeaturesPath + "/*"+ImageExtension) 
+    for j in range(0, len(dataFileNames)): #For each of the files
+        outputName = dataFileNames[j] #Grab the filename
+        outputName = re.sub(testingFeaturesPath, '', outputName) #Remove the directory prefix
+        shutil.move(dataFileNames[j], AnimationImagesSavePath+outputName) #Move them to the Animation images folder
+    if not lineScanning:
+        StopPercentageTestingSLADS += 1
+    else: #lineScanning
+        StopPercentageTestingSLADS += percentageAdjustment
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+        
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+            
 
 
 # In[ ]:
