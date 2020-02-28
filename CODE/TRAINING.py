@@ -36,9 +36,8 @@ def cGaussian_parhelper(cNum, sigma, windowSize, orderForRD, imgAsBlocksOnlyUnme
     #For each of the selected unmeasured points calculate the captured "area"
     temp = np.zeros((windowSize[0]*windowSize[1], len(orderForRD)))
     for index in range(0,len(orderForRD)): temp[:,index] = imgAsBlocksOnlyUnmeasured[orderForRD[index],:]*generateGaussianKernel(sigma[orderForRD[index]], windowSize)
-    RD = np.sum(temp, axis=0)
     
-    return cNum, RD
+    return cNum, np.sum(temp, axis=0)
 
 #Given a set of file names, perform the initial setup for generating SLADS Model(s)
 def initTrain(sortedTrainingSampleFolders):
@@ -153,9 +152,6 @@ def initTrain(sortedTrainingSampleFolders):
                 for result in tqdm(parIterator(idens), total=len(idens), position=3, desc='c Values', leave=False, ascii=True):
                     trainingDatabase[result[0]].append(TrainingSample(dataSampleName, images, maskObject, massRanges, measurementPerc, polyFeatures, reconImage, orderForRD, result[1]))
 
-                #Manually run garbage collection
-                gc.collect()
-
     #Save the basic trainingSamples data for finding the best C
     #pickle.dump(trainingSamples, open(dir_TrainingResults + 'trainingSamples.p', 'wb'))
 
@@ -196,9 +192,6 @@ def trainModel(trainingDatabase):
     np.save(dir_TrainingResults + 'cValues', cValues)
     np.save(dir_TrainingResults + 'trainedModels', trainingModels)
 
-    #Manually run garbage collection
-    gc.collect()
-    
     return trainingModels
 
 #Given SLADS Model(s) determine the c value that minimizes the total distortion in scanned samples
@@ -216,6 +209,7 @@ def findBestC(trainingSamples, trainingModels):
     simulationFlag_id = ray.put(True)
     trainPlotFlag_id = ray.put(False)
     animationFlag_id = ray.put(False)
+    bestCFlag_id = ray.put(True)
     tqdmHide_id = ray.put(True)
 
     #For each of the proposed c values determine which produces the overall minimal amount of toal distortion
@@ -229,10 +223,9 @@ def findBestC(trainingSamples, trainingModels):
         areaUnderCurve = 0
         
         #Perform pool function and extract variables from the results
-        idens = [parFunction.remote(info_id, trainingSamples_id, trainingModel_id, stopPerc_id, sampleNum, simulationFlag_id, trainPlotFlag_id, animationFlag_id, tqdmHide_id) for sampleNum in range(0, len(trainingSamples))]
+        idens = [parFunction.remote(info_id, trainingSamples_id, trainingModel_id, stopPerc_id, sampleNum, simulationFlag_id, trainPlotFlag_id, animationFlag_id, tqdmHide_id, bestCFlag_id) for sampleNum in range(0, len(trainingSamples))]
 
-        for result in tqdm(parIterator(idens), total=len(idens), desc='Training Samples', position=1, leave=False, ascii=True):
-            areaUnderCurve += np.trapz(result.TDList, result.percMeasuredList)
+        for areaResult in tqdm(parIterator(idens), total=len(idens), desc='Training Samples', position=1, leave=False, ascii=True): areaUnderCurve += areaResult
 
         #Append the total distortion sum to a list corresponding to the c values
         areaUnderCurveList.append(areaUnderCurve)

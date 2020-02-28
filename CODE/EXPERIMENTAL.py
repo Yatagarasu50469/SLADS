@@ -56,7 +56,7 @@ def performImplementation(bestC, bestModel):
     impSample = Sample(impSampleName, images, massRanges, maskObject, mzWeights, dir_ImpResults)
     
     #Run SLADS
-    result = runSLADS(info, impSample, bestModel, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False)
+    result = runSLADS(info, impSample, bestModel, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, bestCFlag=False)
     
     #Indicate to equipment that the sample scan has concluded
     with open('./INPUT/IMP/DONE', 'w') as filehandle: filehandle.writelines('')

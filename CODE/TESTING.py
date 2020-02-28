@@ -27,19 +27,20 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
         testingSamples.append(Sample(dataSampleName, images, massRanges, maskObject, mzWeights, dir_TestingResults))
 
     #Set function for the pool
-    with contextlib.redirect_stdout(None):
-        parFunction = ray.remote(runSLADS)
-        time.sleep(1)
+    #with contextlib.redirect_stdout(None):
+    #    parFunction = ray.remote(runSLADS)
+    #    time.sleep(1)
 
     #Add constant static parameters to shared pool memory
-    info_id = ray.put(info)
-    testingSamples_id = ray.put(testingSamples)
-    testingModel_id = ray.put(bestModel)
-    stopPerc_id = ray.put(stopPerc)
-    simulationFlag_id = ray.put(True)
-    trainPlotFlag_id = ray.put(False)
-    animationFlag_id = ray.put(animationGen)
-    tqdmHide_id = ray.put(True)
+    #info_id = ray.put(info)
+    #testingSamples_id = ray.put(testingSamples)
+    #testingModel_id = ray.put(bestModel)
+    #stopPerc_id = ray.put(stopPerc)
+    #simulationFlag_id = ray.put(True)
+    #trainPlotFlag_id = ray.put(False)
+    #animationFlag_id = ray.put(animationGen)
+    #tqdmHide_id = ray.put(True)
+    #bestCFlag_id = ray.put(False)
 
     #Create holding arrays for all of the results
     MSE_testingResults = []
@@ -48,10 +49,18 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
     perc_testingResults = []
 
     #Perform pool function and extract variables from the results
-    idens = [parFunction.remote(info_id, testingSamples_id, testingModel_id, stopPerc_id, sampleNum, simulationFlag_id, trainPlotFlag_id, animationFlag_id, tqdmHide_id) for sampleNum in range(0, len(testingSamples))]
+    #idens = [parFunction.remote(info_id, testingSamples_id, testingModel_id, stopPerc_id, sampleNum, simulationFlag_id, trainPlotFlag_id, animationFlag_id, tqdmHide_id, bestCFlag_id) for sampleNum in range(0, len(testingSamples))]
 
     #Perform pool function and extract variables from the results
-    for result in tqdm(parIterator(idens), total=len(idens), desc='Testing Samples', position=0, leave=True, ascii=True):
+    #for result in tqdm(parIterator(idens), total=len(idens), desc='Testing Samples', position=0, leave=True, ascii=True):
+    #    info, testingSamples, bestModel, stopPerc, sampleNum, True, False, animationGen, True, False
+    #    MSE_testingResults.append(result.MSEList)
+    #    SSIM_testingResults.append(result.SSIMList)
+    #    TD_testingResults.append(result.TDList)
+    #    perc_testingResults.append(result.percMeasuredList)
+
+    for sampleNum in tqdm(range(0,len(testingSamples)), desc='Testing Samples', position=0, leave=True, ascii=True):
+        result = runSLADS(info, testingSamples, bestModel, stopPerc, sampleNum, True, False, animationGen, True, False)
         MSE_testingResults.append(result.MSEList)
         SSIM_testingResults.append(result.SSIMList)
         TD_testingResults.append(result.TDList)

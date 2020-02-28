@@ -16,7 +16,7 @@
 
 
     NAME: 		lineSLADS
-    VERSION NUM:	0.61
+    VERSION NUM:	0.6.1
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
 			points along a single axis. 

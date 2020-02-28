@@ -29,8 +29,8 @@ stopPerc = 50
 #Name used for sample data obtained with impModel
 impSampleName = 'SAMPLE_1'
 
-#Percent of available RAM to allocate for the multiprocessing pool
-percRAM = 80
+#Percent free RAM to allocate pool; leave enough free for results overhead
+percRAM = 90
 
 #Number of processor threads to leave free
 numFreeThreads = 2

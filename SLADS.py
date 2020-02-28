@@ -7,7 +7,7 @@
 #
 #DATE MODIFIED:	    27 February 2020
 #
-#VERSION NUM:	    0.61
+#VERSION NUM:	    0.6.1
 #
 #DESCRIPTION:	    Multichannel implementation of SLADS (Supervised Learning 
 #                   Algorithm for Dynamic Sampling with additional constraint to
@@ -42,7 +42,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum=0.61
+versionNum="0.6.1"
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
@@ -70,7 +70,7 @@ sectionTitle("\n \
  ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀\n \
 Author(s):\tDavid Helminiak\t\tEECE Marquette University\n \
 \t\tDong Hye Ye\t\tEECE Marquette University\n \
-Version:\t"+str(versionNum))
+Version:\t"+versionNum)
 
 #If a SLADS model needs to be trained
 if trainingModel:

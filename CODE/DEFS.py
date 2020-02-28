@@ -397,7 +397,7 @@ class MaskObject():
         for lineNum in range(0, len(self.linesToScan)): self.linesToScan[lineNum] = [pt for ix, pt in enumerate(self.linesToScan[lineNum]) if pt not in pts]
         self.linesToScan = [x for x in self.linesToScan if x]
 
-def runSLADS(info, samples, model, stopPerc, sampleNum, simulationFlag, trainPlotFlag, animationFlag, tqdmHide):
+def runSLADS(info, samples, model, stopPerc, sampleNum, simulationFlag, trainPlotFlag, animationFlag, tqdmHide, bestCFlag):
 
     if simulationFlag: #Here sample.images contains the full ground-truth images
         sample = samples[sampleNum]
@@ -510,9 +510,8 @@ def runSLADS(info, samples, model, stopPerc, sampleNum, simulationFlag, trainPlo
 
             #print(timesList)
     
-    #Manually run garbage collection
-    gc.collect()
-    
+    if bestCFlag: return np.trapz(result.TDList, result.percMeasuredList)
+
     return result
 
 def findNewMeasurementIdxs(info, maskObject, sample, model, reconValues, reconImage, ERDValuesNP):
