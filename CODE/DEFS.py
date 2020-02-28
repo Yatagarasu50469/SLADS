@@ -44,6 +44,7 @@ class Result():
         self.masks.append(maskObject.mask.copy())
         self.ERDValueNPs.append(ERDValuesNP.copy())
         self.sample = sample
+        self.percMeasuredList.append(percMeasured)
 
         if self.simulationFlag:
 
@@ -57,7 +58,6 @@ class Result():
             self.TDList.append(TD)
             self.MSEList.append(MSE)
             self.SSIMList.append(SSIM)
-            self.percMeasuredList.append(percMeasured)
 
         #If an animation will be produced and the run has completed
         if self.animationFlag and completedRunFlag:
@@ -73,6 +73,9 @@ class Result():
             #Clean directories
             if os.path.exists(dir_AnimationFrames): shutil.rmtree(dir_AnimationFrames)
             os.makedirs(dir_AnimationFrames)
+
+            if os.path.exists(dir_AnimationVideos): shutil.rmtree(dir_AnimationVideos)
+            os.makedirs(dir_AnimationVideos)
 
             if os.path.exists(dir_mzSampleResults): shutil.rmtree(dir_mzSampleResults)
             os.makedirs(dir_mzSampleResults)
@@ -129,49 +132,49 @@ class Result():
                     font = {'size' : 18}
                     plt.rc('font', **font)
                     f = plt.figure(figsize=(15,5))
-
+            
                     f.subplots_adjust(top = 0.7)
                     f.subplots_adjust(wspace=0.15, hspace=0.2)
                     plt.suptitle("Percent Sampled: %.2f, Measurement Iteration: %.0f\nSSIM: %.2f" % (self.percMeasuredList[i], i+1, self.SSIMList[i]), fontsize=20, fontweight='bold', y = 0.95)
-
+                    
                     sub = f.add_subplot(1,3,1)
                     sub.imshow(self.avgImage * 255.0/self.avgImage.max(), cmap='hot', aspect='auto')
                     sub.set_title('Ground-Truth')
-
+                    
                     sub = f.add_subplot(1,3,2)
                     sub.imshow(self.reconImages[i] * 255.0/self.reconImages[i].max(), cmap='hot', aspect='auto')
                     sub.set_title('Reconstructed Image')
-
+                    
                     sub = f.add_subplot(1,3,3)
                     sub.imshow(self.masks[i], cmap='gray', aspect='auto')
                     sub.set_title('Sampled Mask')
-
+                    
                     plt.savefig(saveLocation, bbox_inches='tight')
                     plt.close()
                     #=====================
-
+                    
                     #2x2 with ERD printout
                     #=====================
 #                    font = {'size' : 18}
 #                    plt.rc('font', **font)
 #                    f = plt.figure(figsize=(15,15))
-#            
+#
 #                    f.subplots_adjust(top = 0.85)
 #                    f.subplots_adjust(wspace=0.15, hspace=0.2)
 #                    plt.suptitle("Percent Sampled: %.2f, Measurement Iteration: %.0f\nSSIM: %.2f" % (self.percMeasuredList[i], i+1, self.SSIMList[i]), fontsize=20, fontweight='bold', y = 0.95)
-#                    
+#
 #                    sub = f.add_subplot(2,2,1)
 #                    sub.imshow(self.avgImage * 255.0/self.avgImage.max(), cmap='hot', aspect='auto')
 #                    sub.set_title('Ground-Truth')
-#                    
+#
 #                    sub = f.add_subplot(2,2,2)
 #                    sub.imshow(self.reconImages[i] * 255.0/self.reconImages[i].max(), cmap='hot', aspect='auto')
 #                    sub.set_title('Reconstructed Image')
-#                    
+#
 #                    sub = f.add_subplot(2,2,3)
 #                    sub.imshow(self.masks[i], cmap='gray', aspect='auto')
 #                    sub.set_title('Sampled Mask')
-#                    
+#
 #                    sub = f.add_subplot(2,2,4)
 #                    #im = sub.imshow(self.ERDValueNPs[i]>0, cmap='gray', aspect='auto')
 #                    #sub.set_title('ERD Values > 0')
@@ -183,8 +186,7 @@ class Result():
 #                    plt.savefig(saveLocation, bbox_inches='tight')
 #                    plt.close()
 
-            #If this wasn't a simulation
-            else:
+            else: #Not a simulation
                 #Save each of the individual mass range reconstructions
                 percSampled = "{:.2f}".format(self.percMeasuredList[len(self.percMeasuredList)-1])
                 for massNum in range(0, len(self.sample.massRanges)):
@@ -197,7 +199,7 @@ class Result():
                     f = plt.figure(figsize=(10,5))
                     f.subplots_adjust(top = 0.80)
                     f.subplots_adjust(wspace=0.15, hspace=0.2)
-                    plt.suptitle('Percent Sampled: ' + percSampled + '  Measurement mz: ' + massRange + '  SSIM: ' + SSIM, fontsize=20, fontweight='bold', y = 0.95)
+                    plt.suptitle('Percent Sampled: ' + percSampled + '  Measurement mz: ' + massRange, fontsize=20, fontweight='bold', y = 0.95)
 
                     sub = f.add_subplot(1,2,1)
                     sub.imshow(self.masks[len(self.masks)-1 ], cmap='gray', aspect='auto')
@@ -219,9 +221,9 @@ class Result():
 
                     font = {'size' : 18}
                     plt.rc('font', **font)
-                    f = plt.figure(figsize=(15,15))
+                    f = plt.figure(figsize=(15,5))
 
-                    f.subplots_adjust(top = 0.85)
+                    f.subplots_adjust(top = 0.80)
                     f.subplots_adjust(wspace=0.15, hspace=0.2)
                     plt.suptitle("Percent Sampled: %.2f, Measurement Iteration: %.0f" % (self.percMeasuredList[i], i+1), fontsize=20, fontweight='bold', y = 0.95)
 
@@ -286,6 +288,7 @@ class MaskObject():
         self.initialUnMeasuredIdxs = []
         self.unMeasuredIdxsList = []
         self.measuredIdxsList = []
+        self.initialSets = []
 
         #Generate a list of arrays contianing the x,y points that need to be scanned
         self.linesToScan = []
@@ -308,11 +311,13 @@ class MaskObject():
 
         #Set which lines should be acquired in initial scan
         for lineIndexNum in range(0, len(lineIndexes)):
-            #Subtract the number of lines deleted so far
             lineIndex = lineIndexes[lineIndexNum]
+            ptList = []
             for pt in self.linesToScan[lineIndex]:
                 self.initialMask[tuple(pt)] = 1
                 self.initialMaskPts.append(pt)
+                ptList.append(pt)
+            self.initialSets.append([self.linesToScan[lineIndex][0], self.linesToScan[lineIndex][len(self.linesToScan[lineIndex])-1]])
 
         #Now delete the lines specified
         for lineIndexNum in range(0, len(lineIndexes)): self.delLine(lineIndexes[lineIndexNum]-lineIndexNum)
@@ -349,12 +354,18 @@ class MaskObject():
         self.measuredIdxs = np.transpose(np.where(self.mask == 1))
         self.unMeasuredIdxs = np.transpose(np.where(self.mask == 0))
 
-    #Reset the training sample's mask and linesToScan to nothing having been scanned
-    def reset(self):
-        self.mask = np.zeros([self.height, self.width])
-        self.linesToScan = copy.copy(self.originalLinesToScan)
-        self.measuredIdxs = np.transpose(np.where(self.mask == 1))
-        self.unMeasuredIdxs = np.transpose(np.where(self.mask == 0))
+    #Reset the training sample's mask and linesToScan
+    def reset(self, simulationFlag):
+        #If this is a simulation, then reset to blank mask (no initial scan)
+        if simulationFlag:
+            self.mask = np.zeros([self.height, self.width])
+            self.linesToScan = copy.copy(self.originalLinesToScan)
+            self.measuredIdxs = np.transpose(np.where(self.mask == 1))
+            self.unMeasuredIdxs = np.transpose(np.where(self.mask == 0))
+        else: #Reset to state after initial measurements have been made
+            self.mask = self.initialMask
+            self.measuredIdxs = np.transpose(np.where(self.mask == 1))
+            self.unMeasuredIdxs = np.transpose(np.where(self.mask == 0))
 
     def delLine(self, index):
         self.linesToScan = np.delete(self.linesToScan, index, 0)
@@ -362,20 +373,24 @@ class MaskObject():
     def delPoints(self, pts):
         for i in range(0,len(self.linesToScan)):
             indexes = []
-            for pt in pts:
-                indexes.append([i for i, j in enumerate(self.linesToScan[i]) if j == pt])
+            for pt in pts: indexes.append([i for i, j in enumerate(self.linesToScan[i]) if j == pt])
             indexes = [x for x in np.asarray(indexes).flatten().tolist() if x != []]
             if len(indexes) > 0:
                 self.linesToScan[i] = np.delete(self.linesToScan[i], indexes,0).tolist()
 
 def runSLADS(info, samples, models, stopPerc, cNum, sampleNum, simulationFlag, trainPlotFlag, animationFlag, tqdmHide):
-    
-    sample = samples[sampleNum]
+
+    if simulationFlag:
+        sample = samples[sampleNum]
+        theta = models[cNum]
+    else:
+        sample = samples
+        theta = models
+        sample.measuredImages = sample.images
     maskObject = sample.maskObject
-    theta = models[cNum]
 
     #Reinitialize the mask state to starting state
-    maskObject.reset()
+    maskObject.reset(simulationFlag)
 
     #Has the stopping condition been met yet
     completedRunFlag = False
@@ -385,7 +400,7 @@ def runSLADS(info, samples, models, stopPerc, cNum, sampleNum, simulationFlag, t
 
     #Assume variable Classify=='N' (Artifact of pointwise SLADS)
 
-    #Perform weighted averaging for the ground-truth image
+    #Perform weighted averaging for the known image
     npImages = []
     for image in sample.images: npImages.append(np.asarray(image))
     avgImage = np.average(np.asarray(npImages), axis=0, weights=sample.mzWeights)
@@ -397,7 +412,7 @@ def runSLADS(info, samples, models, stopPerc, cNum, sampleNum, simulationFlag, t
     stopCondFuncVal = np.zeros((int((maskObject.area)*(stopCondParams.maxPercentage)/100)+10,2))
 
     #Perform the initial measurements
-    sample, maskObject = performMeasurements(sample, maskObject, maskObject.initialMeasuredIdxs, simulationFlag)
+    if simulationFlag: sample, maskObject = performMeasurements(sample, maskObject, maskObject.initialMeasuredIdxs, None, simulationFlag)
 
     #Perform initial reconstruction and ERD calculation
     reconImage, reconValues, ERDValues, ERDValuesNP = avgReconAndERD(sample, info, iterNum, maskObject, theta, reconImage=None, reconValues=None, ERDValues=None, ERDValuesNP=None, newIdxs=None, maxIdxsVect=None)
@@ -439,12 +454,12 @@ def runSLADS(info, samples, models, stopPerc, cNum, sampleNum, simulationFlag, t
             
             t0 = time.time()
             #Find next measurement locations
-            maskObject, newIdxs, maxIdxsVect = findNewMeasurementIdxs(info, maskObject, measuredValues, theta, reconValues, reconImage, ERDValues, ERDValuesNP)
+            maskObject, newIdxs, lineToScanIdx, maxIdxsVect = findNewMeasurementIdxs(info, maskObject, measuredValues, theta, reconValues, reconImage, ERDValues, ERDValuesNP)
             timesList.append(round(time.time()-t0,10))
             
             t0 = time.time()
             #Perform measurements
-            sample, maskObject = performMeasurements(sample, maskObject, newIdxs, simulationFlag)
+            sample, maskObject = performMeasurements(sample, maskObject, newIdxs, lineToScanIdx, simulationFlag)
             timesList.append(round(time.time()-t0,10))
             
             t0 = time.time()
@@ -533,7 +548,7 @@ def findNewMeasurementIdxs(info, maskObject, measuredValues, theta, reconValues,
     for pt in ptArray:
         if pt in unMeasuredIdxsList: maxIdxsVect.append(unMeasuredIdxsList.index(pt))
 
-    return maskObject, np.asarray(newIdxs), np.asarray(maxIdxsVect)
+    return maskObject, np.asarray(newIdxs), lineToScanIdx, np.asarray(maxIdxsVect)
 
 def avgReconAndERD(sample, info, iterNum, maskObject, theta, reconImage, reconValues, ERDValues, ERDValuesNP, newIdxs, maxIdxsVect):
 
@@ -747,17 +762,24 @@ def percResults(results, perc_testingResults, precision):
             finalPercents.append(percent)
     return finalPercents, averages
 
-
-def performMeasurements(sample, maskObject, newIdxs, simulationFlag):
+def performMeasurements(sample, maskObject, newIdxs, lineToScanIdx, simulationFlag):
 
     #Update the maskObject according to the newIdxs
     maskObject.update(newIdxs)
 
-    #Obtain values from the stored image information
-    for imageNum in range(0,len(sample.measuredImages)):
-        temp = np.asarray(sample.images[imageNum]).copy()
-        temp[maskObject.mask == 0] = 0
-        sample.measuredImages[imageNum] = temp.copy()
+    #If this is not a simulation then inform equipment what points to scan, wait, read in new data, update images in sample
+    if not simulationFlag:
+        with open('./INPUT/IMP/UNLOCK', 'w') as filehandle: filehandle.writelines(str(tuple(newIdxs[0])) + ', ' + str(tuple(newIdxs[len(newIdxs)-1])))
+        equipWait()
+        images, massRanges = readScanData()
+        sample.images = images
+        sample.measuredImages = images
+    else:
+        #Obtain masked values from the stored image information
+        for imageNum in range(0,len(sample.measuredImages)):
+            temp = np.asarray(sample.images[imageNum]).copy()
+            temp[maskObject.mask == 0] = 0
+            sample.measuredImages[imageNum] = temp.copy()
     return sample, maskObject
 
 def sectionTitle(title):

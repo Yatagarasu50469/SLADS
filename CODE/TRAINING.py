@@ -37,7 +37,7 @@ def initTrain(sortedTrainingSampleFolders):
     #Set function for the pool
     with contextlib.redirect_stdout(None):
         parFunction = ray.remote(imFeature_parhelper)
-        time.sleep(0.5)
+        time.sleep(1)
 
     #Create a set of training samples for each possible c Value
     trainingDatabase = []
@@ -203,7 +203,7 @@ def findBestC(trainingSamples, trainingModels):
     #Set function for the pool
     with contextlib.redirect_stdout(None):
         parFunction = ray.remote(runSLADS)
-        time.sleep(0.5)
+        time.sleep(1)
     
     #Add constant static parameters to shared pool memory
     info_id = ray.put(info)

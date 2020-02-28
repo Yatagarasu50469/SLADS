@@ -2,33 +2,64 @@
 #IMPLEMENTATION SLADS SPECIFIC
 #==================================================================
 
-def performImplementation(dataSampleName):
+#Signal external equipment and wait for LOCK file to exist
+def equipWait():
+    
+    #Signal the equipment by removing the LOCK file if it exists
+    if os.path.isfile('./INPUT/IMP/LOCK'): os.remove('./INPUT/IMP/LOCK')
+    while True:
+        if not os.path.isfile('./INPUT/IMP/LOCK'):
+            time.sleep(0.1)
+        else:
+            break
 
-    #Load the best model (if it has not been passed along from the training method)
-    bestC = np.load(dir_TrainingResults + 'bestC.npy')
-    bestTheta = np.load(dir_TrainingResults + 'bestTheta.npy')
-
+def readScanData():
     images = []
     massRanges = []
-    for imageFileName in natsort.natsorted(glob.glob(testingSampleFolder + '/*.' + 'csv'), reverse=False):
+    for imageFileName in natsort.natsorted(glob.glob('./INPUT/IMP/*.' + 'csv'), reverse=False):
         images.append(np.nan_to_num(np.loadtxt(imageFileName, delimiter=',')))
         massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
+    return images, massRanges
+
+#Perform SLADS with external equipment
+def performImplementation(bestC, bestTheta):
+
+    #Clean up files from previous runs if they exist
+    if os.path.isfile('./INPUT/IMP/DONE'): os.remove('./INPUT/IMP/DONE')
+    if os.path.isfile('./INPUT/IMP/UNLOCK'): os.remove('./INPUT/IMP/UNLOCK')
     
-    #Read in the width and height
-    height, width = images[0].shape
+    #Wait for equipment to initialize scan
+    equipWait()
+    
+    #Read in the image data (blank) for size information
+    images, massRanges = readScanData()
     
     #Create a new maskObject
-    maskObject = MaskObject(width, height, measurementPercs=[])
-    
+    maskObject = MaskObject(images[0].shape[1], images[0].shape[0], measurementPercs=[])
+
+    #For each of the initial sets that must be obtained
+    for setNum in range(0, len(maskObject.initialSets)):
+        
+        #Export the set to a file UNLOCK
+        with open('./INPUT/IMP/UNLOCK', 'w') as filehandle: filehandle.writelines(str(maskObject.initialSets[setNum][0]) + ', ' + str(maskObject.initialSets[setNum][1]))
+        
+        #Wait for equipment to finish scan
+        equipWait()
+
+    #Update internal sample data with the acquired information
+    images, massRanges = readScanData()
+
     #How should the mz ranges be weighted (all equal for now)
     mzWeights = np.ones(len(images))/len(images)
     
     #Define information as a new Sample object
-    impSample = Sample(dataSampleName, images, massRanges, maskObject, mzWeights, dir_ImpResults)
+    impSample = Sample(impSampleName, images, massRanges, maskObject, mzWeights, dir_ImpResults)
     
-
-    sys.error('Error! - Implementation functionality for SLADS has not fully been incorporated at this time.')
+    #Run SLADS
+    result = runSLADS(info, impSample, bestTheta, stopPerc, 0, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False)
     
-    #Modify runSLADS regarding iterNum and simulationFlag checking
-    runSLADS(info, impSample, maskObject, bestTheta, stopPerc, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen)
+    #Indicate to equipment that the sample scan has concluded
+    with open('./INPUT/IMP/DONE', 'w') as filehandle: filehandle.writelines('')
 
+    #Move all of the csv files to finalized directory
+    for fileName in glob.glob('./INPUT/IMP/*.' + 'csv'): shutil.move(fileName, dir_ImpDataFinal)

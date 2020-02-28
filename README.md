@@ -16,7 +16,7 @@
 
 
     NAME: 		lineSLADS
-    VERSION NUM:	0.5
+    VERSION NUM:	0.6
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
 			points along a single axis. 
@@ -38,7 +38,7 @@
     		0.3	Complete code rewrite, computational improvements
     		0.4	Class/function segmentation
     		0.5	Overhead reduction; switch multiprocessing package
-    		~0.6	Modifications for Nano-DESI microscope integration
+    		0.6	Modifications for Nano-DESI microscope integration
     		~0.7	Tissue model library generation
     		~0.8	Deep feature extraction
     		~0.9	GPU acceleratiaon
@@ -101,7 +101,7 @@
     	|	|	|------->Images
     	|	|	|	|-------N/A
     	|	|	|------->trainedModels.npy
-    	|	|	|------->trainingSamples.p
+
 
 # INSTALLATION
 

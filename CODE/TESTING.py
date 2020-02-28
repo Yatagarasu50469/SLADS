@@ -17,12 +17,8 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestTheta):
             images.append(np.nan_to_num(np.loadtxt(imageFileName, delimiter=',')))
             massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
 
-        #Read in the width and height
-        #width, height = pd.read_csv(testingSampleFolder+'/dimensions.csv', sep=',', header=None).values[0].tolist()
-        height, width = images[0].shape
-
         #Create a new maskObject
-        maskObject = MaskObject(width, height, measurementPercs=[])
+        maskObject = MaskObject(images[0].shape[1], images[0].shape[0], measurementPercs=[])
     
         #How should the mz ranges be weighted (all equal for now)
         mzWeights = np.ones(len(images))/len(images)
@@ -33,7 +29,7 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestTheta):
     #Set function for the pool
     with contextlib.redirect_stdout(None):
         parFunction = ray.remote(runSLADS)
-        time.sleep(0.5)
+        time.sleep(1)
 
 
     #Add constant static parameters to shared pool memory

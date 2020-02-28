@@ -15,7 +15,6 @@ testingModel = True
 LOOCV = False
 
 #Is this an implementation run
-#Not implemented at this time
 impModel = False
 
 #PARAMETERS: L1
@@ -26,6 +25,9 @@ windowSize = [3, 21]
 
 #Stopping percentage for number of acquired pixels
 stopPerc = 50
+
+#Name used for sample data obtained with impModel
+impSampleName = 'SAMPLE_1'
 
 #PARAMETERS: L2
 #==================================================================

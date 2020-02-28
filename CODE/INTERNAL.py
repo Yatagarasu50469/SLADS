@@ -54,6 +54,9 @@ if testingModel:
 if impModel:
     if os.path.exists(dir_ImpResults): shutil.rmtree(dir_ImpResults)
     os.makedirs(dir_ImpResults)
+    dir_ImpDataFinal = dir_ImpData + impSampleName + os.path.sep
+    if os.path.exists(dir_ImpDataFinal): shutil.rmtree(dir_ImpDataFinal)
+    os.makedirs(dir_ImpDataFinal)
 
 if animationGen:
     dir_Animations = dir_TestingResults + 'Animations/'

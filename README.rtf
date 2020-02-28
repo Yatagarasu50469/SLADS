@@ -110,7 +110,7 @@
 \b0 \cf0 #====================================================================\
 \pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardeftab529\ri-720\partightenfactor0
 \cf0 NAME:		lineSLADS\
-VERSION NUM:	0.5\
+VERSION NUM:	0.6\
 DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm \
 			for Dynamic Sampling with additional constraint to select groups of points \
 			along a single axis. \
@@ -127,18 +127,20 @@ FUNDING:		This project has received funding and was programmed for:\
 \
 GLOBAL\
 CHANGELOG:	0.1	Multithreading adjustments to pointwise SLADS\
-			0.1.1	Line constraints, concatenation, pruning, and results organization			0.2	Comple program rewrite\
+			0.1.1	Line constraints, concatenation, pruning, and results organization\
+			0.2	Comple program rewrite\
 			0.3	Complete code rewrite, computational improvements\
 			0.4	Class/function segmentation\
 			0.5	Overhead reduction; switch multiprocessing package\
-			~0.6	Modifications for Nano-DESI microscope integration\
+			0.6	Modifications for Nano-DESI microscope integration\
 			~0.7	Tissue model library generation\
 			~0.8	Deep feature extraction\
 			~0.9	GPU acceleratiaon\
 			~1.0	Initial release\
 \pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardeftab529\ri-1440\partightenfactor0
 \cf0 #====================================================================\
-\
+\pard\pardeftab529\ri0\partightenfactor0
+\cf0 \
 \pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardeftab529\ri0\partightenfactor0
 \cf0 #====================================================================\
 \pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardeftab529\ri0\partightenfactor0
@@ -748,11 +750,7 @@ All critical parameters for SLADS may be altered in ./CONFIG.py where:\
 
 \b0 #====================================================================\
 
-\b Warning
-\b0 : This section\'92s procedure has not been implemented at this time. Below is a brief proposal of how SLADS may be easily integrated with physical scanning equipment\
-
-\b \
-Note
+\b Note
 \b0 : In order to use a SLADS model in a physical implementation, the files resultant from the training procedure must be located within './RESULTS/TRAIN_RESULTS/', particularly:  bestC.npy and bestTheta.npy.\
 \
 Prior to engaging the physical equipment, run SLADS with the 
@@ -763,9 +761,21 @@ Prior to engaging the physical equipment, run SLADS with the
 \b LOCK
 \b0  to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, saved in a file: 
 \b UNLOCK
-\b0 . SLADS will delete the 
+\b0 . The data will be presented in the format: \
+\
+	(
+\i startRowNum
+\i0 , 
+\i startColumnNum
+\i0 ),  (
+\i endRowNum
+\i0 , 
+\i endColumnNum
+\i0 )\
+\
+SLADS will delete the 
 \b LOCK
-\b0  folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in .csv files for each of the specified mz ranges in accordance with the format mentioned in the 
+\b0  file then, signaling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in .csv files for each of the specified mz ranges in accordance with the format mentioned in the 
 \b TRAINING/TESTING PROCEDURE
 \b0  section. When SLADS has reached its termination criteria it will produce a different file:
 \b  DONE

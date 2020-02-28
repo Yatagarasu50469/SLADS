@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    7 January 2020
+#DATE MODIFIED:	    22 January 2020
 #
-#VERSION NUM:	    0.5
+#VERSION NUM:	    0.6
 #
 #DESCRIPTION:	    Multichannel implementation of SLADS (Supervised Learning 
 #                   Algorithm for Dynamic Sampling with additional constraint to
@@ -30,7 +30,7 @@
 #               0.3    Complete code rewrite, computational improvements
 #               0.4    Class/function segmentation
 #               0.5    Overhead reduction; switch multiprocessing package
-#               ~0.6	Modifications for Nano-DESI microscope integration
+#               0.6     Modifications for Nano-DESI microscope integration
 #               ~0.7	Tissue model library generation
 #               ~0.8	Deep feature extraction
 #               ~0.9	GPU acceleratiaon
@@ -41,7 +41,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum=0.5
+versionNum=0.6
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
@@ -94,7 +94,14 @@ if trainingModel:
 
     #Identify the best Model; saves to training results
     bestC, bestTheta = findBestC(trainingSamples, trainingModels)
+
+#If testing or implementation
+if testingModel or impModel:
     
+    #Load in the best model information
+    bestC = np.load(dir_TrainingResults + 'bestC.npy')
+    bestTheta = np.load(dir_TrainingResults + 'bestTheta.npy')
+
 #If a SLADS model needs to be tested
 if testingModel:
     
@@ -104,11 +111,7 @@ if testingModel:
     exec(open("./CODE/TESTING.py").read())
 
     #Obtain the file pats for the intended testing data
-    testSamplePaths = natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False) 
-    
-    #Load in the best model information
-    bestC = np.load(dir_TrainingResults + 'bestC.npy')
-    bestTheta = np.load(dir_TrainingResults + 'bestTheta.npy')
+    testSamplePaths = natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False)
 
     #Perform testing
     testSLADS(testSamplePaths, bestC, bestTheta)
@@ -123,10 +126,10 @@ if impModel:
     sectionTitle('PERFORMING SLADS')
 
     #Import any specific implementation function and class definitions
-    exec(open("./CODE/EXPERPIMENTAL.py").read())
-    
-    #Obtain the file paths for the data that has been captured
-    impSamplePaths = natsort.natsorted(glob.glob(dir_ImpData + '/*'), reverse=False)
+    exec(open("./CODE/EXPERIMENTAL.py").read())
+
+    #Begin performing an implementation
+    performImplementation(bestC, bestTheta)
 
 #AFTER INTENDED PROCEDURES (TRAINING/TESTING) HAVE BEEN PERFORMED
 sectionTitle('PROGRAM COMPLETE')
