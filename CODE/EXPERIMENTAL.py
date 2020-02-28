@@ -22,7 +22,7 @@ def readScanData():
     return images, massRanges
 
 #Perform SLADS with external equipment
-def performImplementation(bestC, bestTheta):
+def performImplementation(bestC, bestModel):
 
     #Clean up files from previous runs if they exist
     if os.path.isfile('./INPUT/IMP/DONE'): os.remove('./INPUT/IMP/DONE')
@@ -35,11 +35,11 @@ def performImplementation(bestC, bestTheta):
     images, massRanges = readScanData()
     
     #Create a new maskObject
-    maskObject = MaskObject(images[0].shape[1], images[0].shape[0], measurementPercs=[])
+    maskObject = MaskObject(images[0].shape[1], images[0].shape[0], [], numMasks)
 
     #For each of the initial sets that must be obtained
     for setNum in range(0, len(maskObject.initialSets)):
-        
+
         #Export the set to a file UNLOCK
         with open('./INPUT/IMP/UNLOCK', 'w') as filehandle: filehandle.writelines(str(maskObject.initialSets[setNum][0]) + ', ' + str(maskObject.initialSets[setNum][1]))
         
@@ -49,14 +49,14 @@ def performImplementation(bestC, bestTheta):
     #Update internal sample data with the acquired information
     images, massRanges = readScanData()
 
-    #How should the mz ranges be weighted (all equal for now)
+    #Weight images equally
     mzWeights = np.ones(len(images))/len(images)
-    
+
     #Define information as a new Sample object
     impSample = Sample(impSampleName, images, massRanges, maskObject, mzWeights, dir_ImpResults)
     
     #Run SLADS
-    result = runSLADS(info, impSample, bestTheta, stopPerc, 0, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False)
+    result = runSLADS(info, impSample, bestModel, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False)
     
     #Indicate to equipment that the sample scan has concluded
     with open('./INPUT/IMP/DONE', 'w') as filehandle: filehandle.writelines('')

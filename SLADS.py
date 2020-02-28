@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    22 January 2020
+#DATE MODIFIED:	    27 February 2020
 #
-#VERSION NUM:	    0.6
+#VERSION NUM:	    0.61
 #
 #DESCRIPTION:	    Multichannel implementation of SLADS (Supervised Learning 
 #                   Algorithm for Dynamic Sampling with additional constraint to
@@ -24,13 +24,14 @@
 #               NIH Grant 1UG3HL145593-01
 #
 #GLOBAL
-#CHANGELOG:     0.1    Multithreading adjustments to pointwise SLADS
-#               0.1.1  Line constraints, concatenation, pruning, and results organization
-#               0.2    Comple program rewrite
-#               0.3    Complete code rewrite, computational improvements
-#               0.4    Class/function segmentation
-#               0.5    Overhead reduction; switch multiprocessing package
+#CHANGELOG:     0.1     Multithreading adjustments to pointwise SLADS
+#               0.1.1    Line constraints, concatenation, pruning, and results organization
+#               0.2     Line bounded constraints addition
+#               0.3     Complete code rewrite, computational improvements
+#               0.4     Class/function segmentation
+#               0.5     Overhead reduction; switch multiprocessing package
 #               0.6     Modifications for Nano-DESI microscope integration
+#               0.6.1   Model robustness and reduction of memory overhead
 #               ~0.7	Tissue model library generation
 #               ~0.8	Deep feature extraction
 #               ~0.9	GPU acceleratiaon
@@ -41,7 +42,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum=0.6
+versionNum=0.61
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
@@ -93,18 +94,15 @@ if trainingModel:
     sectionTitle('DETERMINING BEST MODEL')
 
     #Identify the best Model; saves to training results
-    bestC, bestTheta = findBestC(trainingSamples, trainingModels)
+    bestC, bestModel = findBestC(trainingSamples, trainingModels)
 
-#If testing or implementation
-if testingModel or impModel:
-    
-    #Load in the best model information
-    bestC = np.load(dir_TrainingResults + 'bestC.npy')
-    bestTheta = np.load(dir_TrainingResults + 'bestTheta.npy')
+#Load in the best model information if training wasn't performed
+if not trainingModel:
+    bestC = np.load(dir_TrainingResults + 'bestC.npy', allow_pickle=True)
+    bestModel = np.load(dir_TrainingResults + 'bestModel.npy', allow_pickle=True)
 
 #If a SLADS model needs to be tested
 if testingModel:
-    
     sectionTitle('PERFORMING TESTING')
 
     #Import any specific testing function and class definitions
@@ -114,7 +112,7 @@ if testingModel:
     testSamplePaths = natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False)
 
     #Perform testing
-    testSLADS(testSamplePaths, bestC, bestTheta)
+    testSLADS(testSamplePaths, bestC, bestModel)
 
 #If Leave-One-Out Cross Validation is to be performed
 if LOOCV:
@@ -129,7 +127,7 @@ if impModel:
     exec(open("./CODE/EXPERIMENTAL.py").read())
 
     #Begin performing an implementation
-    performImplementation(bestC, bestTheta)
+    performImplementation(bestC, bestModel)
 
 #AFTER INTENDED PROCEDURES (TRAINING/TESTING) HAVE BEEN PERFORMED
 sectionTitle('PROGRAM COMPLETE')

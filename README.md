@@ -1,4 +1,4 @@
-﻿
+
      ▄▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄ 
 	▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌
 	▐░█▀▀▀▀▀▀▀▀▀ ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ 
@@ -16,7 +16,7 @@
 
 
     NAME: 		lineSLADS
-    VERSION NUM:	0.6
+    VERSION NUM:	0.61
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
 			points along a single axis. 
@@ -33,12 +33,13 @@
     
     GLOBAL
     CHANGELOG:	0.1	Multithreading adjustments to pointwise SLADS
-    		0.1.1	Line constraints, concatenation, pruning, and results organization			
+    		0.1.1 Line constraints, concatenation, pruning, and results organization			
     		0.2	Comple program rewrite
     		0.3	Complete code rewrite, computational improvements
     		0.4	Class/function segmentation
     		0.5	Overhead reduction; switch multiprocessing package
     		0.6	Modifications for Nano-DESI microscope integration
+         0.6.1 Model robustness and reduction of memory overhead
     		~0.7	Tissue model library generation
     		~0.8	Deep feature extraction
     		~0.9	GPU acceleratiaon
@@ -147,7 +148,7 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 		pyparsing: 		2.4.6
 		pytz:			2019.3
 		PyWavelets: 		1.1.1
-		ray:			0.8.0
+		ray:			0.8.2
 		scipy:			1.4.1
 		six: 			1.13.0
 		scikit-image: 		0.16.2

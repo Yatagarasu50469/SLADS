@@ -5,11 +5,32 @@
 #INTERNAL OBJECT SETUP
 #==================================================================
 #Initialize the information object for training and testing
-#(reconMethod, featReconMethod, neighborWeightsPower, numNeighbors, filterType, featDistCutoff, resolution)
-info = Info('CWM', 'CWM', 2, 10, 'Gaussian', 0.25, 1, imageType)
+reconMethod = 'CWM'
+featReconMethod = 'CWM'
+neighborWeightsPower = 2
+numNeighbors = 1
+filterType = 'Gaussian'
+featDistCutoff = 0.25
+resolution = 1
+info = Info(reconMethod, featReconMethod, neighborWeightsPower, numNeighbors, filterType, featDistCutoff, resolution, imageType)
 
-#Setup parallization pool
-ray.init(num_cpus=num_threads)
+#Set the number of available CPU threads, leave 2 free if possilbe
+num_threads = multiprocessing.cpu_count()
+if num_threads > numFreeThreads: num_threads -= numFreeThreads
+
+#Set the raw amount of RAM for the multiprocessing pool
+amount_RAM = int(psutil.virtual_memory().available*(percRAM/100))
+
+#Setup parallization pool; allocate 40% for object storage and 10% for redis information metadata/lineage
+#object_store_memory=int(amount_RAM*0.4), redis_max_memory=int(amount_RAM*0.1)
+ray.init(num_cpus=num_threads, memory=amount_RAM, object_store_memory=int(amount_RAM*0.7), log_to_driver=False, logging_level=logging.ERROR)
+
+#Print and store all current variables in RAM
+#variableList = []
+#for name, size in sorted(((name, sys.getsizeof(value)) for name, value in globals().items()), key= lambda x: -x[1])[:len(globals().items())]: variableList.append(str("{:>30}: {:>8}".format(name, sizeFunc(size))))
+#for name, size in sorted(((name, sys.getsizeof(value)) for name, value in locals().items()), key= lambda x: -x[1])[:len(locals().items())]: variableList.append(str("{:>30}: {:>8}".format(name, sizeFunc(size))))
+#for name, size in sorted(((name, sys.getsizeof(value)) for name, value in vars().items()), key= lambda x: -x[1])[:len(vars().items())]: variableList.append(str("{:>30}: {:>8}".format(name, sizeFunc(size))))
+#with open('variable1.txt', 'w') as filehandle: filehandle.writelines("%s\n" % item for item in variableList)
 
 #PATH/DIRECTORY SETUP
 #==================================================================

@@ -20,8 +20,8 @@ impModel = False
 #PARAMETERS: L1
 #==================================================================
 
-#Window size for approximate RD summation; 15 for 512x512
-windowSize = [3, 21]
+#Window size for approximate RD summation; 15 for 64x64, (width,height)
+windowSize = [15,15]
 
 #Stopping percentage for number of acquired pixels
 stopPerc = 50
@@ -29,14 +29,20 @@ stopPerc = 50
 #Name used for sample data obtained with impModel
 impSampleName = 'SAMPLE_1'
 
+#Percent of available RAM to allocate for the multiprocessing pool
+percRAM = 80
+
+#Number of processor threads to leave free
+numFreeThreads = 2
+
 #PARAMETERS: L2
 #==================================================================
 
 #Sampling percentages for training
-measurementPercs = [1, 5, 10, 20, 30, 40]
+measurementPercs = [5, 10, 20, 30, 40]
 
 #Possible c values for RD approximation
-cValues = np.array([2, 3, 4, 5, 6, 7, 8, 9, 10])
+cValues = np.array([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
 
 #Should animations be generated during testing/implementation
 animationGen = True
@@ -49,12 +55,11 @@ imageType = 'C'
 #Not implemented at this time
 findStopThresh = False
 
+#How many masks should be used for each percentage during training
+numMasks = 1
+
 #Percent of reduction in distrotion limit for numRandomChoice determination
 percOfRD = 50
-
-#Set the number of available CPU threads, leave 2 free if possilbe
-num_threads = multiprocessing.cpu_count()
-if num_threads > 2: num_threads -= 2
 
 #Running in a console/True, jupyter-notebook/False
 consoleRunning = True

@@ -13,20 +13,22 @@ class Sample:
         self.measuredImages = []
         for rangeNum in range(0,len(massRanges)): self.measuredImages.append(np.zeros([maskObject.width, maskObject.height]))
         self.resultsPath = resultsPath
+        self.measuredLines = []
+        self.avgImage = None
 
 #Trained SLADS Model object
 class SLADSModel:
-    def __init__(self, massRange, theta, cValue):
+    def __init__(self, massRange, model, cValue):
         self.massRange = massRange
-        self.theta = theta
+        self.model = model
         self.cValue = cValue
 
 #Singular result generated through runSLADS
 class Result():
-    def __init__(self, info, sample, avgImage, simulationFlag, animationFlag):
+    def __init__(self, info, sample, avgGroundTruthImage, simulationFlag, animationFlag):
         self.info = info
         self.sample = sample
-        self.avgImage = avgImage
+        self.avgGroundTruthImage = avgGroundTruthImage
         self.simulationFlag = simulationFlag
         self.animationFlag = animationFlag
         self.reconImages = []
@@ -36,8 +38,9 @@ class Result():
         self.MSEList = []
         self.SSIMList = []
         self.percMeasuredList = []
+        self.thresholdList = []
 
-    def update(self, percMeasured, reconImage, sample, maskObject, ERDValuesNP, iterNum, completedRunFlag):
+    def update(self, threshold, percMeasured, reconImage, sample, maskObject, ERDValuesNP, iterNum, completedRunFlag):
 
         #Save the model development
         self.reconImages.append(reconImage)
@@ -45,14 +48,15 @@ class Result():
         self.ERDValueNPs.append(ERDValuesNP.copy())
         self.sample = sample
         self.percMeasuredList.append(percMeasured)
+        self.thresholdList.append(threshold)
 
         if self.simulationFlag:
 
             #Find statistics of interest
-            difference = np.sum(computeDifference(self.avgImage, reconImage, self.info.imageType))
+            difference = np.sum(computeDifference(self.avgGroundTruthImage, reconImage, self.info.imageType))
             TD = difference/maskObject.area
-            MSE = (np.sum((reconImage.astype("float") - self.avgImage.astype("float")) ** 2))/(float(maskObject.area))
-            SSIM = structural_similarity(reconImage.astype("float"), self.avgImage.astype("float"))
+            MSE = (np.sum((reconImage.astype("float") - self.avgGroundTruthImage.astype("float")) ** 2))/(float(maskObject.area))
+            SSIM = structural_similarity(reconImage.astype("float"), self.avgGroundTruthImage.astype("float"))
 
             #Save them for each timestep
             self.TDList.append(TD)
@@ -85,6 +89,8 @@ class Result():
 
             #Normalize values
             self.ERDValueNPs = (self.ERDValueNPs-np.min(self.ERDValueNPs))*((255.0-0.0)/(np.max(self.ERDValueNPs)-np.min(self.ERDValueNPs)))+0.0
+            self.thresholdList = np.asarray(self.thresholdList)
+            self.thresholdList = (self.thresholdList-np.min(self.thresholdList))*((255.0-0.0)/(np.max(self.thresholdList)-np.min(self.thresholdList)))+0.0
 
             #If this was a simulation
             if self.simulationFlag:
@@ -125,22 +131,22 @@ class Result():
                 #Generate each of the frames
                 for i in range(0, len(self.masks)):
 
-                    saveLocation = dir_AnimationFrames + 'stretched_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
-
+                    thresholdStr = "{:.2f}".format(self.thresholdList[i])
                     #1x3 without ERD
                     #=====================
+                    saveLocation = dir_AnimationFrames + 'stretched_1x3_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
                     font = {'size' : 18}
                     plt.rc('font', **font)
                     f = plt.figure(figsize=(15,5))
-            
+                    
                     f.subplots_adjust(top = 0.7)
                     f.subplots_adjust(wspace=0.15, hspace=0.2)
                     plt.suptitle("Percent Sampled: %.2f, Measurement Iteration: %.0f\nSSIM: %.2f" % (self.percMeasuredList[i], i+1, self.SSIMList[i]), fontsize=20, fontweight='bold', y = 0.95)
-                    
+
                     sub = f.add_subplot(1,3,1)
-                    sub.imshow(self.avgImage * 255.0/self.avgImage.max(), cmap='hot', aspect='auto')
+                    sub.imshow(self.avgGroundTruthImage * 255.0/self.avgGroundTruthImage.max(), cmap='hot', aspect='auto')
                     sub.set_title('Ground-Truth')
-                    
+            
                     sub = f.add_subplot(1,3,2)
                     sub.imshow(self.reconImages[i] * 255.0/self.reconImages[i].max(), cmap='hot', aspect='auto')
                     sub.set_title('Reconstructed Image')
@@ -148,44 +154,52 @@ class Result():
                     sub = f.add_subplot(1,3,3)
                     sub.imshow(self.masks[i], cmap='gray', aspect='auto')
                     sub.set_title('Sampled Mask')
+
+                    plt.savefig(saveLocation, bbox_inches='tight')
+                    plt.close()
+                    #=====================
+
+                    #2x2 with ERD printout
+                    #=====================
+                    saveLocation = dir_AnimationFrames + 'stretched_2x2_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                    font = {'size' : 18}
+                    plt.rc('font', **font)
+                    f = plt.figure(figsize=(15,15))
                     
+                    f.subplots_adjust(top = 0.85)
+                    f.subplots_adjust(wspace=0.15, hspace=0.2)
+                    plt.suptitle("Percent Sampled: %.2f, Measurement Iteration: %.0f\nSSIM: %.2f" % (self.percMeasuredList[i], i+1, self.SSIMList[i]), fontsize=20, fontweight='bold', y = 0.95)
+
+                    sub = f.add_subplot(2,2,1)
+                    sub.imshow(self.avgGroundTruthImage * 255.0/self.avgGroundTruthImage.max(), cmap='hot', aspect='auto')
+                    sub.set_title('Ground-Truth')
+
+                    sub = f.add_subplot(2,2,2)
+                    sub.imshow(self.reconImages[i] * 255.0/self.reconImages[i].max(), cmap='hot', aspect='auto')
+                    sub.set_title('Reconstructed Image')
+
+                    sub = f.add_subplot(2,2,3)
+                    sub.imshow(self.masks[i], cmap='gray', aspect='auto')
+                    sub.set_title('Sampled Mask')
+
+                    sub = f.add_subplot(2,2,4)
+                    #im = sub.imshow(self.ERDValueNPs[i] >= self.thresholdList[i], cmap='gray', aspect='auto')
+                    #sub.set_title('ERD Values >=' + thresholdStr)
+                    im = sub.imshow(self.ERDValueNPs[i], cmap='viridis', vmin=0, vmax=255, aspect='auto')
+                    sub.set_title('ERD Values')
+                    cbar = f.colorbar(im, ax=sub, orientation='vertical', pad=0.01)
+
                     plt.savefig(saveLocation, bbox_inches='tight')
                     plt.close()
                     #=====================
                     
-                    #2x2 with ERD printout
-                    #=====================
-#                    font = {'size' : 18}
-#                    plt.rc('font', **font)
-#                    f = plt.figure(figsize=(15,15))
-#
-#                    f.subplots_adjust(top = 0.85)
-#                    f.subplots_adjust(wspace=0.15, hspace=0.2)
-#                    plt.suptitle("Percent Sampled: %.2f, Measurement Iteration: %.0f\nSSIM: %.2f" % (self.percMeasuredList[i], i+1, self.SSIMList[i]), fontsize=20, fontweight='bold', y = 0.95)
-#
-#                    sub = f.add_subplot(2,2,1)
-#                    sub.imshow(self.avgImage * 255.0/self.avgImage.max(), cmap='hot', aspect='auto')
-#                    sub.set_title('Ground-Truth')
-#
-#                    sub = f.add_subplot(2,2,2)
-#                    sub.imshow(self.reconImages[i] * 255.0/self.reconImages[i].max(), cmap='hot', aspect='auto')
-#                    sub.set_title('Reconstructed Image')
-#
-#                    sub = f.add_subplot(2,2,3)
-#                    sub.imshow(self.masks[i], cmap='gray', aspect='auto')
-#                    sub.set_title('Sampled Mask')
-#
-#                    sub = f.add_subplot(2,2,4)
-#                    #im = sub.imshow(self.ERDValueNPs[i]>0, cmap='gray', aspect='auto')
-#                    #sub.set_title('ERD Values > 0')
-#                    #im = sub.imshow(self.ERDValueNPs[i], cmap='viridis', vmin=0, vmax=255, aspect='auto')
-#                    im = sub.imshow(self.ERDValueNPs[i], cmap='viridis', aspect='auto')
-#                    sub.set_title('ERD Values')
-#                    cbar = f.colorbar(im, ax=sub, orientation='vertical', pad=0.01)
-#                    
-#                    plt.savefig(saveLocation, bbox_inches='tight')
-#                    plt.close()
-
+                dataFileNames = natsort.natsorted(glob.glob(dir_AnimationFrames + 'stretched_2x2_*.png'))
+                height, width, layers = cv2.imread(dataFileNames[0]).shape
+                animation = cv2.VideoWriter(dir_AnimationVideos + 'stretched_2x2_' + self.sample.name + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
+                for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
+                animation.release()
+                animation = None
+                    
             else: #Not a simulation
                 #Save each of the individual mass range reconstructions
                 percSampled = "{:.2f}".format(self.percMeasuredList[len(self.percMeasuredList)-1])
@@ -217,7 +231,7 @@ class Result():
                 #Generate each of the frames
                 for i in range(0, len(self.masks)):
 
-                    saveLocation = dir_AnimationFrames + 'stretched_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                    saveLocation = dir_AnimationFrames + 'stretched_1x3_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
 
                     font = {'size' : 18}
                     plt.rc('font', **font)
@@ -236,20 +250,22 @@ class Result():
                     sub.set_title('Sampled Mask')
 
                     sub = f.add_subplot(1,3,3)
-                    im = sub.imshow(self.ERDValueNPs[i]>0, cmap='gray', aspect='auto')
-                    #im = sub.imshow(self.ERDValueNPs[i], cmap='viridis', vmin=0, vmax=255, aspect='auto')
-                    sub.set_title('ERD Values > 0')
-                    #cbar = f.colorbar(im, ax=sub, orientation='vertical', pad=0.01)
+                    #im = sub.imshow(self.ERDValueNPs[i]>0, cmap='gray', aspect='auto')
+                    #sub.set_title('ERD Values > 0')
+                    im = sub.imshow(self.ERDValueNPs[i], cmap='viridis', vmin=0, vmax=255, aspect='auto')
+                    sub.set_title('ERD Values')
+                    cbar = f.colorbar(im, ax=sub, orientation='vertical', pad=0.01)
 
                     plt.savefig(saveLocation, bbox_inches='tight')
                     plt.close()
 
-            dataFileNames = natsort.natsorted(glob.glob(dir_AnimationFrames + 'stretched_*.png'))
+            dataFileNames = natsort.natsorted(glob.glob(dir_AnimationFrames + 'stretched_1x3_*.png'))
             height, width, layers = cv2.imread(dataFileNames[0]).shape
-            animation = cv2.VideoWriter(dir_AnimationVideos + 'stretched_' + self.sample.name + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
+            animation = cv2.VideoWriter(dir_AnimationVideos + 'stretched_1x3_' + self.sample.name + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
             for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
             animation.release()
             animation = None
+
 
 class Info:
     def __init__(self, reconMethod, featReconMethod, neighborWeightsPower, numNeighbors, filterType, featDistCutoff, resolution, imageType):
@@ -276,7 +292,7 @@ class StopCondParams:
 
 #Each sample needs a mask object
 class MaskObject():
-    def __init__(self, width, height, measurementPercs):
+    def __init__(self, width, height, measurementPercs, numMasks):
         self.width = width
         self.height = height
         self.area = width*height
@@ -298,17 +314,19 @@ class MaskObject():
                 line.append(tuple([rowNum, columnNum]))
             self.linesToScan.append(line)
 
+        #Fix internel format, so that it is consistent throughout program operation
+        self.linesToScan = np.asarray(self.linesToScan).tolist()
+
         #Generate the initial set of linesToScan
         self.originalLinesToScan = copy.copy(self.linesToScan)
         self.initialMask = np.zeros([height, width])
 
         #Set which lines should be acquired in initial scan
         lineIndexes = [
-            int((height-1)*0.1),
+            int((height-1)*0.10),
             int((height-1)*0.50),
-            int((height-1)*0.9)
+            int((height-1)*0.90)
         ]
-
         #Set which lines should be acquired in initial scan
         for lineIndexNum in range(0, len(lineIndexes)):
             lineIndex = lineIndexes[lineIndexNum]
@@ -318,6 +336,7 @@ class MaskObject():
                 self.initialMaskPts.append(pt)
                 ptList.append(pt)
             self.initialSets.append([self.linesToScan[lineIndex][0], self.linesToScan[lineIndex][len(self.linesToScan[lineIndex])-1]])
+            #self.initialSets.append(ptList)
 
         #Now delete the lines specified
         for lineIndexNum in range(0, len(lineIndexes)): self.delLine(lineIndexes[lineIndexNum]-lineIndexNum)
@@ -325,14 +344,18 @@ class MaskObject():
         self.initialLinesToScan = copy.copy(self.linesToScan)
         self.initialMeasuredIdxs = np.transpose(np.where(self.initialMask == 1))
         self.initialUnMeasuredIdxs = np.transpose(np.where(self.initialMask == 0))
-
-        #Create random initial percentage masks using point measurements instead of full lines
-        for measurementPerc in measurementPercs:
-            self.mask = np.zeros([height, width])
-            self.mask = np.random.rand(height, width) < (measurementPerc/100)
-            self.percMasks.append(self.mask)
-            self.measuredIdxsList.append(np.transpose(np.where(self.mask == 1)))
-            self.unMeasuredIdxsList.append(np.transpose(np.where(self.mask == 0)))
+        
+        #Create random initial percentage masks using point measurements
+        for percNum in range(0, len(measurementPercs)):
+            self.percMasks.append([])
+            self.measuredIdxsList.append([])
+            self.unMeasuredIdxsList.append([])
+            for maskNum in range(0, numMasks):
+                self.mask = np.zeros([height, width])
+                self.mask = np.random.rand(height, width) < (measurementPercs[percNum]/100)
+                self.percMasks[percNum].append(self.mask)
+                self.measuredIdxsList[percNum].append(np.transpose(np.where(self.mask == 1)))
+                self.unMeasuredIdxsList[percNum].append(np.transpose(np.where(self.mask == 0)))
 
         #Create random line masks, using full lines
 #        for measurementPerc in measurementPercs:
@@ -368,25 +391,22 @@ class MaskObject():
             self.unMeasuredIdxs = np.transpose(np.where(self.mask == 0))
 
     def delLine(self, index):
-        self.linesToScan = np.delete(self.linesToScan, index, 0)
+        self.linesToScan = np.delete(self.linesToScan, index, 0).tolist()
 
     def delPoints(self, pts):
-        for i in range(0,len(self.linesToScan)):
-            indexes = []
-            for pt in pts: indexes.append([i for i, j in enumerate(self.linesToScan[i]) if j == pt])
-            indexes = [x for x in np.asarray(indexes).flatten().tolist() if x != []]
-            if len(indexes) > 0:
-                self.linesToScan[i] = np.delete(self.linesToScan[i], indexes,0).tolist()
+        for lineNum in range(0, len(self.linesToScan)): self.linesToScan[lineNum] = [pt for ix, pt in enumerate(self.linesToScan[lineNum]) if pt not in pts]
+        self.linesToScan = [x for x in self.linesToScan if x]
 
-def runSLADS(info, samples, models, stopPerc, cNum, sampleNum, simulationFlag, trainPlotFlag, animationFlag, tqdmHide):
+def runSLADS(info, samples, model, stopPerc, sampleNum, simulationFlag, trainPlotFlag, animationFlag, tqdmHide):
 
-    if simulationFlag:
+    if simulationFlag: #Here sample.images contains the full ground-truth images
         sample = samples[sampleNum]
-        theta = models[cNum]
-    else:
+        avgGroundTruthImage = np.average(sample.images, axis=0, weights=sample.mzWeights)
+    else: #Here sample.images contains only the initially measured ground-truth images
         sample = samples
-        theta = models
         sample.measuredImages = sample.images
+        avgGroundTruthImage = []
+
     maskObject = sample.maskObject
 
     #Reinitialize the mask state to starting state
@@ -400,11 +420,6 @@ def runSLADS(info, samples, models, stopPerc, cNum, sampleNum, simulationFlag, t
 
     #Assume variable Classify=='N' (Artifact of pointwise SLADS)
 
-    #Perform weighted averaging for the known image
-    npImages = []
-    for image in sample.images: npImages.append(np.asarray(image))
-    avgImage = np.average(np.asarray(npImages), axis=0, weights=sample.mzWeights)
-
     #Initialize stopping condition object
     stopCondParams = StopCondParams(maskObject.area, 0, 50, 2, stopPerc)
 
@@ -412,16 +427,13 @@ def runSLADS(info, samples, models, stopPerc, cNum, sampleNum, simulationFlag, t
     stopCondFuncVal = np.zeros((int((maskObject.area)*(stopCondParams.maxPercentage)/100)+10,2))
 
     #Perform the initial measurements
-    if simulationFlag: sample, maskObject = performMeasurements(sample, maskObject, maskObject.initialMeasuredIdxs, None, simulationFlag)
+    if simulationFlag: sample, maskObject = performMeasurements(iterNum, sample, maskObject, maskObject.initialMeasuredIdxs, simulationFlag)
 
     #Perform initial reconstruction and ERD calculation
-    reconImage, reconValues, ERDValues, ERDValuesNP = avgReconAndERD(sample, info, iterNum, maskObject, theta, reconImage=None, reconValues=None, ERDValues=None, ERDValuesNP=None, newIdxs=None, maxIdxsVect=None)
+    sample, measuredValues, reconImage, reconValues, ERDValuesNP = avgReconAndERD(sample, info, iterNum, maskObject, model, reconImage=None, reconValues=None, ERDValuesNP=None, newIdxs=None)
 
     #Determine percentage pixels measured initially
     percMeasured = (np.sum(maskObject.mask)/maskObject.area)*100
-
-    #Retrieve the averaged image's measured values
-    measuredValues = np.asarray(avgImage)[maskObject.mask == 1]
 
     #Check for completion state here just in case, prior to loop!
     completedRunFlag = checkStopCondFuncThreshold(stopCondParams, stopCondFuncVal, maskObject, measuredValues, iterNum)
@@ -430,8 +442,8 @@ def runSLADS(info, samples, models, stopPerc, cNum, sampleNum, simulationFlag, t
     if len(maskObject.linesToScan) == 0: completedRunFlag = True
 
     #Initialize a result object
-    result = Result(info, sample, avgImage, simulationFlag, animationFlag)
-    result.update(percMeasured, reconImage, sample, maskObject, ERDValuesNP, iterNum, completedRunFlag)
+    result = Result(info, sample, avgGroundTruthImage, simulationFlag, animationFlag)
+    result.update(0, percMeasured, reconImage, sample, maskObject, ERDValuesNP, iterNum, completedRunFlag)
 
     #Until the stopping criteria has been met
     with tqdm(total = float(100), desc = '% Sampled', leave = False, ascii=True, disable=tqdmHide) as pbar:
@@ -449,22 +461,22 @@ def runSLADS(info, samples, models, stopPerc, cNum, sampleNum, simulationFlag, t
 
             t0 = time.time()
             #Make a duplicate of the ReconValues for stop condition gradient test
-            oldReconValues = reconValues.copy()
+            oldReconImage = reconImage.copy()
             timesList.append(round(time.time()-t0,10))
             
             t0 = time.time()
             #Find next measurement locations
-            maskObject, newIdxs, lineToScanIdx, maxIdxsVect = findNewMeasurementIdxs(info, maskObject, measuredValues, theta, reconValues, reconImage, ERDValues, ERDValuesNP)
+            maskObject, newIdxs, threshold = findNewMeasurementIdxs(info, maskObject, sample, model, reconValues, reconImage, ERDValuesNP)
             timesList.append(round(time.time()-t0,10))
             
             t0 = time.time()
             #Perform measurements
-            sample, maskObject = performMeasurements(sample, maskObject, newIdxs, lineToScanIdx, simulationFlag)
+            sample, maskObject = performMeasurements(iterNum, sample, maskObject, newIdxs, simulationFlag)
             timesList.append(round(time.time()-t0,10))
             
             t0 = time.time()
             #Perform reconstruction and ERD calculation
-            reconImage, reconValues, ERDValues, ERDValuesNP = avgReconAndERD(sample, info, iterNum, maskObject, theta, reconImage, reconValues, ERDValues, ERDValuesNP, newIdxs, maxIdxsVect)
+            sample, measuredValues, reconImage, reconValues, ERDValuesNP = avgReconAndERD(sample, info, iterNum, maskObject, model, reconImage, reconValues, ERDValuesNP, newIdxs)
             timesList.append(round(time.time()-t0,10))
             
             t0 = time.time()
@@ -474,12 +486,7 @@ def runSLADS(info, samples, models, stopPerc, cNum, sampleNum, simulationFlag, t
             
             t0 = time.time()
             #Evaluate the stop condition value
-            stopCondFuncVal = computeStopCondFuncVal(oldReconValues, measuredValues, stopCondParams, info, stopCondFuncVal, maxIdxsVect, iterNum, maskObject)
-            timesList.append(round(time.time()-t0,10))
-            
-            t0 = time.time()
-            #Retrieve the averaged image's measured values
-            measuredValues = np.asarray(avgImage)[maskObject.mask == 1]
+            stopCondFuncVal = computeStopCondFuncVal(oldReconImage, reconImage, stopCondParams, info, stopCondFuncVal, newIdxs, iterNum, maskObject)
             timesList.append(round(time.time()-t0,10))
 
             t0 = time.time()
@@ -494,7 +501,7 @@ def runSLADS(info, samples, models, stopPerc, cNum, sampleNum, simulationFlag, t
 
             t0 = time.time()
             #Store information to the resultsObject
-            result.update(percMeasured, reconImage, sample, maskObject, ERDValuesNP, iterNum, completedRunFlag)
+            result.update(threshold, percMeasured, reconImage, sample, maskObject, ERDValuesNP, iterNum, completedRunFlag)
             timesList.append(round(time.time()-t0,10))
 
             #Update the progress bar
@@ -502,65 +509,63 @@ def runSLADS(info, samples, models, stopPerc, cNum, sampleNum, simulationFlag, t
             pbar.refresh()
 
             #print(timesList)
-
+    
+    #Manually run garbage collection
+    gc.collect()
+    
     return result
 
-def findNewMeasurementIdxs(info, maskObject, measuredValues, theta, reconValues, reconImage, ERDValues, ERDValuesNP):
+def findNewMeasurementIdxs(info, maskObject, sample, model, reconValues, reconImage, ERDValuesNP):
     newIdxs = []
 
     #Assuming manual angle selection; sum ERD for all lines
     lineERDSums = []
     for line in maskObject.linesToScan: lineERDSums.append(np.nansum(ERDValuesNP[tuple([x[0] for x in line]), tuple([y[1] for y in line])]))
-
+    
     #Choose the line with maximum ERD and extract the actual indices
     lineToScanIdx = np.nanargmax(lineERDSums)
     lineToScanIdxs = maskObject.linesToScan[lineToScanIdx]
+    
+    #Set threshold for what ERD Values are worth scanning the locations of as mean of the chosen line
+    threshold = lineERDSums[lineToScanIdx]/len(maskObject.linesToScan[lineToScanIdx])
 
-    #Set threshold for what ERD Values are worth scanning the locations of
-    threshold = 0
-    #threshold = np.mean(ERDValuesNP[np.where((ERDValuesNP > 0))])
-
-    #If there is ERD > 0 in the determined line
-    if lineERDSums[lineToScanIdx] > 0:
-
-        #Grab the ERD values in that line
-        idxsX, idxsY = map(list, zip(*[tuple(idx) for idx in lineToScanIdxs]))
-        lineERDValues = ERDValuesNP[np.asarray(idxsX), np.asarray(idxsY)]
-
-        #Find all locations above the threshold
-        idxs = np.argwhere(lineERDValues > threshold)
-        if len(idxs) > 0:
-            newIdxs = lineToScanIdxs[idxs[0][0]:idxs[len(idxs)-1][0]+1]
-        else:
-            #No location was found over the threshold, just scan the full line
-            newIdxs = lineToScanIdxs
-    else:
-        #Just choose a line to scan...
-        newIdxs = lineToScanIdxs
-
-    #Remove the line selected from further consideration
+    #START/END POINT BASED SELECTION
+    #=======
+    #Narrow the possible points for selection by the given threshold
+    if lineERDSums[lineToScanIdx] > 0: newIdxs = [pos for pos in np.argwhere(np.array(ERDValuesNP) >= threshold).tolist() if pos in lineToScanIdxs]
+    
+    #Select all points between the first and last position with an ERD above threshold, if there are not enough, then scan the whole line
+    if len(newIdxs) > 1: newIdxs = lineToScanIdxs[lineToScanIdxs.index(newIdxs[0]):lineToScanIdxs.index(newIdxs[len(newIdxs)-1])]
+    #=======
+    
+    #SELECTION SAFEGUARD
+    #=======
+    #If there are not enough locations selected, just scan the whole remainder of the line with the greatest ERD; ensures resonable completion time
+    if len(newIdxs) <= (0.01*maskObject.width): newIdxs = np.asarray(lineToScanIdxs).tolist()
+    
+    #POINT CONSIDERATION UPDATE
+    #=======
+    #Remove the selected points from further consideration, allows revisting lines
+    #maskObject.delPoints(newIdxs)
+    
+    #Remove the line selected from further consideration, does not allow revisiting
     maskObject.delLine(lineToScanIdx)
+    #=======
+    
+    return maskObject, newIdxs, threshold
 
-    #Extract the positions of those coordinates within the unmeasured listing
-    maxIdxsVect = []
-    unMeasuredIdxsList = maskObject.unMeasuredIdxs.tolist()
-    ptArray = np.asarray(newIdxs).tolist()
-    for pt in ptArray:
-        if pt in unMeasuredIdxsList: maxIdxsVect.append(unMeasuredIdxsList.index(pt))
-
-    return maskObject, np.asarray(newIdxs), lineToScanIdx, np.asarray(maxIdxsVect)
-
-def avgReconAndERD(sample, info, iterNum, maskObject, theta, reconImage, reconValues, ERDValues, ERDValuesNP, newIdxs, maxIdxsVect):
+def avgReconAndERD(sample, info, iterNum, maskObject, model, reconImage, reconValues, ERDValuesNP, newIdxs):
 
     #Find neighbor information
     neighborIndices, neighborWeights, neighborDistances = findNeighbors(info, maskObject.measuredIdxs, maskObject.unMeasuredIdxs)
     
-    #Perform weighted averaging of the measured images
-    image = np.average(np.asarray(sample.measuredImages), axis=0, weights=sample.mzWeights)
-    
     #Retrieve the measured values
     idxsX, idxsY = map(list, zip(*[tuple(idx) for idx in maskObject.measuredIdxs]))
-    measuredValues = image[np.asarray(idxsX), np.asarray(idxsY)]
+    
+    #Perform weighted averaging of the multiple channels
+    sample.avgImage = np.average(np.asarray(sample.measuredImages), axis=0, weights=sample.mzWeights)
+    
+    measuredValues = sample.avgImage[np.asarray(idxsX), np.asarray(idxsY)]
     
     #Find neighborhood values
     neighborValues = findNeighborValues(measuredValues, neighborIndices)
@@ -569,65 +574,29 @@ def avgReconAndERD(sample, info, iterNum, maskObject, theta, reconImage, reconVa
     reconValues, reconImage = computeRecons(info, maskObject, maskObject.unMeasuredIdxs, maskObject.measuredIdxs, neighborValues, neighborWeights, measuredValues)
     
     #Compute full ERD Values
-    ERDValues = computeFullERD(info, maskObject, measuredValues, reconValues, reconImage, theta, neighborValues, neighborWeights, neighborDistances)
-    
-#    
-#    for image in sample.measuredImages:
-#
-#        #Retrieve the measured values
-#        measuredValues = np.asarray(image)[maskObject.measuredIdxs]
-#
-#        #Find neighborhood values
-#        neighborValues = findNeighborValues(measuredValues, neighborIndices)
-#
-#        #Compute reconstructions
-#        reconValues, reconImage = computeRecons(info, maskObject, maskObject.unMeasuredIdxs, maskObject.measuredIdxs, neighborValues, neighborWeights, measuredValues)
-#
-#        #Compute full ERD Values
-#        ERDValues = computeFullERD(info, maskObject, measuredValues, reconValues, reconImage, theta, neighborValues, neighborWeights, neighborDistances)
-#
-#        #Store results
-#        reconImageList.append(reconImage)
-#        reconValuesList.append(reconValues)
-#        ERDValueList.append(ERDValues)
-#
-#    #Perform weighted averaging
-#    reconImage = np.average(np.asarray(reconImageList), axis=0, weights=sample.mzWeights)
-#    reconValues = np.average(np.asarray(reconValuesList), axis=0, weights=sample.mzWeights)
-#    ERDValues = np.average(np.asarray(ERDValueList), axis=0, weights=sample.mzWeights)
+    ERDValuesNP = computeERD(info, maskObject, measuredValues, reconValues, reconImage, model, neighborValues, neighborWeights, neighborDistances)
 
-    #Convert ERDValues from 1D to 2D
-    ERDValuesNP = makeERDArray(ERDValues, maskObject, reconImage)
+    return sample, measuredValues, reconImage, reconValues, ERDValuesNP
 
-    return reconImage, reconValues, ERDValues, ERDValuesNP
-
-def computeFullERD(info, maskObject, measuredValues, reconValues, reconImage, theta, neighborValues, neighborWeights, neighborDistances):
+def computeERD(info, maskObject, measuredValues, reconValues, reconImage, model, neighborValues, neighborWeights, neighborDistances):
 
     # Compute features
     polyFeatures = computeFeatures(maskObject.unMeasuredIdxs, maskObject.area, neighborValues, neighborWeights, neighborDistances, info, reconValues, reconImage)
 
     # Compute ERD
-    ERDValues = polyFeatures.dot(theta)
-
-    return ERDValues
-
-def makeERDArray(ERDValues, maskObject, reconImage):
+    ERDValues = model.predict(polyFeatures)
+    
     #Rearrange ERD values into array; those that have already been measured have 0 ERD
     ERDValuesNP = np.zeros([maskObject.height, maskObject.width])
-
+    
     #Copy over ERD values for unmeasured points
     for i in range(0, len(maskObject.unMeasuredIdxs)): ERDValuesNP[maskObject.unMeasuredIdxs[i][0], maskObject.unMeasuredIdxs[i][1]] = ERDValues[i]
-
+    
     #Remove values that are less than those already scanned (0 ERD)
     ERDValuesNP[np.where((ERDValuesNP < 0))] = 0
-
-    #Normalize values
-    #ERDValuesNP = (ERDValuesNP-np.min(ERDValuesNP))*((255.0-0.0)/(np.max(ERDValuesNP)-np.min(ERDValuesNP)))+0.0
-
-    #Change the values based on the reconImage directly
-    #ERDValuesNP[np.where((reconImage == 0)))] = 0
-
+    
     return ERDValuesNP
+
 
 def checkStopCondFuncThreshold(stopCondParams, StopCondFuncVal, maskObject, measuredValues, iterNum):
 
@@ -647,31 +616,29 @@ def checkStopCondFuncThreshold(stopCondParams, StopCondFuncVal, maskObject, meas
             else:
                 return False
 
-def computeStopCondFuncVal(reconValues, measuredValues, stopCondParams, info, stopCondFuncVal, maxIdxsVect, iterNum, maskObject):
-
-    #Calculate the difference in values between the previous reconstruction values against the measured values
-    diff = 0
-    for i in range(0, len(maxIdxsVect)): diff += computeDifference(reconValues[maxIdxsVect[i]], measuredValues[len(measuredValues)-len(maxIdxsVect)+i], info.imageType)
-    diff = diff/len(measuredValues)
-
+def computeStopCondFuncVal(oldReconImage, reconImage, stopCondParams, info, stopCondFuncVal, newIdxs, iterNum, maskObject):
+    
+    #Calculate the average difference in values between the previous reconValues against their actual measured values
+    idxsX, idxsY = map(list, zip(*[tuple(idx) for idx in newIdxs]))
+    diff = np.mean(computeDifference(reconImage[np.asarray(idxsX), np.asarray(idxsY)], oldReconImage[np.asarray(idxsX), np.asarray(idxsY)], info.imageType))
+    
     if iterNum == 1:
-        stopCondFuncVal[iterNum,0] = stopCondParams.beta*diff
+        stopCondFuncVal[iterNum] = stopCondParams.beta*diff
     else:
-        stopCondFuncVal[iterNum,0] = ((1-stopCondParams.beta)*stopCondFuncVal[iterNum-1,0] + stopCondParams.beta*diff)
-
-    stopCondFuncVal[iterNum,1] = np.shape(measuredValues)[0]
-
+        stopCondFuncVal[iterNum] = ((1-stopCondParams.beta)*stopCondFuncVal[iterNum-1] + stopCondParams.beta*diff)
+    
     return stopCondFuncVal
 
 def findNeighbors(info, measuredIdxs, unMeasuredIdxs):
 
-    neigh = NearestNeighbors(n_neighbors=info.numNeighbors)
+    neigh = NearestNeighbors()
     neigh.fit(measuredIdxs)
-    neighborDistances, neighborIndices = neigh.kneighbors(unMeasuredIdxs)
+    neighborDistances, neighborIndices = neigh.kneighbors(unMeasuredIdxs, n_neighbors=info.numNeighbors)
     neighborDistances = neighborDistances*info.resolution
     unNormNeighborWeights = 1/np.power(neighborDistances, info.neighborWeightsPower)
     sumOverRow = (np.sum(unNormNeighborWeights, axis=1))
     neighborWeights = unNormNeighborWeights/sumOverRow[:, np.newaxis]
+    neighborDistances = np.mean(neighborDistances, axis=1)
 
     return neighborIndices, neighborWeights, neighborDistances
 
@@ -700,18 +667,17 @@ def computeWeightedMRecons(neighborValues, neighborWeights, info):
     return reconValues
 
 def computeFeatures(unMeasuredIdxs, area, neighborValues, neighborWeights, neighborDistances, info, reconValues, reconImage):
-    feature = np.zeros((np.shape(unMeasuredIdxs)[0],7))
+    feature = np.zeros((np.shape(unMeasuredIdxs)[0],6))
 
     # Compute std div features
     diffVect = computeDifference(neighborValues, np.transpose(np.matlib.repmat(reconValues, np.shape(neighborValues)[1],1)), info.imageType)
     feature[:,0] = np.sum(neighborWeights*diffVect, axis=1)
-    feature[:,1] = np.sqrt((1/info.numNeighbors)*np.sum(np.power(diffVect,2),axis=1))
+    feature[:,1] = np.sqrt(np.sum(np.power(diffVect,2),axis=1))
 
     # Compute distance/density features
     cutoffDist = np.ceil(np.sqrt((info.featDistCutoff/100)*(area/np.pi)))
-    feature[:,2] = neighborDistances[:,0]
-    neighborsInCircle = np.sum(neighborDistances <= cutoffDist, axis=1)
-    feature[:,3] = (1+(np.pi*(np.power(cutoffDist, 2))))/(1+np.sum(neighborDistances <= cutoffDist, axis=1))
+    feature[:,2] = neighborDistances
+    feature[:,3] = (1+(np.pi*(np.power(cutoffDist, 2))))/(1+np.sum(neighborDistances <= cutoffDist))
 
     # Compute gradient features
     gradientImageX, gradientImageY = np.gradient(reconImage)
@@ -725,12 +691,8 @@ def computeFeatures(unMeasuredIdxs, area, neighborValues, neighborWeights, neigh
     #NEW Addition; add the actual reconstruction values for the unmeasured positions
     #feature[:,6] = reconImage[unMeasuredIdxs[:,0], unMeasuredIdxs[:,1]]
 
-    #Compute polyfeatures
-    polyFeatures = np.hstack([np.ones((np.shape(feature)[0],1)), feature])
-    for i in range(0, np.shape(feature)[1]):
-        for j in range(i, np.shape(feature)[1]):
-            temp = feature[:,i]*feature[:,j]
-            polyFeatures = np.column_stack([polyFeatures, feature[:,i]*feature[:,j]])
+    polyFeatures = PolynomialFeatures(degree=2).fit_transform(feature)
+
     return polyFeatures
 
 def computeDifference(array1, array2, imageType):
@@ -762,7 +724,7 @@ def percResults(results, perc_testingResults, precision):
             finalPercents.append(percent)
     return finalPercents, averages
 
-def performMeasurements(sample, maskObject, newIdxs, lineToScanIdx, simulationFlag):
+def performMeasurements(iterNum, sample, maskObject, newIdxs, simulationFlag):
 
     #Update the maskObject according to the newIdxs
     maskObject.update(newIdxs)
@@ -780,6 +742,7 @@ def performMeasurements(sample, maskObject, newIdxs, lineToScanIdx, simulationFl
             temp = np.asarray(sample.images[imageNum]).copy()
             temp[maskObject.mask == 0] = 0
             sample.measuredImages[imageNum] = temp.copy()
+
     return sample, maskObject
 
 def sectionTitle(title):
@@ -792,6 +755,13 @@ def parIterator(idens):
     while idens:
         done, idens = ray.wait(idens)
         yield ray.get(done[0])
+
+#Convert bytes into human readable format
+def sizeFunc(num, suffix='B'):
+    for unit in ['','Ki','Mi','Gi','Ti','Pi','Ei','Zi']:
+        if abs(num) < 1024.0: return "%3.1f %s%s" % (num, unit, suffix)
+        num /= 1024.0
+    return "%.1f %s%s" % (num, 'Yi', suffix)
 
 #==================================================================
 

@@ -3,7 +3,7 @@
 #==================================================================
 
 #Given a set of sample paths, perform testing using a trained SLADS Model
-def testSLADS(sortedTestingSampleFolders, bestC, bestTheta):
+def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
     
     #Setup testing samples
     testingSamples = []
@@ -18,11 +18,11 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestTheta):
             massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
 
         #Create a new maskObject
-        maskObject = MaskObject(images[0].shape[1], images[0].shape[0], measurementPercs=[])
+        maskObject = MaskObject(images[0].shape[1], images[0].shape[0], measurementPercs=[], numMasks=0)
     
-        #How should the mz ranges be weighted (all equal for now)
+        #Weight images equally
         mzWeights = np.ones(len(images))/len(images)
-    
+
         #Define information as a new Sample object
         testingSamples.append(Sample(dataSampleName, images, massRanges, maskObject, mzWeights, dir_TestingResults))
 
@@ -31,13 +31,11 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestTheta):
         parFunction = ray.remote(runSLADS)
         time.sleep(1)
 
-
     #Add constant static parameters to shared pool memory
     info_id = ray.put(info)
     testingSamples_id = ray.put(testingSamples)
-    testingModels_id = ray.put([bestTheta])
+    testingModel_id = ray.put(bestModel)
     stopPerc_id = ray.put(stopPerc)
-    cNum_id = ray.put(0)
     simulationFlag_id = ray.put(True)
     trainPlotFlag_id = ray.put(False)
     animationFlag_id = ray.put(animationGen)
@@ -50,7 +48,7 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestTheta):
     perc_testingResults = []
 
     #Perform pool function and extract variables from the results
-    idens = [parFunction.remote(info_id, testingSamples_id, testingModels_id, stopPerc_id, cNum_id, sampleNum, simulationFlag_id, trainPlotFlag_id, animationFlag_id, tqdmHide_id) for sampleNum in range(0, len(testingSamples))]
+    idens = [parFunction.remote(info_id, testingSamples_id, testingModel_id, stopPerc_id, sampleNum, simulationFlag_id, trainPlotFlag_id, animationFlag_id, tqdmHide_id) for sampleNum in range(0, len(testingSamples))]
 
     #Perform pool function and extract variables from the results
     for result in tqdm(parIterator(idens), total=len(idens), desc='Testing Samples', position=0, leave=True, ascii=True):
