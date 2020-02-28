@@ -1,4 +1,4 @@
-
+﻿
      ▄▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄ 
 	▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌
 	▐░█▀▀▀▀▀▀▀▀▀ ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ 
@@ -31,19 +31,19 @@
     FUNDING:	This project has received funding and was programmed for:
     		NIH Grant 1UG3HL145593-01
     
-    GLOBAL
-    CHANGELOG:	0.1	Multithreading adjustments to pointwise SLADS
-    			0.1.1 Line constraints, concatenation, pruning, and results organization			
-    			0.2	Comple program rewrite
-    			0.3	Complete code rewrite, computational improvements
-    			0.4	Class/function segmentation
-    			0.5	Overhead reduction; switch multiprocessing package
-    			0.6	Modifications for Nano-DESI microscope integration
-         		0.6.1 Model robustness and reduction of memory overhead
-    			~0.7	Tissue model library generation
-    			~0.8	Deep feature extraction
-    			~0.9	GPU acceleratiaon
-    			~1.0	Initial release
+	GLOBAL
+	CHANGELOG:	0.1     Multithreading adjustments to pointwise SLADS
+		        0.1.1   Line constraints, concatenation, pruning, and results organization			
+		        0.2     Comple program rewrite
+	                0.3	Complete code rewrite, computational improvements
+	                0.4	Class/function segmentation
+	                0.5	Overhead reduction; switch multiprocessing package
+	                0.6	Modifications for Nano-DESI microscope integration
+	        		0.6.1 Model robustness and reduction of memory overhead
+	               ~0.7	Tissue model library generation
+	               ~0.8	Deep feature extraction
+		       ~0.9	GPU acceleratiaon
+	               ~1.0	Initial release
 
 # PROGRAM FILE STRUCTURE
 **Note:** If testing/training is not to be performed, then contents of 'TEST', 'TRAIN', may be disregarded, but a trained SLADS model must be present in: ./RESULTS/TRAIN/.
