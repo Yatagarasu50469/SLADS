@@ -59,8 +59,14 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
     #    TD_testingResults.append(result.TDList)
     #    perc_testingResults.append(result.percMeasuredList)
 
+    #If an animation will be produced
+    if animationGen:
+        dir_AnimationVideos = dir_Animations + 'Videos/'
+        if os.path.exists(dir_AnimationVideos): shutil.rmtree(dir_AnimationVideos)
+        os.makedirs(dir_AnimationVideos)
+
     for sampleNum in tqdm(range(0,len(testingSamples)), desc='Testing Samples', position=0, leave=True, ascii=True):
-        result = runSLADS(info, testingSamples, bestModel, stopPerc, sampleNum, True, False, animationGen, True, False)
+        result = runSLADS(info, [testingSamples[sampleNum]], bestModel, stopPerc, 0, True, False, animationGen, True, False)
         MSE_testingResults.append(result.MSEList)
         SSIM_testingResults.append(result.SSIMList)
         TD_testingResults.append(result.TDList)

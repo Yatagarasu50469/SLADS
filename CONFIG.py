@@ -5,7 +5,7 @@
 #PARAMETERS: L0
 #==================================================================
 #Is training of a model to be performed
-trainingModel = True
+trainingModel = False
 
 #Is testing of a model to be performed
 testingModel = True

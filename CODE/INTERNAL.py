@@ -8,7 +8,7 @@
 reconMethod = 'CWM'
 featReconMethod = 'CWM'
 neighborWeightsPower = 2
-numNeighbors = 1
+numNeighbors = 10
 filterType = 'Gaussian'
 featDistCutoff = 0.25
 resolution = 1

@@ -74,12 +74,9 @@ class Result():
             dir_AnimationVideos = dir_Animations + 'Videos/'
             dir_AnimationFrames = dir_Animations + self.sample.name + '/'
 
-            #Clean directories
+            #Clean sub-directories
             if os.path.exists(dir_AnimationFrames): shutil.rmtree(dir_AnimationFrames)
             os.makedirs(dir_AnimationFrames)
-
-            if os.path.exists(dir_AnimationVideos): shutil.rmtree(dir_AnimationVideos)
-            os.makedirs(dir_AnimationVideos)
 
             if os.path.exists(dir_mzSampleResults): shutil.rmtree(dir_mzSampleResults)
             os.makedirs(dir_mzSampleResults)

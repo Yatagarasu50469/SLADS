@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    27 February 2020
+#DATE MODIFIED:	    2 March 2020
 #
-#VERSION NUM:	    0.6.1
+#VERSION NUM:	    0.6.2
 #
 #DESCRIPTION:	    Multichannel implementation of SLADS (Supervised Learning 
 #                   Algorithm for Dynamic Sampling with additional constraint to
@@ -32,6 +32,7 @@
 #               0.5     Overhead reduction; switch multiprocessing package
 #               0.6     Modifications for Nano-DESI microscope integration
 #               0.6.1   Model robustness and reduction of memory overhead
+#               0.6.2   Model loading and animation production patches
 #               ~0.7	Tissue model library generation
 #               ~0.8	Deep feature extraction
 #               ~0.9	GPU acceleratiaon
@@ -42,7 +43,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum="0.6.1"
+versionNum="0.6.2"
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
@@ -98,8 +99,8 @@ if trainingModel:
 
 #Load in the best model information if training wasn't performed
 if not trainingModel:
-    bestC = np.load(dir_TrainingResults + 'bestC.npy', allow_pickle=True)
-    bestModel = np.load(dir_TrainingResults + 'bestModel.npy', allow_pickle=True)
+    bestC = np.load(dir_TrainingResults + 'bestC.npy', allow_pickle=True).item()
+    bestModel = np.load(dir_TrainingResults + 'bestModel.npy', allow_pickle=True).item()
 
 #If a SLADS model needs to be tested
 if testingModel:
