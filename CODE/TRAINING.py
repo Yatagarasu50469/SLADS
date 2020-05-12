@@ -63,7 +63,9 @@ def initTrain(sortedTrainingSampleFolders):
 
         #Import each of the images according to their mz range order
         for imageFileName in natsort.natsorted(glob.glob(trainingSampleFolder + '/*.' + 'csv'), reverse=False):
-            images.append(np.nan_to_num(np.loadtxt(imageFileName, delimiter=',')))
+            image = np.nan_to_num(np.loadtxt(imageFileName, delimiter=','))
+            if resizeImage == True: image = cv2.resize(image, resizeDims, interpolation = cv2.INTER_NEAREST)
+            images.append(image)
             massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
         maskObject = MaskObject(images[0].shape[1], images[0].shape[0], measurementPercs, numMasks)
         #for measurementPercNum in range(0,len(measurementPercs)):
@@ -92,8 +94,8 @@ def initTrain(sortedTrainingSampleFolders):
                 neighborIndices, neighborWeights, neighborDistances = findNeighbors(info, measuredIdxs, unMeasuredIdxs)
 
                 #Calculate the sigma values for each possible c
-                sigmaValues = []
-                for c in cValues: sigmaValues.append(neighborDistances/c)
+                sigmaValues = [(neighborDistances[:,0]/c) for c in cValues]
+                #for c in cValues: sigmaValues.append(neighborDistances[:,0]/c)
 
                 #Flatten 2D mask array to 1D
                 maskVect = np.ravel(mask)
@@ -222,6 +224,12 @@ def findBestC(trainingSamples, trainingModels):
         #Initialize rolling sum for total distortion levels
         areaUnderCurve = 0
         
+        #DEBUG: Serial operation
+        #idens = []
+        #for sampleNum in range(0, len(trainingSamples)):
+        #    result = runSLADS(info, trainingSamples, trainingModels[cNum], stopPerc, sampleNum, True, False, False, True, (True))
+        #    idens.append(result)
+
         #Perform pool function and extract variables from the results
         idens = [parFunction.remote(info_id, trainingSamples_id, trainingModel_id, stopPerc_id, sampleNum, simulationFlag_id, trainPlotFlag_id, animationFlag_id, tqdmHide_id, bestCFlag_id) for sampleNum in range(0, len(trainingSamples))]
 

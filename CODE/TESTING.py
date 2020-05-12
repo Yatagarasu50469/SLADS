@@ -14,7 +14,9 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
         images = []
         massRanges = []
         for imageFileName in natsort.natsorted(glob.glob(testingSampleFolder + '/*.' + 'csv'), reverse=False):
-            images.append(np.nan_to_num(np.loadtxt(imageFileName, delimiter=',')))
+            image = np.nan_to_num(np.loadtxt(imageFileName, delimiter=','))
+            if resizeImage == True: image = cv2.resize(image, resizeDims, interpolation = cv2.INTER_NEAREST)
+            images.append(image)
             massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
 
         #Create a new maskObject
@@ -66,7 +68,7 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
         os.makedirs(dir_AnimationVideos)
 
     for sampleNum in tqdm(range(0,len(testingSamples)), desc='Testing Samples', position=0, leave=True, ascii=True):
-        result = runSLADS(info, [testingSamples[sampleNum]], bestModel, stopPerc, 0, True, False, animationGen, True, False)
+        result = runSLADS(info, [testingSamples[sampleNum]], bestModel, stopPerc, 0, True, False, animationGen, False, False)
         MSE_testingResults.append(result.MSEList)
         SSIM_testingResults.append(result.SSIMList)
         TD_testingResults.append(result.TDList)

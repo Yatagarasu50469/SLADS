@@ -5,7 +5,7 @@
 #PARAMETERS: L0
 #==================================================================
 #Is training of a model to be performed
-trainingModel = False
+trainingModel = True
 
 #Is testing of a model to be performed
 testingModel = True
@@ -35,6 +35,28 @@ percRAM = 90
 #Number of processor threads to leave free
 numFreeThreads = 2
 
+#Which scanning method shoud be used: pointwise or linewise
+scanMethod = 'pointwise'
+
+#If linewise, should the threshold for point selection be set as the mean of the chosen points' ERD Values
+#i.e. partial line selection
+meanThresholdFlag = True
+
+#Should possible selections be masked by the determined foreground
+ERDMaskingFlag = False
+
+#Should partial segments of a line be scanned
+partialLineFlag = False
+
+#Should lines be allowed to be revisited
+lineRevistFlag = False
+
+#Should the input data be resized
+resizeImage = False
+
+#If the input data should be resized what dimensions should be used
+resizeDims = (512,512)
+
 #PARAMETERS: L2
 #==================================================================
 
@@ -42,7 +64,10 @@ numFreeThreads = 2
 measurementPercs = [5, 10, 20, 30, 40]
 
 #Possible c values for RD approximation
-cValues = np.array([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20])
+cValues = np.array([1, 2, 4, 8, 16, 32])
+
+#How should the mz visualizations be weighted, 'std' or 'equal'
+mzWeighting='equal'
 
 #Should animations be generated during testing/implementation
 animationGen = True
