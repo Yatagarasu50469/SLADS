@@ -16,7 +16,7 @@
 
 
     NAME: 		lineSLADS
-    VERSION NUM:	0.6.3
+    VERSION NUM:	0.6.4
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
 			points along a single axis. 
@@ -42,6 +42,7 @@
                     0.6.1   Model robustness and reduction of memory overhead
                     0.6.2   Model loading and animation production patches
                     0.6.3   Start/End point selection with Canny
+                    0.6.4   Custom knn metric, SSIM calc, init computations
 	               ~0.7	Tissue model library generation
 	               ~0.8	Deep feature extraction
 		       ~0.9	GPU acceleratiaon
@@ -142,6 +143,7 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 		natsort: 		6.2.0
 		networkx: 		2.4
 		opencv-python:	 	4.1.2.30
+        pathlib:         1.0.1
 		pickleshare: 		0.7.5
 		pillow:			7.0.0
 		prompt-toolkit: 	3.0.2
@@ -150,7 +152,7 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 		pyparsing: 		2.4.6
 		pytz:			2019.3
 		PyWavelets: 		1.1.1
-		ray:			0.8.2
+		ray:			0.8.5
 		scipy:			1.4.1
 		six: 			1.13.0
 		scikit-image: 		0.16.2
@@ -169,6 +171,9 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 	$ python --m pip install --upgrade pip
 	$ pip3 install opencv-python datetime glob3 IPython joblib pandas psutil matplotlib pillow 
 	   ray scipy sobol sobol_seq natsort multiprocess ray scikit-image sklearn tqdm
+      $ cd ./CODE/scikit-learn
+      $ make clean
+      $ pip3 install --verbose --no-build-isolation --editable .
 
 ### **Installation on Windows 10**
 **Note:** At this time, for Windows 10, the Linux subsystem must be used, as the multiprocessing package **ray** has not been (nor is likely to be in the near future) released for Windows. 
@@ -186,10 +191,13 @@ Restart when prompted and then open the **Microsoft Store**. Search for Ubuntu a
 	$ pip3 install datetime glob3 IPython joblib pandas psutil matplotlib pillow 
 	   ray scipy sobol sobol_seq natsort multiprocess ray scikit-image sklearn tqdm
 
-Place the SLADS-# release folder onto the Windows desktop. Then back inside of **Ubuntu**, enter the following to move into the SLADS folder replacing **username** and **versionNum** as appropriate:
+Place the SLADS-# release folder onto the Windows desktop. Note this must be done prior to building the custom sci-kit pacakge. Back inside of **Ubuntu**, enter the following to move into the SLADS folder replacing **username** and **versionNum** as appropriate:
 
 	$ cd /mnt/c/Users/username/Desktop/SLADS-versionNum
-
+    $ cd ./CODE/scikit-learn
+    $ make clean
+    $ pip3 install --verbose --no-build-isolation --editable .
+    
 The configuration: CONFIG.py may be edited through Windows with the editor of your choice, after which SLADS may be run using: 
 
 	$ python3 SLADS.py
@@ -201,6 +209,10 @@ The configuration: CONFIG.py may be edited through Windows with the editor of yo
 Assuming the desired equipment intended for end application of SLADS, outputs Thermo-Finnigan .RAW files, the data will need to be pre-processed prior to training a SLADS model. Each data sample must be aligned between rows using a simple linear interpolation scheme according to the unique acquisition times. Each individual mz range of interest must then be exported as a .csv file. For example, given a singular sample: **sampleName**, with a number of rows: **numRows** (corresponding to the number of acquired .RAW files, or number intended for acquisition),  and a set of mz ranges: **lowMZ1**-**highMZ1**, **lowMZ2**-**highMZ2**, etc., a folder should be created which contains files named according to the convention: 
 
 	mzlowMZ_highMZfnsampleNamensnumRows.csv
+
+Each sample folder must also include a file ./aspect.txt containing the width and height of the physically measured sample deliminated by a comma. For example  the .aspect.txt for a sample with **width**, **height** might read:
+
+    9.13, 7.17
 
 Please note that at this time in development, each mz value should be specified with exactly 8 characters. Therefore, the following sample parameters:
 
@@ -214,13 +226,14 @@ Please note that at this time in development, each mz value should be specified 
 should yield the following folder hierarchy:
 
     -------> Slide1-Wnt-3
+        |-------> aspect.txt
     	|-------> mz454.8740_454.8922fnSlide1-Wnt-3ns72.csv
     	|-------> mz454.8844_454.9026fnSlide1-Wnt-3ns72.csv
 
 Each of these folders may then be placed either into ./INPUT/TEST, or ./INPUT/TRAIN as desired. An example of the desired multichannel sample input format is included in the ./EXAMPLE/ folder. 
 
 ###  **CONFIGURATION**
-**Warning:** Several of the parameters listed may either not implemented at this time, or have been disabled; if this is the case it will be noted in the comments within ./CONFIG.py. 
+**Warning:** This section is no longer up to date, refer to ./CONFIG.py for updated variable descriptions. Several of the parameters listed may either not implemented at this time, replacd, removed, or have been disabled. 
 
 All critical parameters for SLADS may be altered in ./CONFIG.py where:
 
@@ -284,9 +297,12 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 
 **Note:** In order to use a SLADS model in a physical implementation, the files resultant from the training procedure must be located within './RESULTS/TRAIN_RESULTS/', particularly:  bestC.npy and bestTheta.npy.
 
-Prior to engaging the physical equipment, run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in .csv files for each of the specified mz ranges in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. 
+Prior to engaging the physical equipment, place the physical aspect ratio information into ./INPUT/IMP/aspect.txt (as done for the training/testing procedures), then run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in .csv files for each of the specified mz ranges in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. 
 
 # FAQ
+###  **SLADS procdues an error: Could not connect to socket /tmp/ray/session_2020-04-07_23-15-16_042185_13532/sockets/raylet**
 
+Although the error would suggest there is something wrong with the network connectivity (can double check firewall settings), it is actually more likely to be an issue with available disk space. This can be handeled by manually specifying a temporary directory for the plasma memory storage on an alternate drive with more free space. Modify the **ray.init** command located in ./CODE/INTERNAL.py as shown below, replacing **/mntPoint/tmp** with a blank directory **tmp** located on another hard drive with more free space. 
 
+        ray.init(num_cpus=num_threads, memory=amount_RAM, object_store_memory=int(amount_RAM*0.5), log_to_driver=False, logging_level=logging.ERROR, plasma_directory="/mntPoint/tmp")
 

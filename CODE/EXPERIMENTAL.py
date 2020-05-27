@@ -16,9 +16,27 @@ def equipWait():
 def readScanData():
     images = []
     massRanges = []
-    for imageFileName in natsort.natsorted(glob.glob('./INPUT/IMP/*.' + 'csv'), reverse=False):
-        images.append(np.nan_to_num(np.loadtxt(imageFileName, delimiter=',')))
+    
+    #Import the sample's pixel aspect ratio (width, height)
+    aspectRatio = np.loadtxt('./INPUT/IMP/aspect.txt', delimiter=',')
+    
+    images = []
+    massRanges = []
+    #Import each of the images according to their mz range order
+    for imageFileName in natsort.natsorted('./INPUT/IMP/*.' + 'csv'), reverse=False):
+        image = np.nan_to_num(np.loadtxt(imageFileName, delimiter=','))
+        height, width = image.shape
+        
+        #Whichever dimension is the smaller leave alone, but resize the other according to the aspect ratio
+        if resizeAspect:
+            if width > height:
+                image = cv2.resize((image), (int(round((aspectRatio[0]/aspectRatio[1])*height)), height), interpolation = cv2.INTER_NEAREST)
+            elif height > width:
+                image = cv2.resize((image), (width, int(round((aspectRatio[0]/aspectRatio[1])*width))), interpolation = cv2.INTER_NEAREST)
+
+        images.append(image)
         massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
+
     return images, massRanges
 
 #Perform SLADS with external equipment
@@ -62,4 +80,4 @@ def performImplementation(bestC, bestModel):
     with open('./INPUT/IMP/DONE', 'w') as filehandle: filehandle.writelines('')
 
     #Move all of the csv files to finalized directory
-    for fileName in glob.glob('./INPUT/IMP/*.' + 'csv'): shutil.move(fileName, dir_ImpDataFinal)
+    for fileName in glob.glob('./INPUT/IMP/*'): shutil.move(fileName, dir_ImpDataFinal)

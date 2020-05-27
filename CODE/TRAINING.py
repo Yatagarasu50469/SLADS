@@ -15,21 +15,6 @@ class TrainingSample:
         self.orderForRD = orderForRD
         self.RD = RD
 
-def imFeature_parhelper(measuredValues, neighborIndices, info, maskObject, unMeasuredIdxs, measuredIdxs, neighborWeights, neighborDistances, orderForRD):
-    
-    #Find neighborhood values
-    neighborValues = findNeighborValues(measuredValues, neighborIndices)
-    
-    #Compute reconstructions
-    reconValues, reconImage = computeRecons(info, maskObject, unMeasuredIdxs, measuredIdxs, neighborValues, neighborWeights, measuredValues)
-    
-    #Compute features
-    polyFeatures = computeFeatures(unMeasuredIdxs, maskObject.area, neighborValues, neighborWeights, neighborDistances, info, reconValues, reconImage)
-    
-    #Extract set of the polyFeatures
-    polyFeatures = polyFeatures[orderForRD,:]
-    
-    return reconImage, polyFeatures
 
 def cGaussian_parhelper(cNum, sigma, windowSize, orderForRD, imgAsBlocksOnlyUnmeasured):
     
@@ -44,7 +29,6 @@ def initTrain(sortedTrainingSampleFolders):
     
     #Set function for the pool
     with contextlib.redirect_stdout(None):
-        imFeature_parFunction = ray.remote(imFeature_parhelper)
         cGaussian_parFunction = ray.remote(cGaussian_parhelper)
         time.sleep(1)
 
@@ -61,13 +45,28 @@ def initTrain(sortedTrainingSampleFolders):
         images = []
         massRanges = []
 
+        #Import the sample's pixel aspect ratio (width, height)
+        aspectRatio = np.loadtxt(trainingSampleFolder+'/aspect.txt', delimiter=',')
+
+        images = []
+        massRanges = []
         #Import each of the images according to their mz range order
-        for imageFileName in natsort.natsorted(glob.glob(trainingSampleFolder + '/*.' + 'csv'), reverse=False):
+        for imageFileName in natsort.natsorted(glob.glob(trainingSampleFolder + '/*.csv'), reverse=False):
             image = np.nan_to_num(np.loadtxt(imageFileName, delimiter=','))
-            if resizeImage == True: image = cv2.resize(image, resizeDims, interpolation = cv2.INTER_NEAREST)
+            height, width = image.shape
+            
+            #Whichever dimension is the smaller leave alone, but resize the other according to the aspect ratio
+            if resizeAspect:
+                if width > height:
+                    image = cv2.resize((image), (int(round((aspectRatio[0]/aspectRatio[1])*height)), height), interpolation = cv2.INTER_NEAREST)
+                elif height > width:
+                    image = cv2.resize((image), (width, int(round((aspectRatio[0]/aspectRatio[1])*width))), interpolation = cv2.INTER_NEAREST)
+        
             images.append(image)
             massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
         maskObject = MaskObject(images[0].shape[1], images[0].shape[0], measurementPercs, numMasks)
+
+        #Save copies of the measurement masks for validation; DEBUG
         #for measurementPercNum in range(0,len(measurementPercs)):
             #for maskNum in range(0,numMasks):
                 #plt.imshow(maskObject.percMasks[measurementPercNum][maskNum], aspect='auto', cmap='gray')
@@ -77,63 +76,54 @@ def initTrain(sortedTrainingSampleFolders):
         #Weight images equally
         mzWeights = np.ones(len(images))/len(images)
 
+        #Define a new sample
+        sample = Sample(dataSampleName, images, massRanges, maskObject, mzWeights, dir_TrainingResults)
+
         #Append the basic information for each of the provided samples for use in determining best c Value
-        trainingSamples.append(Sample(dataSampleName, images, massRanges, maskObject, mzWeights, dir_TrainingResults))
+        trainingSamples.append(sample)
 
         #For each of the measurement percentages, extract features and initial RD values for each image
         for measurementPercNum in tqdm(range(0,len(measurementPercs)), desc = 'Measurement %', position=1, leave=False, ascii=True):
             measurementPerc = measurementPercs[measurementPercNum]
             for maskNum in tqdm(range(0,numMasks), desc = 'Masks', position=2, leave=False, ascii=True):
                 
-                #Retreive relevant mask information
-                mask = maskObject.percMasks[measurementPercNum][maskNum]
-                measuredIdxs = maskObject.measuredIdxsList[measurementPercNum][maskNum]
-                unMeasuredIdxs = maskObject.unMeasuredIdxsList[measurementPercNum][maskNum]
+                #Set mask in maskObject and extract needed measurement indices
+                maskObject.mask = maskObject.percMasks[measurementPercNum][maskNum]
+                maskObject.measuredIdxs = maskObject.measuredIdxsList[measurementPercNum][maskNum]
+                maskObject.unMeasuredIdxs = maskObject.unMeasuredIdxsList[measurementPercNum][maskNum]
 
                 #Find neighbor information
-                neighborIndices, neighborWeights, neighborDistances = findNeighbors(info, measuredIdxs, unMeasuredIdxs)
+                neighborIndices, neighborWeights, neighborDistances = findNeighbors(info, maskObject, maskObject.measuredIdxs, maskObject.unMeasuredIdxs)
 
                 #Calculate the sigma values for each possible c
                 sigmaValues = [(neighborDistances[:,0]/c) for c in cValues]
                 #for c in cValues: sigmaValues.append(neighborDistances[:,0]/c)
 
                 #Flatten 2D mask array to 1D
-                maskVect = np.ravel(mask)
+                maskVect = np.ravel(maskObject.mask)
 
                 #Use all of the unmeasured points for RD approximation
-                orderForRD = np.arange(0,len(unMeasuredIdxs)).tolist()
+                orderForRD = np.arange(0,len(maskObject.unMeasuredIdxs)).tolist()
+                
+                #Set the measured images for the sample
+                for imageNum in range(0,len(sample.measuredImages)):
+                    temp = np.asarray(sample.images[imageNum]).copy()
+                    temp[maskObject.mask == 0] = 0
+                    sample.measuredImages[imageNum] = temp.copy()
 
-                #Setup holding arrays for reconImages and polyFeatures
-                reconImageList = []
-                polyFeaturesList = []
+                #Compute reconstruction
+                reconImage = computeRecons(info, sample, maskObject, True)
 
-                #Add static parameters to shared pool memory
-                neighborIndices_id = ray.put(neighborIndices)
-                info_id = ray.put(info)
-                maskObject_id = ray.put(maskObject)
-                unMeasuredIdxs_id = ray.put(unMeasuredIdxs)
-                measuredIdxs_id = ray.put(measuredIdxs)
-                neighborWeights_id = ray.put(neighborWeights)
-                neighborDistances_id = ray.put(neighborDistances)
-                orderForRD_id = ray.put(orderForRD)
+                #Determine the feature vector for the reconstruction
+                polyFeatures = computeFeatures(maskObject, sample, info, reconImage)
 
-                #Perform pool function and extract variables from the results
-                idens = [imFeature_parFunction.remote(np.asarray(images[imNum])[mask==1], neighborIndices_id, info_id, maskObject_id, unMeasuredIdxs_id, measuredIdxs_id, neighborWeights_id, neighborDistances_id, orderForRD_id) for imNum in range(0, len(images))]
-                for result in tqdm(parIterator(idens), total=len(idens), position=3, desc='Poly Features', leave=False, ascii=True):
-                    reconImageList.append(result[0])
-                    polyFeaturesList.append(result[1])
-
-                #Average the reconstructions according to the mzWeights
-                reconImage = np.average(np.asarray(reconImageList), axis=0, weights=mzWeights)
-
-                #Average the ground-truth according to the mzWeights
-                avgImage = np.average(np.asarray(images), axis=0, weights=mzWeights)
-
-                #Average the polyFeatures according to the mzWeights
-                polyFeatures = np.average(np.asarray(polyFeaturesList), axis=0, weights=mzWeights)
+                #Reset the measured images and measurement lists for the sample/mask to a blank state
+                sample.measuredImages = [np.zeros([maskObject.width, maskObject.height]) for rangeNum in range(0,len(massRanges))]
+                maskObject.measuredIdxs = []
+                maskObject.unMeasuredIdxs = []
 
                 #Compute the difference between the original and reconstructed images
-                RDPP = computeDifference(avgImage, reconImage, info.imageType)
+                RDPP = computeDifference(sample.avgImage, reconImage, info.imageType)
 
                 #Convert differences to int
                 RDPP.astype(int)
@@ -145,7 +135,8 @@ def initTrain(sortedTrainingSampleFolders):
                 imgAsBlocks = viewW(RDPPWithZeros, (windowSize[0],windowSize[1])).reshape(-1,windowSize[0]*windowSize[1])[:,::1]
                 imgAsBlocksOnlyUnmeasured = imgAsBlocks[np.logical_not(maskVect),:]
 
-                #Add additional static parameters to shared pool memory
+                #Add static parameters to shared pool memory
+                orderForRD_id = ray.put(orderForRD)
                 imgAsBlocksOnlyUnmeasured_id = ray.put(imgAsBlocksOnlyUnmeasured)
                 windowSize_id = ray.put(windowSize)
 
@@ -212,7 +203,7 @@ def findBestC(trainingSamples, trainingModels):
     trainPlotFlag_id = ray.put(False)
     animationFlag_id = ray.put(False)
     bestCFlag_id = ray.put(True)
-    tqdmHide_id = ray.put(True)
+    tqdmHide_id = ray.put(False)
 
     #For each of the proposed c values determine which produces the overall minimal amount of toal distortion
     areaUnderCurveList = []
@@ -225,14 +216,12 @@ def findBestC(trainingSamples, trainingModels):
         areaUnderCurve = 0
         
         #DEBUG: Serial operation
-        #idens = []
-        #for sampleNum in range(0, len(trainingSamples)):
-        #    result = runSLADS(info, trainingSamples, trainingModels[cNum], stopPerc, sampleNum, True, False, False, True, (True))
-        #    idens.append(result)
-
+        #for sampleNum in tqdm(range(0, len(trainingSamples)), desc = 'Training Samples', leave=False, ascii=True):
+        #    areaResult = runSLADS(info, trainingSamples, trainingModels[cNum], stopPerc, sampleNum, True, False, False, False, True)
+        #    areaUnderCurve += areaResult
+    
         #Perform pool function and extract variables from the results
         idens = [parFunction.remote(info_id, trainingSamples_id, trainingModel_id, stopPerc_id, sampleNum, simulationFlag_id, trainPlotFlag_id, animationFlag_id, tqdmHide_id, bestCFlag_id) for sampleNum in range(0, len(trainingSamples))]
-
         for areaResult in tqdm(parIterator(idens), total=len(idens), desc='Training Samples', position=1, leave=False, ascii=True): areaUnderCurve += areaResult
 
         #Append the total distortion sum to a list corresponding to the c values

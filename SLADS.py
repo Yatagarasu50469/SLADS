@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    24 April 2020
+#DATE MODIFIED:	    27 May 2020
 #
-#VERSION NUM:	    0.6.3
+#VERSION NUM:	    0.6.4
 #
 #DESCRIPTION:	    Multichannel implementation of SLADS (Supervised Learning 
 #                   Algorithm for Dynamic Sampling with additional constraint to
@@ -34,6 +34,7 @@
 #               0.6.1   Model robustness and reduction of memory overhead
 #               0.6.2   Model loading and animation production patches
 #               0.6.3   Start/End point selection with Canny
+#               0.6.4   Custom knn metric, SSIM calc, init computations
 #               ~0.7	Tissue model library generation
 #               ~0.8	Deep feature extraction
 #               ~0.9	GPU acceleratiaon
@@ -44,7 +45,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum="0.6.3"
+versionNum="0.6.4"
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())

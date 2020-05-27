@@ -9,13 +9,24 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
     testingSamples = []
     for testingSampleFolder in sortedTestingSampleFolders:
         dataSampleName = os.path.basename(testingSampleFolder)
-    
-        #Obtain images
+        
+        #Import the sample's pixel aspect ratio (width, height)
+        aspectRatio = np.loadtxt(testingSampleFolder+'/aspect.txt', delimiter=',')
+        
         images = []
         massRanges = []
-        for imageFileName in natsort.natsorted(glob.glob(testingSampleFolder + '/*.' + 'csv'), reverse=False):
+        #Import each of the images according to their mz range order
+        for imageFileName in natsort.natsorted(glob.glob(testingSampleFolder + '/*.csv'), reverse=False):
             image = np.nan_to_num(np.loadtxt(imageFileName, delimiter=','))
-            if resizeImage == True: image = cv2.resize(image, resizeDims, interpolation = cv2.INTER_NEAREST)
+            height, width = image.shape
+            
+            #Whichever dimension is the smaller leave alone, but resize the other according to the aspect ratio
+            if resizeAspect:
+                if width > height:
+                    image = cv2.resize((image), (int(round((aspectRatio[0]/aspectRatio[1])*height)), height), interpolation = cv2.INTER_NEAREST)
+                elif height > width:
+                    image = cv2.resize((image), (width, int(round((aspectRatio[0]/aspectRatio[1])*width))), interpolation = cv2.INTER_NEAREST)
+        
             images.append(image)
             massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
 
