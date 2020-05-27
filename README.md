@@ -171,7 +171,7 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 	$ python --m pip install --upgrade pip
 	$ pip3 install opencv-python datetime glob3 IPython joblib pandas psutil matplotlib pillow 
 	   ray scipy sobol sobol_seq natsort multiprocess ray scikit-image sklearn tqdm
-      $ cd ./scikit-learn
+      $ cd ./CODE/scikit-learn
       $ make clean
       $ pip3 install --verbose --no-build-isolation --editable .
 
@@ -194,7 +194,7 @@ Restart when prompted and then open the **Microsoft Store**. Search for Ubuntu a
 Place the SLADS-# release folder onto the Windows desktop. Note this must be done prior to building the custom sci-kit pacakge. Back inside of **Ubuntu**, enter the following to move into the SLADS folder replacing **username** and **versionNum** as appropriate:
 
 	$ cd /mnt/c/Users/username/Desktop/SLADS-versionNum
-    $ cd ./scikit-learn
+    $ cd ./CODE/scikit-learn
     $ make clean
     $ pip3 install --verbose --no-build-isolation --editable .
     
