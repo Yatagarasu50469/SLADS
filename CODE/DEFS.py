@@ -381,7 +381,7 @@ class MaskObject():
         self.maxDim = np.max([height, width])
         self.minDim = np.min([height, width])
         self.smallDimIdx = 1 if height > width else 0
-        self.reconAspect = ((height/width)**2) if width>height else ((width/height)**2)
+        self.reconAspect = width/height if width>height else height/width
         self.percMasks = []
         self.measuredIdxs = []
         self.unMeasuredIdxs = []
@@ -801,7 +801,7 @@ def computeStopCondFuncVal(oldReconImage, reconImage, stopCondParams, info, stop
     return stopCondFuncVal
 
 def findNeighbors(info, maskObject, measuredIdxs, unMeasuredIdxs):
-    neigh = NearestNeighbors(n_neighbors=info.numNeighbors, metric='asym', aspect=maskObject.reconAspect)
+    neigh = NearestNeighbors(n_neighbors=info.numNeighbors, algorithm='ball_tree', metric='asym', aspect=maskObject.reconAspect)
     neigh.fit(measuredIdxs)
     neighborDistances, neighborIndices = neigh.kneighbors(unMeasuredIdxs)
     neighborDistances = neighborDistances*info.resolution
