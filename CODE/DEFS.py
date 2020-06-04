@@ -381,7 +381,7 @@ class MaskObject():
         self.maxDim = np.max([height, width])
         self.minDim = np.min([height, width])
         self.smallDimIdx = 1 if height > width else 0
-        self.reconAspect = height/width if width>height else width/height
+        self.reconAspect = ((height/width)**2) if width>height else ((width/height)**2)
         self.percMasks = []
         self.measuredIdxs = []
         self.unMeasuredIdxs = []
