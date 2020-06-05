@@ -15,14 +15,18 @@ impModel = False
 
 #PARAMETERS: L1
 #==================================================================
+#Which algorithm should be used for nearest neighbor: kd_tree or ball_tree
+#ball-tree is more accurate but cannot be run with 50k per line
+algorithmNN = 'ball_tree'
+
 #Which scanning method shoud be used: pointwise or linewise
-scanMethod = 'linewise'
+scanMethod = 'pointwise'
 
 #Should partial segments of a line be scanned
-partialLineFlag = True
+partialLineFlag = False
 
 #What method should be used for linewise point selection: (percLine, 50% of line) (meanThreshold, mean of chosen line ERD) (none, full lines)
-lineMethod = 'percLine'
+lineMethod = 'meanThreshold'
 
 #Should features be normalized
 normalizeFeatures = True

@@ -227,7 +227,7 @@ class Result():
                     ax3.set_title('Sampled Mask')
 
                     ax4 = plt.subplot2grid((2,6), (1,1), colspan=2)
-                    im = ax4.imshow(self.ERDValueNPs[i], cmap='viridis', vmin=0, vmax=255, aspect='auto')
+                    im = ax4.imshow(self.ERDValueNPs[i], cmap='viridis', vmin=np.min(self.ERDValueNPs), vmax=np.max(self.ERDValueNPs), aspect='auto')
                     ax4.set_title('ERD Values')
                     cbar = f.colorbar(im, ax=ax4, orientation='vertical', pad=0.01)
 
@@ -801,7 +801,7 @@ def computeStopCondFuncVal(oldReconImage, reconImage, stopCondParams, info, stop
     return stopCondFuncVal
 
 def findNeighbors(info, maskObject, measuredIdxs, unMeasuredIdxs):
-    neigh = NearestNeighbors(n_neighbors=info.numNeighbors, algorithm='ball_tree', metric='asym', aspect=maskObject.reconAspect)
+    neigh = NearestNeighbors(n_neighbors=info.numNeighbors, algorithm=algorithmNN, metric='asym', aspect=maskObject.reconAspect)
     neigh.fit(measuredIdxs)
     neighborDistances, neighborIndices = neigh.kneighbors(unMeasuredIdxs)
     neighborDistances = neighborDistances*info.resolution
