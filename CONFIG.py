@@ -20,19 +20,16 @@ impModel = False
 algorithmNN = 'ball_tree'
 
 #Which scanning method shoud be used: pointwise or linewise
-scanMethod = 'pointwise'
+scanMethod = 'linewise'
 
-#Should partial segments of a line be scanned
-partialLineFlag = False
+#If linewise, should partial segments of a line be scanned
+partialLineFlag = True
+
+#Should the image be resized to its physical aspect ratio
+physResize = False
 
 #What method should be used for linewise point selection: (percLine, 50% of line) (meanThreshold, mean of chosen line ERD) (none, full lines)
-lineMethod = 'meanThreshold'
-
-#Should features be normalized
-normalizeFeatures = True
-
-#Should possible selections be masked by the determined foreground
-ERDMaskingFlag = False
+lineMethod = 'percLine'
 
 #Window size for approximate RD summation; 15 for 64x64, (width,height)
 windowSize = [15,15]
@@ -90,16 +87,8 @@ mzWeighting='equal'
 #'discrete' option not implemented at this time
 imageType = 'C'
 
-#Percent of reduction in distrotion limit for numRandomChoice determination
-percOfRD = 50
-
 #Should a stopping threshold be found that corresponds to the best determined c value
 #Not implemented at this time
 findStopThresh = False
 
-#Should the input data be resized to be symmetric during the reconstruction phase
-resizeImage = False
-
-#Should the input data be resize according to the provided aspect ratio information
-resizeAspect = False
 

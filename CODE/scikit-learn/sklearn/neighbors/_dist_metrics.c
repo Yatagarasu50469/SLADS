@@ -11565,7 +11565,7 @@ static int __pyx_pf_7sklearn_9neighbors_13_dist_metrics_12asymDistance___init__(
  * 
  *     cdef inline DTYPE_t dist(self, DTYPE_t* x1, DTYPE_t* x2,             # <<<<<<<<<<<<<<
  *                               ITYPE_t size) nogil except -1:
- *             return sqrt(((x2[0]-x1[0])**2)*(self.aspect**2)+((x2[1]-x1[1])**2))
+ *         return sqrt((x2[0]-x1[0])*(x2[0]-x1[0])+(x2[1]-x1[1])*(x2[1]-x1[1])*self.aspect)
  */
 
 static __pyx_t_7sklearn_9neighbors_9_typedefs_DTYPE_t __pyx_f_7sklearn_9neighbors_13_dist_metrics_12asymDistance_dist(struct __pyx_obj_7sklearn_9neighbors_13_dist_metrics_asymDistance *__pyx_v_self, __pyx_t_7sklearn_9neighbors_9_typedefs_DTYPE_t *__pyx_v_x1, __pyx_t_7sklearn_9neighbors_9_typedefs_DTYPE_t *__pyx_v_x2, CYTHON_UNUSED __pyx_t_7sklearn_9neighbors_9_typedefs_ITYPE_t __pyx_v_size) {
@@ -11574,11 +11574,11 @@ static __pyx_t_7sklearn_9neighbors_9_typedefs_DTYPE_t __pyx_f_7sklearn_9neighbor
   /* "sklearn/neighbors/_dist_metrics.pyx":1038
  *     cdef inline DTYPE_t dist(self, DTYPE_t* x1, DTYPE_t* x2,
  *                               ITYPE_t size) nogil except -1:
- *             return sqrt(((x2[0]-x1[0])**2)*(self.aspect**2)+((x2[1]-x1[1])**2))             # <<<<<<<<<<<<<<
+ *         return sqrt((x2[0]-x1[0])*(x2[0]-x1[0])+(x2[1]-x1[1])*(x2[1]-x1[1])*self.aspect)             # <<<<<<<<<<<<<<
  * 
  * #------------------------------------------------------------
  */
-  __pyx_r = sqrt(((pow(((__pyx_v_x2[0]) - (__pyx_v_x1[0])), 2.0) * pow(__pyx_v_self->__pyx_base.aspect, 2.0)) + pow(((__pyx_v_x2[1]) - (__pyx_v_x1[1])), 2.0)));
+  __pyx_r = sqrt(((((__pyx_v_x2[0]) - (__pyx_v_x1[0])) * ((__pyx_v_x2[0]) - (__pyx_v_x1[0]))) + ((((__pyx_v_x2[1]) - (__pyx_v_x1[1])) * ((__pyx_v_x2[1]) - (__pyx_v_x1[1]))) * __pyx_v_self->__pyx_base.aspect)));
   goto __pyx_L0;
 
   /* "sklearn/neighbors/_dist_metrics.pyx":1036
@@ -11586,7 +11586,7 @@ static __pyx_t_7sklearn_9neighbors_9_typedefs_DTYPE_t __pyx_f_7sklearn_9neighbor
  * 
  *     cdef inline DTYPE_t dist(self, DTYPE_t* x1, DTYPE_t* x2,             # <<<<<<<<<<<<<<
  *                               ITYPE_t size) nogil except -1:
- *             return sqrt(((x2[0]-x1[0])**2)*(self.aspect**2)+((x2[1]-x1[1])**2))
+ *         return sqrt((x2[0]-x1[0])*(x2[0]-x1[0])+(x2[1]-x1[1])*(x2[1]-x1[1])*self.aspect)
  */
 
   /* function exit code */

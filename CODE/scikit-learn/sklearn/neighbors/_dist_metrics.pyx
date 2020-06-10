@@ -1035,7 +1035,7 @@ cdef class asymDistance(DistanceMetric):
 
     cdef inline DTYPE_t dist(self, DTYPE_t* x1, DTYPE_t* x2,
                               ITYPE_t size) nogil except -1:
-            return sqrt(((x2[0]-x1[0])**2)*(self.aspect**2)+((x2[1]-x1[1])**2))
+        return sqrt((x2[0]-x1[0])*(x2[0]-x1[0])+(x2[1]-x1[1])*(x2[1]-x1[1])*self.aspect)
 
 #------------------------------------------------------------
 # Yule Distance (boolean)

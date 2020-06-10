@@ -45,26 +45,31 @@ def initTrain(sortedTrainingSampleFolders):
         images = []
         massRanges = []
 
-        #Import the sample's pixel aspect ratio (width, height)
-        aspectRatio = np.loadtxt(trainingSampleFolder+'/aspect.txt', delimiter=',')
-
+        #Set a default aspect ratio
+        aspect = [1,1]
+        
+        if physResize:
+            #Import the sample's physical aspect ratio (width, height)
+            aspect = np.loadtxt(trainingSampleFolder+'/aspect.txt', delimiter=',')
+        
         images = []
+        originalImages = []
         massRanges = []
-        #Import each of the images according to their mz range order
+        #Import each of the images according to their mz range order, resizing to physical aspects
         for imageFileName in natsort.natsorted(glob.glob(trainingSampleFolder + '/*.csv'), reverse=False):
             image = np.nan_to_num(np.loadtxt(imageFileName, delimiter=','))
-            height, width = image.shape
-            
-            #Whichever dimension is the smaller leave alone, but resize the other according to the aspect ratio
-            if resizeAspect:
-                if width > height:
-                    image = cv2.resize((image), (int(round((aspectRatio[0]/aspectRatio[1])*height)), height), interpolation = cv2.INTER_NEAREST)
-                elif height > width:
-                    image = cv2.resize((image), (width, int(round((aspectRatio[0]/aspectRatio[1])*width))), interpolation = cv2.INTER_NEAREST)
-        
+            imageHeight, imageWidth = image.shape
+            if physResize:
+                originalImages.append(image)
+                if imageWidth > imageHeight:
+                    image = cv2.resize((image), (int(round((aspect[0]/aspect[1])*imageHeight)), imageHeight), interpolation = cv2.INTER_LINEAR)
+                elif imageHeight > imageWidth:
+                    image = cv2.resize((image), (imageWidth, int(round((aspect[0]/aspect[1])*imageWidth))), interpolation = cv2.INTER_LINEAR)
+            if not physResize:
+                originalImages.append(image)
             images.append(image)
             massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
-        maskObject = MaskObject(images[0].shape[1], images[0].shape[0], measurementPercs, numMasks)
+        maskObject = MaskObject(imageWidth, imageHeight, image.shape[1], image.shape[0], measurementPercs, numMasks)
 
         #Save copies of the measurement masks for validation; DEBUG
         #for measurementPercNum in range(0,len(measurementPercs)):
@@ -77,7 +82,7 @@ def initTrain(sortedTrainingSampleFolders):
         mzWeights = np.ones(len(images))/len(images)
 
         #Define a new sample
-        sample = Sample(dataSampleName, images, massRanges, maskObject, mzWeights, dir_TrainingResults)
+        sample = Sample(dataSampleName, images, originalImages, massRanges, maskObject, mzWeights, dir_TrainingResults)
 
         #Append the basic information for each of the provided samples for use in determining best c Value
         trainingSamples.append(sample)
@@ -118,7 +123,7 @@ def initTrain(sortedTrainingSampleFolders):
                 polyFeatures = computeFeatures(maskObject, sample, info, reconImage)
 
                 #Reset the measured images and measurement lists for the sample/mask to a blank state
-                sample.measuredImages = [np.zeros([maskObject.width, maskObject.height]) for rangeNum in range(0,len(massRanges))]
+                sample.measuredImages = [np.zeros([maskObject.physHeight, maskObject.physWidth]) for rangeNum in range(0,len(massRanges))]
                 maskObject.measuredIdxs = []
                 maskObject.unMeasuredIdxs = []
 

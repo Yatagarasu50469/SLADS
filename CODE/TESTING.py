@@ -10,34 +10,36 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
     for testingSampleFolder in sortedTestingSampleFolders:
         dataSampleName = os.path.basename(testingSampleFolder)
         
-        #Import the sample's pixel aspect ratio (width, height)
-        aspectRatio = np.loadtxt(testingSampleFolder+'/aspect.txt', delimiter=',')
+        if physResize:
+            #Import the sample's physical aspect ratio (width, height)
+            aspect = np.loadtxt(testingSampleFolder+'/aspect.txt', delimiter=',')
         
         images = []
+        originalImages = []
         massRanges = []
         #Import each of the images according to their mz range order
         for imageFileName in natsort.natsorted(glob.glob(testingSampleFolder + '/*.csv'), reverse=False):
             image = np.nan_to_num(np.loadtxt(imageFileName, delimiter=','))
-            height, width = image.shape
-            
-            #Whichever dimension is the smaller leave alone, but resize the other according to the aspect ratio
-            if resizeAspect:
-                if width > height:
-                    image = cv2.resize((image), (int(round((aspectRatio[0]/aspectRatio[1])*height)), height), interpolation = cv2.INTER_NEAREST)
-                elif height > width:
-                    image = cv2.resize((image), (width, int(round((aspectRatio[0]/aspectRatio[1])*width))), interpolation = cv2.INTER_NEAREST)
-        
+            imageHeight, imageWidth = image.shape
+            if physResize:
+                originalImages.append(image)
+                if imageWidth > imageHeight:
+                    image = cv2.resize((image), (int(round((aspect[0]/aspect[1])*imageHeight)), imageHeight), interpolation = cv2.INTER_LINEAR)
+                elif imageHeight > imageWidth:
+                    image = cv2.resize((image), (imageWidth, int(round((aspect[0]/aspect[1])*imageWidth))), interpolation = cv2.INTER_LINEAR)
+            if not physResize:
+                originalImages.append(image)
             images.append(image)
             massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
 
         #Create a new maskObject
-        maskObject = MaskObject(images[0].shape[1], images[0].shape[0], measurementPercs=[], numMasks=0)
-    
+        maskObject = MaskObject(imageWidth, imageHeight, image.shape[1], image.shape[0], [], 0)
+        
         #Weight images equally
         mzWeights = np.ones(len(images))/len(images)
 
         #Define information as a new Sample object
-        testingSamples.append(Sample(dataSampleName, images, massRanges, maskObject, mzWeights, dir_TestingResults))
+        testingSamples.append(Sample(dataSampleName, images, originalImages, massRanges, maskObject, mzWeights, dir_TestingResults))
 
     #Set function for the pool
     #with contextlib.redirect_stdout(None):

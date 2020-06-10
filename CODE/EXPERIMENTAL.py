@@ -17,27 +17,35 @@ def readScanData():
     images = []
     massRanges = []
     
-    #Import the sample's pixel aspect ratio (width, height)
-    aspectRatio = np.loadtxt('./INPUT/IMP/aspect.txt', delimiter=',')
+    #Set a default aspect ratio
+    aspect = [1,1]
+    
+    if physResize:
+        #Import the sample's pixel aspect ratio (width, height)
+        aspect = np.loadtxt('./INPUT/IMP/aspect.txt', delimiter=',')
     
     images = []
+    originalImages = []
     massRanges = []
     #Import each of the images according to their mz range order
     for imageFileName in natsort.natsorted('./INPUT/IMP/*.' + 'csv'), reverse=False):
         image = np.nan_to_num(np.loadtxt(imageFileName, delimiter=','))
-        height, width = image.shape
-        
-        #Whichever dimension is the smaller leave alone, but resize the other according to the aspect ratio
-        if resizeAspect:
-            if width > height:
-                image = cv2.resize((image), (int(round((aspectRatio[0]/aspectRatio[1])*height)), height), interpolation = cv2.INTER_NEAREST)
-            elif height > width:
-                image = cv2.resize((image), (width, int(round((aspectRatio[0]/aspectRatio[1])*width))), interpolation = cv2.INTER_NEAREST)
-
+        imageHeight, imageWidth = image.shape
+        if physResize:
+            originalImages.append(image)
+            if imageWidth > imageHeight:
+                image = cv2.resize((image), (int(round((aspect[0]/aspect[1])*imageHeight)), imageHeight), interpolation = cv2.INTER_LINEAR)
+            elif imageHeight > imageWidth:
+                image = cv2.resize((image), (imageWidth, int(round((aspect[0]/aspect[1])*imageWidth))), interpolation = cv2.INTER_LINEAR)
+        if not physResize:
+            originalImages.append(image)
         images.append(image)
         massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
 
-    return images, massRanges
+    #Create a new maskObject
+    maskObject = MaskObject(imageWidth, imageHeight, image.shape[1], image.shape[0], [], 0)
+
+    return images, originalImages, massRanges, maskObject
 
 #Perform SLADS with external equipment
 def performImplementation(bestC, bestModel):
@@ -50,11 +58,8 @@ def performImplementation(bestC, bestModel):
     equipWait()
     
     #Read in the image data (blank) for size information
-    images, massRanges = readScanData()
+    images, massRanges, maskObject = readScanData()
     
-    #Create a new maskObject
-    maskObject = MaskObject(images[0].shape[1], images[0].shape[0], [], numMasks)
-
     #For each of the initial sets that must be obtained
     for setNum in range(0, len(maskObject.initialSets)):
 
@@ -65,13 +70,13 @@ def performImplementation(bestC, bestModel):
         equipWait()
 
     #Update internal sample data with the acquired information
-    images, massRanges = readScanData()
+    images, originalImages, massRanges = readScanData()
 
     #Weight images equally
     mzWeights = np.ones(len(images))/len(images)
 
     #Define information as a new Sample object
-    impSample = Sample(impSampleName, images, massRanges, maskObject, mzWeights, dir_ImpResults)
+    impSample = Sample(impSampleName, images, originalImages, massRanges, maskObject, mzWeights, dir_ImpResults)
     
     #Run SLADS
     result = runSLADS(info, impSample, bestModel, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, bestCFlag=False)
