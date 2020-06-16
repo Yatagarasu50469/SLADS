@@ -10,36 +10,17 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
     for testingSampleFolder in sortedTestingSampleFolders:
         dataSampleName = os.path.basename(testingSampleFolder)
         
-        if physResize:
-            #Import the sample's physical aspect ratio (width, height)
-            aspect = np.loadtxt(testingSampleFolder+'/aspect.txt', delimiter=',')
-        
-        images = []
-        originalImages = []
-        massRanges = []
         #Import each of the images according to their mz range order
-        for imageFileName in natsort.natsorted(glob.glob(testingSampleFolder + '/*.csv'), reverse=False):
-            image = np.nan_to_num(np.loadtxt(imageFileName, delimiter=','))
-            imageHeight, imageWidth = image.shape
-            if physResize:
-                originalImages.append(image)
-                if imageWidth > imageHeight:
-                    image = cv2.resize((image), (int(round((aspect[0]/aspect[1])*imageHeight)), imageHeight), interpolation = cv2.INTER_LINEAR)
-                elif imageHeight > imageWidth:
-                    image = cv2.resize((image), (imageWidth, int(round((aspect[0]/aspect[1])*imageWidth))), interpolation = cv2.INTER_LINEAR)
-            if not physResize:
-                originalImages.append(image)
-            images.append(image)
-            massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
-
-        #Create a new maskObject
-        maskObject = MaskObject(imageWidth, imageHeight, image.shape[1], image.shape[0], [], 0)
+        images, massRanges, imageHeight, imageWidth = readScanData(testingSampleFolder + '/')
+        
+        #Create a mask object
+        maskObject = MaskObject(imageWidth, imageHeight, [], 0)
         
         #Weight images equally
         mzWeights = np.ones(len(images))/len(images)
 
         #Define information as a new Sample object
-        testingSamples.append(Sample(dataSampleName, images, originalImages, massRanges, maskObject, mzWeights, dir_TestingResults))
+        testingSamples.append(Sample(dataSampleName, images, massRanges, maskObject, mzWeights, dir_TestingResults))
 
     #Set function for the pool
     #with contextlib.redirect_stdout(None):

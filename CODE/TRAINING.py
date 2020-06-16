@@ -15,7 +15,6 @@ class TrainingSample:
         self.orderForRD = orderForRD
         self.RD = RD
 
-
 def cGaussian_parhelper(cNum, sigma, windowSize, orderForRD, imgAsBlocksOnlyUnmeasured):
     
     #For each of the selected unmeasured points calculate the captured "area"
@@ -33,43 +32,20 @@ def initTrain(sortedTrainingSampleFolders):
         time.sleep(1)
 
     #Create a set of training samples for each possible c Value
-    trainingDatabase = []
-    for cNum in range(0,len(cValues)): trainingDatabase.append([])
+    trainingDatabase = [[] for cNum in range(0,len(cValues))]
 
     #For each physical sample, generate a training example for
     trainingSamples = []
-    for sampleNum in tqdm(range(0,len(sortedTrainingSampleFolders)), desc = 'Training Samples', position=0, ascii=True):
-        trainingSampleFolder = sortedTrainingSampleFolders[sampleNum]
+    for trainingSampleFolder in tqdm(sortedTrainingSampleFolders, desc = 'Training Samples', position=0, ascii=True):
 
+        #Obtain the name of the training sample
         dataSampleName = os.path.basename(trainingSampleFolder)
-        images = []
-        massRanges = []
 
-        #Set a default aspect ratio
-        aspect = [1,1]
-        
-        if physResize:
-            #Import the sample's physical aspect ratio (width, height)
-            aspect = np.loadtxt(trainingSampleFolder+'/aspect.txt', delimiter=',')
-        
-        images = []
-        originalImages = []
-        massRanges = []
-        #Import each of the images according to their mz range order, resizing to physical aspects
-        for imageFileName in natsort.natsorted(glob.glob(trainingSampleFolder + '/*.csv'), reverse=False):
-            image = np.nan_to_num(np.loadtxt(imageFileName, delimiter=','))
-            imageHeight, imageWidth = image.shape
-            if physResize:
-                originalImages.append(image)
-                if imageWidth > imageHeight:
-                    image = cv2.resize((image), (int(round((aspect[0]/aspect[1])*imageHeight)), imageHeight), interpolation = cv2.INTER_LINEAR)
-                elif imageHeight > imageWidth:
-                    image = cv2.resize((image), (imageWidth, int(round((aspect[0]/aspect[1])*imageWidth))), interpolation = cv2.INTER_LINEAR)
-            if not physResize:
-                originalImages.append(image)
-            images.append(image)
-            massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
-        maskObject = MaskObject(imageWidth, imageHeight, image.shape[1], image.shape[0], measurementPercs, numMasks)
+        #Import each of the images according to their mz range order
+        images, massRanges, imageHeight, imageWidth = readScanData(trainingSampleFolder + '/')
+
+        #Create a mask object
+        maskObject = MaskObject(imageWidth, imageHeight, measurementPercs, numMasks)
 
         #Save copies of the measurement masks for validation; DEBUG
         #for measurementPercNum in range(0,len(measurementPercs)):
@@ -82,7 +58,7 @@ def initTrain(sortedTrainingSampleFolders):
         mzWeights = np.ones(len(images))/len(images)
 
         #Define a new sample
-        sample = Sample(dataSampleName, images, originalImages, massRanges, maskObject, mzWeights, dir_TrainingResults)
+        sample = Sample(dataSampleName, images, massRanges, maskObject, mzWeights, dir_TrainingResults)
 
         #Append the basic information for each of the provided samples for use in determining best c Value
         trainingSamples.append(sample)
@@ -98,11 +74,10 @@ def initTrain(sortedTrainingSampleFolders):
                 maskObject.unMeasuredIdxs = maskObject.unMeasuredIdxsList[measurementPercNum][maskNum]
 
                 #Find neighbor information
-                neighborIndices, neighborWeights, neighborDistances = findNeighbors(info, maskObject, maskObject.measuredIdxs, maskObject.unMeasuredIdxs)
+                neighborIndices, neighborWeights, neighborDistances = findNeighbors(info, maskObject, maskObject.measuredIdxs, maskObject.unMeasuredIdxs, False)
 
                 #Calculate the sigma values for each possible c
                 sigmaValues = [(neighborDistances[:,0]/c) for c in cValues]
-                #for c in cValues: sigmaValues.append(neighborDistances[:,0]/c)
 
                 #Flatten 2D mask array to 1D
                 maskVect = np.ravel(maskObject.mask)
@@ -117,13 +92,13 @@ def initTrain(sortedTrainingSampleFolders):
                     sample.measuredImages[imageNum] = temp.copy()
 
                 #Compute reconstruction
-                reconImage = computeRecons(info, sample, maskObject, True)
+                reconImage = computeRecons(info, sample, maskObject, True, False)
 
                 #Determine the feature vector for the reconstruction
                 polyFeatures = computeFeatures(maskObject, sample, info, reconImage)
 
                 #Reset the measured images and measurement lists for the sample/mask to a blank state
-                sample.measuredImages = [np.zeros([maskObject.physHeight, maskObject.physWidth]) for rangeNum in range(0,len(massRanges))]
+                sample.measuredImages = [np.zeros([maskObject.imageHeight, maskObject.imageWidth]) for rangeNum in range(0,len(massRanges))]
                 maskObject.measuredIdxs = []
                 maskObject.unMeasuredIdxs = []
 
@@ -157,6 +132,9 @@ def initTrain(sortedTrainingSampleFolders):
 
 #Given a training database, create SLADS Model(s), noting there exists a single training sample for numCValues*numMeasurementPercs*numTrainingSamples
 def trainModel(trainingDatabase):
+    
+    regMSEs = []
+    regR2Scores = []
 
     #Find a SLADS model for each of the c values
     trainingModels = []
@@ -181,10 +159,27 @@ def trainModel(trainingDatabase):
                     bigPolyFeatures = np.row_stack((bigPolyFeatures, tempPolyFeatures))
                     bigRD = np.append(bigRD, trainingSample.RD)
 
-        #Create least-squares regression model
-        regr = linear_model.LinearRegression(normalize=True, n_jobs=num_threads)
+        #Create regression model based on user selection
+        if regModel == 'LS':
+            regr = linear_model.LinearRegression(normalize=True)
+        elif regModel == 'NN':
+            regr = nnr(activation='identity', solver='adam', alpha=1e-5, hidden_layer_sizes=(50, 5), random_state=1, max_iter=500)
+        else:
+            sys.exit('Error! - The chosen regression model is not supported/implemented.')
+
+        #Fit the training data
         regr.fit(bigPolyFeatures, bigRD)
+        
+        #Evaluation of training data fit
+        regMSEs.append(np.mean([mean_squared_error(bigPolyFeatures[:,index], bigRD) for index in range(bigPolyFeatures.shape[1])]))
+        regR2Scores.append(np.mean([r2_score(bigPolyFeatures[:,index], bigRD) for index in range(bigPolyFeatures.shape[1])]))
+        
+        #Save the trained model
         trainingModels.append(regr)
+
+    #Save evaluation of the training fit
+    np.savetxt(dir_TrainingResults + 'regMSEs.csv', regMSEs, delimiter=',')
+    np.savetxt(dir_TrainingResults + 'regR2Scores.csv', regR2Scores, delimiter=',')
 
     #Save the end models and the matched cValue order array
     np.save(dir_TrainingResults + 'cValues', cValues)

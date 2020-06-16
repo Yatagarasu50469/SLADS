@@ -1,13 +1,13 @@
 #====================================================================
 #PROGRAM INFORMATION
 #====================================================================
-#PROGRAM NAME:	Line-SLADS
+#PROGRAM NAME:      SLADS
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    27 May 2020
+#DATE MODIFIED:	    10 June 2020
 #
-#VERSION NUM:	    0.6.5
+#VERSION NUM:	    0.6.6
 #
 #DESCRIPTION:	    Multichannel implementation of SLADS (Supervised Learning 
 #                   Algorithm for Dynamic Sampling with additional constraint to
@@ -36,9 +36,10 @@
 #               0.6.3   Start/End point selection with Canny
 #               0.6.4   Custom knn metric, SSIM calc, init computations
 #               0.6.5   Clean variables and resize to physical
-#               ~0.7	Tissue model library generation
-#               ~0.8	Deep feature extraction
-#               ~0.9	GPU acceleratiaon
+#               0.6.6   SLADS-NET NN, PSNR, asymFinal, and multi-config
+#               ~0.7	Python 3.8 parallization
+#               ~0.8	RAW file feature extraction
+#               ~0.9	GPU acceleration
 #               ~1.0	Initial release
 #====================================================================
 
@@ -46,93 +47,115 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum="0.6.5"
+versionNum="0.6.6"
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
 
-#Load in variable definitions from the configuration file
-exec(open("./CONFIG.py").read())
+#For each of the configuration files that are present, run SLADS
+for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
 
-#Import basic SLADS functions
-exec(open("./CODE/DEFS.py").read())
+    #Load in variable definitions from the configuration file
+    exec(open(configFileName).read())
 
-#Setup directories and internal variables
-exec(open("./CODE/INTERNAL.py").read())
+    #Import basic SLADS functions
+    exec(open("./CODE/DEFS.py").read())
 
-sectionTitle("\n \
- ▄▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄\n \
-▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌\n \
-▐░█▀▀▀▀▀▀▀▀▀ ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀\n \
-▐░▌          ▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌\n \
-▐░█▄▄▄▄▄▄▄▄▄ ▐░▌          ▐░█▄▄▄▄▄▄▄█░▌▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄▄▄\n \
-▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░░▌\n \
- ▀▀▀▀▀▀▀▀▀█░▌▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌ ▀▀▀▀▀▀▀▀▀█░▌\n \
-          ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌          ▐░▌\n \
- ▄▄▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄█░▌ ▄▄▄▄▄▄▄▄▄█░▌\n \
-▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌\n \
- ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀\n \
-Author(s):\tDavid Helminiak\t\tEECE Marquette University\n \
-\t\tDong Hye Ye\t\tEECE Marquette University\n \
-Version:\t"+versionNum)
+    #Setup directories and internal variables
+    exec(open("./CODE/INTERNAL.py").read())
 
-#If a SLADS model needs to be trained
-if trainingModel:
+    sectionTitle("\n \
+     ▄▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄\n \
+    ▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌\n \
+    ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀\n \
+    ▐░▌          ▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌\n \
+    ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌          ▐░█▄▄▄▄▄▄▄█░▌▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄▄▄\n \
+    ▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░░▌\n \
+     ▀▀▀▀▀▀▀▀▀█░▌▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌ ▀▀▀▀▀▀▀▀▀█░▌\n \
+              ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌          ▐░▌\n \
+     ▄▄▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄█░▌ ▄▄▄▄▄▄▄▄▄█░▌\n \
+    ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌\n \
+     ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀\n \
+    Author(s):\tDavid Helminiak\t\tEECE Marquette University\n \
+    \t\tDong Hye Ye\t\tEECE Marquette University\n \
+    Version:\t"+versionNum+"\n \
+    Config:\t"+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0])
+
+
+    destResultsFolder = './RESULTS_'+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0]
     
-    #Import any specfic training function and class definitions
-    exec(open("./CODE/TRAINING.py").read())
+    #If the destination exists, output an error, or delete the folder
+    if preventResultsOverwrite:
+        sys.exit('Error! - The destination results folder already exists')
+    else:
+        if os.path.exists(destResultsFolder): shutil.rmtree(destResultsFolder)
 
-    #Obtain the file paths for the intended training data
-    trainSamplePaths = natsort.natsorted(glob.glob(dir_TrainingData + '/*'), reverse=False)
 
-    sectionTitle('PERFORMING INTITIAL TRAINING COMPUTATIONS')
-    
-    #Perform initial computations
-    trainingSamples, trainingDatabase = initTrain(trainSamplePaths)
+    #If a SLADS model needs to be trained
+    if trainingModel:
+        
+        #Import any specfic training function and class definitions
+        exec(open("./CODE/TRAINING.py").read())
 
-    sectionTitle('TRAINING MODEL(S)')
+        #Obtain the file paths for the intended training data
+        trainSamplePaths = natsort.natsorted(glob.glob(dir_TrainingData + '/*'), reverse=False)
 
-    #Generate SLADS model(s) for the given training database
-    trainingModels = trainModel(trainingDatabase)
+        sectionTitle('PERFORMING INTITIAL TRAINING COMPUTATIONS')
+        
+        #Perform initial computations
+        trainingSamples, trainingDatabase = initTrain(trainSamplePaths)
 
-    sectionTitle('DETERMINING BEST MODEL')
+        sectionTitle('TRAINING MODEL(S)')
 
-    #Identify the best Model; saves to training results
-    bestC, bestModel = findBestC(trainingSamples, trainingModels)
+        #Generate SLADS model(s) for the given training database
+        trainingModels = trainModel(trainingDatabase)
 
-#Load in the best model information if training wasn't performed
-if not trainingModel:
-    bestC = np.load(dir_TrainingResults + 'bestC.npy', allow_pickle=True).item()
-    bestModel = np.load(dir_TrainingResults + 'bestModel.npy', allow_pickle=True).item()
+        sectionTitle('DETERMINING BEST MODEL')
 
-#If a SLADS model needs to be tested
-if testingModel:
-    sectionTitle('PERFORMING TESTING')
+        #Identify the best Model; saves to training results
+        bestC, bestModel = findBestC(trainingSamples, trainingModels)
 
-    #Import any specific testing function and class definitions
-    exec(open("./CODE/TESTING.py").read())
+    #Load in the best model information if training wasn't performed
+    if not trainingModel:
+        bestC = np.load(dir_TrainingResults + 'bestC.npy', allow_pickle=True).item()
+        bestModel = np.load(dir_TrainingResults + 'bestModel.npy', allow_pickle=True).item()
 
-    #Obtain the file pats for the intended testing data
-    testSamplePaths = natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False)
+    #If a SLADS model needs to be tested
+    if testingModel:
+        sectionTitle('PERFORMING TESTING')
 
-    #Perform testing
-    testSLADS(testSamplePaths, bestC, bestModel)
+        #Import any specific testing function and class definitions
+        exec(open("./CODE/TESTING.py").read())
 
-#If Leave-One-Out Cross Validation is to be performed
-if LOOCV:
-    sectionTitle('PERFORMING LOOCV')
-    sys.exit('Error! - LOOCV is not implemented at this time')
+        #Obtain the file pats for the intended testing data
+        testSamplePaths = natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False)
 
-#If a SLADS model is to be used in an implementation
-if impModel:
-    sectionTitle('PERFORMING SLADS')
+        #Perform testing
+        testSLADS(testSamplePaths, bestC, bestModel)
 
-    #Import any specific implementation function and class definitions
-    exec(open("./CODE/EXPERIMENTAL.py").read())
+    #If Leave-One-Out Cross Validation is to be performed
+    if LOOCV:
+        sectionTitle('PERFORMING LOOCV')
+        sys.exit('Error! - LOOCV is not implemented at this time')
 
-    #Begin performing an implementation
-    performImplementation(bestC, bestModel)
+    #If a SLADS model is to be used in an implementation
+    if impModel:
+        sectionTitle('PERFORMING SLADS')
 
-#AFTER INTENDED PROCEDURES (TRAINING/TESTING) HAVE BEEN PERFORMED
-sectionTitle('PROGRAM COMPLETE')
+        #Import any specific implementation function and class definitions
+        exec(open("./CODE/EXPERIMENTAL.py").read())
+
+        #Begin performing an implementation
+        performImplementation(bestC, bestModel)
+
+    #Copy the results folder
+    destination = shutil.copytree('./RESULTS', destResultsFolder)
+
+    try:
+        ray.shutdown()
+    except:
+        sys.error('Error! - Ray failed to shutdown correctly')
+
+    #AFTER INTENDED PROCEDURES (TRAINING/TESTING) HAVE BEEN PERFORMED
+    sectionTitle('PROGRAM COMPLETE')
 

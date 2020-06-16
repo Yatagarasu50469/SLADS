@@ -1,0 +1,6 @@
+,0,1,2,3
+0,Average SSIM:,0.882090162660679,+/-,0.0
+1,Average MSE:,1.4610320840222319e-07,+/-,0.0
+2,Average TD:,0.0001248088770356333,+/-,0.0
+3,Average % Lines Scanned:,,+/-,
+4,Average % Pixels Scanned:,50.536206896551725,+/-,0.0

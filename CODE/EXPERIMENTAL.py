@@ -13,40 +13,6 @@ def equipWait():
         else:
             break
 
-def readScanData():
-    images = []
-    massRanges = []
-    
-    #Set a default aspect ratio
-    aspect = [1,1]
-    
-    if physResize:
-        #Import the sample's pixel aspect ratio (width, height)
-        aspect = np.loadtxt('./INPUT/IMP/aspect.txt', delimiter=',')
-    
-    images = []
-    originalImages = []
-    massRanges = []
-    #Import each of the images according to their mz range order
-    for imageFileName in natsort.natsorted('./INPUT/IMP/*.' + 'csv'), reverse=False):
-        image = np.nan_to_num(np.loadtxt(imageFileName, delimiter=','))
-        imageHeight, imageWidth = image.shape
-        if physResize:
-            originalImages.append(image)
-            if imageWidth > imageHeight:
-                image = cv2.resize((image), (int(round((aspect[0]/aspect[1])*imageHeight)), imageHeight), interpolation = cv2.INTER_LINEAR)
-            elif imageHeight > imageWidth:
-                image = cv2.resize((image), (imageWidth, int(round((aspect[0]/aspect[1])*imageWidth))), interpolation = cv2.INTER_LINEAR)
-        if not physResize:
-            originalImages.append(image)
-        images.append(image)
-        massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
-
-    #Create a new maskObject
-    maskObject = MaskObject(imageWidth, imageHeight, image.shape[1], image.shape[0], [], 0)
-
-    return images, originalImages, massRanges, maskObject
-
 #Perform SLADS with external equipment
 def performImplementation(bestC, bestModel):
 
@@ -57,8 +23,11 @@ def performImplementation(bestC, bestModel):
     #Wait for equipment to initialize scan
     equipWait()
     
-    #Read in the image data (blank) for size information
-    images, massRanges, maskObject = readScanData()
+    #Read in the image data for size information
+    images, massRanges, imageHeight, imageWidth = readScanData('./INPUT/IMP/')
+    
+    #Create a mask object
+    maskObject = MaskObject(imageWidth, imageHeight, [], 0)
     
     #For each of the initial sets that must be obtained
     for setNum in range(0, len(maskObject.initialSets)):
@@ -70,13 +39,13 @@ def performImplementation(bestC, bestModel):
         equipWait()
 
     #Update internal sample data with the acquired information
-    images, originalImages, massRanges = readScanData()
+    images, massRanges, imageHeight, imageWidth = readScanData('./INPUT/IMP/')
 
     #Weight images equally
     mzWeights = np.ones(len(images))/len(images)
 
     #Define information as a new Sample object
-    impSample = Sample(impSampleName, images, originalImages, massRanges, maskObject, mzWeights, dir_ImpResults)
+    impSample = Sample(impSampleName, images, massRanges, maskObject, mzWeights, dir_ImpResults)
     
     #Run SLADS
     result = runSLADS(info, impSample, bestModel, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, bestCFlag=False)

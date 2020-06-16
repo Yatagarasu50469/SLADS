@@ -16,7 +16,7 @@
 
 
     NAME: 		lineSLADS
-    VERSION NUM:	0.6.5
+    VERSION NUM:	0.6.6
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
 			points along a single axis. 
@@ -44,8 +44,9 @@
                     0.6.3   Start/End point selection with Canny
                     0.6.4   Custom knn metric, SSIM calc, init computations
                     0.6.5   Clean variables and resize to physical
-	               ~0.7	Tissue model library generation
-	               ~0.8	Deep feature extraction
+                    0.6.6   SLADS-NET NN, PSNR, asymFinal, and multi-config
+	               ~0.7	Python 3.8 parallization
+	               ~0.8	RAW file feature extraction
 		       ~0.9	GPU acceleratiaon
 	               ~1.0	Initial release
 
@@ -56,7 +57,7 @@
 
     ------->ROOT_DIR
     	|------->README
-    	|------->CONFIG.py
+    	|------->CONFIG_0.py
     	|------->SLADS.py
     	|------->CODE
     	|	|------->DEFS.py
@@ -199,9 +200,11 @@ Place the SLADS-# release folder onto the Windows desktop. Note this must be don
     $ make clean
     $ pip3 install --verbose --no-build-isolation --editable .
     
-The configuration: CONFIG.py may be edited through Windows with the editor of your choice, after which SLADS may be run using: 
+The configuration: CONFIG_0.py may be edited through Windows with the editor of your choice, after which SLADS may be run using: 
 
 	$ python3 SLADS.py
+
+Multiple configuration files in the form of CONFIG_*descriptor*.py, can be generated for which SLADS will be run sequentially. RESULTS_*descriptor* folders will correspond with the numbering of the CONFIG files, with the RESULTS folder without a description, containing results from the last run performed. 
 
 
 # TRAINING/TESTING PROCEDURE
@@ -210,10 +213,6 @@ The configuration: CONFIG.py may be edited through Windows with the editor of yo
 Assuming the desired equipment intended for end application of SLADS, outputs Thermo-Finnigan .RAW files, the data will need to be pre-processed prior to training a SLADS model. Each data sample must be aligned between rows using a simple linear interpolation scheme according to the unique acquisition times. Each individual mz range of interest must then be exported as a .csv file. For example, given a singular sample: **sampleName**, with a number of rows: **numRows** (corresponding to the number of acquired .RAW files, or number intended for acquisition),  and a set of mz ranges: **lowMZ1**-**highMZ1**, **lowMZ2**-**highMZ2**, etc., a folder should be created which contains files named according to the convention: 
 
 	mzlowMZ_highMZfnsampleNamensnumRows.csv
-
-Each sample folder must also include a file ./aspect.txt containing the width and height of the physically measured sample deliminated by a comma. For example  the .aspect.txt for a sample with **width**, **height** might read:
-
-    9.13, 7.17
 
 Please note that at this time in development, each mz value should be specified with exactly 8 characters. Therefore, the following sample parameters:
 
@@ -227,16 +226,15 @@ Please note that at this time in development, each mz value should be specified 
 should yield the following folder hierarchy:
 
     -------> Slide1-Wnt-3
-        |-------> aspect.txt
     	|-------> mz454.8740_454.8922fnSlide1-Wnt-3ns72.csv
     	|-------> mz454.8844_454.9026fnSlide1-Wnt-3ns72.csv
 
 Each of these folders may then be placed either into ./INPUT/TEST, or ./INPUT/TRAIN as desired. An example of the desired multichannel sample input format is included in the ./EXAMPLE/ folder. 
 
 ###  **CONFIGURATION**
-**Warning:** This section is no longer up to date, refer to ./CONFIG.py for updated variable descriptions. Several of the parameters listed may either not implemented at this time, replacd, removed, or have been disabled. 
+**Warning:** This section is no longer up to date, refer to ./CONFIG_0.py for updated variable descriptions. Several of the parameters listed may either not implemented at this time, replacd, removed, or have been disabled. 
 
-All critical parameters for SLADS may be altered in ./CONFIG.py where:
+All critical parameters for SLADS may be altered in ./CONFIG_0.py where:
 
 	L0: Specifies the overall program function(s) to be performed
 		trainingModel: Should a new SLADS model be generated
@@ -249,18 +247,38 @@ All critical parameters for SLADS may be altered in ./CONFIG.py where:
 			- Uses data from ./INPUT/IMP/
 	
 	L1: Specifies general model training parameters
-		windowSize: How should the sample be split for distortion calculations
-		stopPerc: What percentage of pixels should be measured before termination
+        preventResultsOverwrite: Should existing results folders not be allowed to be overwritten
+        densityMeasures: Should the density measures be used
+        regModel: Which regression model should be used: LS, or SLADS-Net NN
+        algorithmNN: Which algorithm should be used for nearest neighbor
+        scanMethod: Which scanning method shoud be used: pointwise or linewise
+        partialLineFlag: If linewise, should partial segments of a line be scanned
+        lineMethod: What method should be used for linewise point selection
+        windowSize: Window size for approximate RD summation; 15 for 64x64, (width,height)
+        stopPerc: What percentage of pixels should be measured before termination
+        impSampleName: What name should be used for sample data obtained with impModel
 
 	L2: Specifies variables that should not typically be changed
-		measurementPercs: What sampling percentages should be used during training
-		cValues: What possible c values should be tested for distortion calculations
-		animationGen: Should animations be generated for testing/implementation
-		imageType: Do the samples contain discrete (binary), or continuous values
-		findStopThresh: Should a stopping threshold be automatically determined
-		percOfRD: What percentage of RD should be expected; limits training cost
-		num_threads: How many CPU threads should be employed; automatic
-		consoleRunning: Is the program running in a console/terminal, or notebook
+        measurementPercs: What sampling percentages should be used during training
+        cValues: What possible c values should be tested for distortion calculations
+        animationGen: Should animations be generated for testing/implementation
+        lineRevistFlag: Should lines be allowed to be revisited
+        percRAM: Percent free RAM to allocate pool; leave enough free for results overhead
+        numFreeThreads: Number of processor threads to leave free
+        multiSubFeatures: Should the original/normlized extracted features be used, or the recon values
+        polyFit: Should a polynomial deg 2 fit be used, or a RBF sampler
+        numMasks: How many masks should be used for each percentage during training
+        consoleRunning: Running in a console/True, jupyter-notebook/False
+    
+    L3: Specifies variables that should not be changed
+        mzWeighting: How should the mz visualizations be weighted: 'equal'
+        LOOCV: Is LOOCV to be performed
+    
+    L4: Specifies variables that will most likely be removed, or radically altered in the future
+        imageType: Type of Images: D - for discrete (binary) image; C - for continuous
+        findStopThresh: Should a stopping threshold be found
+    
+
 		
 ###  **RUN**
 After configuration, to run the program perform the following command in the root directory:
@@ -291,6 +309,8 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 		testingAverageSSIM_Percentage.csv: Average SSIM progression results
 		testingAverageSSIM_Percentage.png: Visualized average SSIM progression
 
+In the case that multiple configuration files are provided in the form of: CONFIG_*descriptor*.py, the RESULTS folder will be duplicated with the same suffix for ease of testing. 
+
 #====================================================================
 # OPERATIONAL PROCEDURE
 
@@ -298,7 +318,7 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 
 **Note:** In order to use a SLADS model in a physical implementation, the files resultant from the training procedure must be located within './RESULTS/TRAIN_RESULTS/', particularly:  bestC.npy and bestTheta.npy.
 
-Prior to engaging the physical equipment, place the physical aspect ratio information into ./INPUT/IMP/aspect.txt (as done for the training/testing procedures), then run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in .csv files for each of the specified mz ranges in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. 
+Prior to engaging the physical equipment run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in .csv files for each of the specified mz ranges in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. 
 
 # FAQ
 ###  **SLADS procdues an error: Could not connect to socket /tmp/ray/session_2020-04-07_23-15-16_042185_13532/sockets/raylet**

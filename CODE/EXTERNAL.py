@@ -45,13 +45,18 @@ from scipy import signal
 from scipy.io import loadmat
 from scipy.io import savemat
 from sklearn import linear_model
+from sklearn import svm
+from sklearn.kernel_approximation import RBFSampler
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.neighbors import NearestNeighbors
+from sklearn.neural_network import MLPRegressor as nnr
 from sklearn.preprocessing import *
 from sklearn.utils import shuffle
 from skimage.util import view_as_windows as viewW
-from sklearn.neighbors import NearestNeighbors
 
-from skimage.metrics import structural_similarity
 from skimage import filters
+from skimage.measure import compare_psnr
+from skimage.metrics import structural_similarity
 from sobol import *
 from tqdm.auto import tqdm
 #==================================================================
