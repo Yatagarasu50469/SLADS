@@ -146,7 +146,7 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 		natsort: 		6.2.0
 		networkx: 		2.4
 		opencv-python:	 	4.1.2.30
-         pathlib:         1.0.1
+		pathlib:         	1.0.1
 		pickleshare: 		0.7.5
 		pillow:			7.0.0
 		prompt-toolkit: 	3.0.2
