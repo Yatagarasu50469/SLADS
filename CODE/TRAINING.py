@@ -74,7 +74,7 @@ def initTrain(sortedTrainingSampleFolders):
                 maskObject.unMeasuredIdxs = maskObject.unMeasuredIdxsList[measurementPercNum][maskNum]
 
                 #Find neighbor information
-                neighborIndices, neighborWeights, neighborDistances = findNeighbors(info, maskObject, maskObject.measuredIdxs, maskObject.unMeasuredIdxs, False)
+                neighborIndices, neighborWeights, neighborDistances = findNeighbors(info, maskObject, maskObject.measuredIdxs, maskObject.unMeasuredIdxs)
 
                 #Calculate the sigma values for each possible c
                 sigmaValues = [(neighborDistances[:,0]/c) for c in cValues]
@@ -92,7 +92,7 @@ def initTrain(sortedTrainingSampleFolders):
                     sample.measuredImages[imageNum] = temp.copy()
 
                 #Compute reconstruction
-                reconImage = computeRecons(info, sample, maskObject, True, False)
+                reconImage = computeRecons(info, sample, maskObject, True)
 
                 #Determine the feature vector for the reconstruction
                 polyFeatures = computeFeatures(maskObject, sample, info, reconImage)
