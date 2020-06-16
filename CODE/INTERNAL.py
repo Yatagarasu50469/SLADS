@@ -20,7 +20,7 @@ if num_threads > numFreeThreads: num_threads -= numFreeThreads
 
 #Setup worker pool; 50% for object storage, 10% for redis metadata/lineage, half-of-rest for workers
 amount_RAM = int(psutil.virtual_memory().available*(percRAM/100))
-ray.init(num_cpus=num_threads, memory=amount_RAM, object_store_memory=int(amount_RAM*0.5), log_to_driver=False, logging_level=logging.ERROR, plasma_directory="/Volumes/DEEP_STORAGE/tmp")
+ray.init(num_cpus=num_threads, memory=amount_RAM, object_store_memory=int(amount_RAM*0.5), log_to_driver=False, logging_level=logging.ERROR)
 
 #Print and store all current variables in RAM
 #variableList = []

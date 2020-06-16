@@ -45,7 +45,6 @@
                     0.6.4   Custom knn metric, SSIM calc, init computations
                     0.6.5   Clean variables and resize to physical
                     0.6.6   SLADS-NET NN, PSNR, asymFinal, and multi-config
-                    0.6.7   Asymmetric with density features
 	               ~0.7	Python 3.8 parallization
 	               ~0.8	RAW file feature extraction
 		       ~0.9	GPU acceleratiaon
@@ -146,7 +145,7 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 		natsort: 		6.2.0
 		networkx: 		2.4
 		opencv-python:	 	4.1.2.30
-		pathlib:         	1.0.1
+        pathlib:         1.0.1
 		pickleshare: 		0.7.5
 		pillow:			7.0.0
 		prompt-toolkit: 	3.0.2
@@ -196,7 +195,7 @@ Restart when prompted and then open the **Microsoft Store**. Search for Ubuntu a
 
 Place the SLADS-# release folder onto the Windows desktop. Note this must be done prior to building the custom sci-kit pacakge. Back inside of **Ubuntu**, enter the following to move into the SLADS folder replacing **username** and **versionNum** as appropriate:
 
-    $ cd /mnt/c/Users/username/Desktop/SLADS-versionNum
+	$ cd /mnt/c/Users/username/Desktop/SLADS-versionNum
     $ cd ./CODE/scikit-learn
     $ make clean
     $ pip3 install --verbose --no-build-isolation --editable .
@@ -312,6 +311,7 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 
 In the case that multiple configuration files are provided in the form of: CONFIG_*descriptor*.py, the RESULTS folder will be duplicated with the same suffix for ease of testing. 
 
+#====================================================================
 # OPERATIONAL PROCEDURE
 
 **Warning:** This section’s procedure has not been implemented at this time. Below is a brief proposal of how SLADS may be easily integrated with physical scanning equipment

@@ -36,8 +36,7 @@
 #               0.6.3   Start/End point selection with Canny
 #               0.6.4   Custom knn metric, SSIM calc, init computations
 #               0.6.5   Clean variables and resize to physical
-#               0.6.6   SLADS-NET NN, PSNR, and multi-config
-#               0.6.7   Asymmetric with density features
+#               0.6.6   SLADS-NET NN, PSNR, asymFinal, and multi-config
 #               ~0.7	Python 3.8 parallization
 #               ~0.8	RAW file feature extraction
 #               ~0.9	GPU acceleration
@@ -48,7 +47,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum="0.6.7"
+versionNum="0.6.6"
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())

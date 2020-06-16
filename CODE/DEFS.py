@@ -24,6 +24,7 @@ class Result():
         self.simulationFlag = simulationFlag
         self.animationFlag = animationFlag
         self.reconImages = []
+        self.finalReconImages = []
         self.masks = []
         self.ERDValueNPs = []
         self.TDList = []
@@ -36,6 +37,8 @@ class Result():
     def update(self, threshold, percMeasured, reconImage, sample, maskObject, ERDValuesNP, iterNum, completedRunFlag):
 
         #Save the model development
+        finalReconImage = computeRecons(info, sample, maskObject, True, True)
+        self.finalReconImages.append(finalReconImage)
         self.reconImages.append(reconImage)
         self.masks.append(maskObject.mask.copy())
         self.ERDValueNPs.append(ERDValuesNP.copy())
@@ -46,11 +49,11 @@ class Result():
         if self.simulationFlag:
 
             #Find statistics of interest
-            difference = np.sum(computeDifference(self.avgGroundTruthImage, reconImage, self.info.imageType))
+            difference = np.sum(computeDifference(self.avgGroundTruthImage, finalReconImage, self.info.imageType))
             TD = difference/maskObject.area
-            MSE = (np.sum((reconImage - self.avgGroundTruthImage) ** 2))/(maskObject.area)
-            SSIM = structural_similarity(self.avgGroundTruthImage, reconImage, data_range=reconImage.max() - reconImage.min())
-            PSNR = compare_psnr(self.avgGroundTruthImage, reconImage, data_range=reconImage.max() - reconImage.min())
+            MSE = (np.sum((finalReconImage - self.avgGroundTruthImage) ** 2))/(maskObject.area)
+            SSIM = structural_similarity(self.avgGroundTruthImage, finalReconImage, data_range=finalReconImage.max() - finalReconImage.min())
+            PSNR = compare_psnr(self.avgGroundTruthImage, finalReconImage, data_range=finalReconImage.max() - finalReconImage.min())
 
             #Save them for each timestep
             self.TDList.append(TD)
@@ -95,7 +98,7 @@ class Result():
                 percSampled = "{:.2f}".format(self.percMeasuredList[len(self.percMeasuredList)-1])
                 
                 #Get reconstructions for each mz image
-                mzRecons = computeRecons(info, sample, maskObject, False)
+                mzRecons = computeRecons(info, sample, maskObject, False, True)
 
                 for massNum in range(0, len(self.sample.massRanges)):
                     
@@ -166,7 +169,7 @@ class Result():
                     
                     sub = f.add_subplot(1,3,3)
                     sub.imshow(subReconImage * 255.0/mzImage.max(), cmap='hot', aspect='auto')
-                    sub.set_title('Reconstruction')
+                    sub.set_title('Asym. Reconstruction')
                     
                     saveLocation = dir_mzSampleResults + 'recon_' + massRange +'.png'
                     
@@ -195,8 +198,8 @@ class Result():
                     sub.set_title('Ground-Truth')
             
                     sub = f.add_subplot(1,3,2)
-                    sub.imshow(self.reconImages[i] * 255.0/self.avgGroundTruthImage.max(), cmap='hot', aspect='auto')
-                    sub.set_title('Reconstruction')
+                    sub.imshow(self.finalReconImages[i] * 255.0/self.avgGroundTruthImage.max(), cmap='hot', aspect='auto')
+                    sub.set_title('Asym. Reconstruction')
                     
                     sub = f.add_subplot(1,3,3)
                     sub.imshow(self.masks[i], cmap='gray', aspect='auto')
@@ -206,40 +209,44 @@ class Result():
                     plt.close()
                     #=====================
 
-                    #2x2 with ERD printout
+                    #2x3 with ERD printout
                     #=====================
-                    saveLocation = dir_AnimationFrames + 'stretched_2x2_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                    saveLocation = dir_AnimationFrames + 'stretched_2x3_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
 
-                    f = plt.figure(figsize=(15,15))
+                    f = plt.figure(figsize=(20,10))
                     f.subplots_adjust(top = 0.85)
-                    f.subplots_adjust(wspace=0.15, hspace=0.2)
+                    f.subplots_adjust(wspace=0.4, hspace=0.2)
                     plt.suptitle("Percent Sampled: %.2f, Measurement Iteration: %.0f\nSSIM: %.2f, PSNR: %.2f" % (self.percMeasuredList[i], i+1, self.SSIMList[i], self.PSNRList[i]), fontsize=20, fontweight='bold', y = 0.95)
 
-                    ax1 = plt.subplot2grid(shape=(2,2), loc=(0,0))
+                    ax1 = plt.subplot2grid(shape=(2,6), loc=(0,0), colspan=2)
                     ax1.imshow(self.avgGroundTruthImage * 255.0/self.avgGroundTruthImage.max(), cmap='hot', aspect='auto')
                     ax1.set_title('Ground-Truth')
 
-                    ax2 = plt.subplot2grid((2,2), (0,1))
-                    ax2.imshow(self.reconImages[i] * 255.0/self.avgGroundTruthImage.max(), cmap='hot', aspect='auto')
-                    ax2.set_title('Reconstruction')
+                    ax2 = plt.subplot2grid((2,6), (0,2), colspan=2)
+                    ax2.imshow(self.finalReconImages[i] * 255.0/self.avgGroundTruthImage.max(), cmap='hot', aspect='auto')
+                    ax2.set_title('Asym. Reconstruction')
 
-                    ax3 = plt.subplot2grid((2,2), (1,0))
-                    ax3.imshow(self.masks[i], cmap='gray', aspect='auto')
-                    ax3.set_title('Measurement Mask')
+                    ax3 = plt.subplot2grid((2,6), (0,4), colspan=2)
+                    ax3.imshow(self.reconImages[i] * 255.0/self.avgGroundTruthImage.max(), cmap='hot', aspect='auto')
+                    ax3.set_title('Sym. Reconstruction')
 
-                    ax4 = plt.subplot2grid((2,2), (1,1))
+                    ax4 = plt.subplot2grid((2,6), (1,1), colspan=2)
+                    ax4.imshow(self.masks[i], cmap='gray', aspect='auto')
+                    ax4.set_title('Measurement Mask')
+
+                    ax5 = plt.subplot2grid((2,6), (1,3), colspan=2)
                     #vmin=0, vmax=255,
-                    im = ax4.imshow(self.ERDValueNPs[i], cmap='viridis', vmin=np.min(self.ERDValueNPs), vmax=np.max(self.ERDValueNPs), aspect='auto')
-                    ax4.set_title('ERD Values')
-                    cbar = f.colorbar(im, ax=ax4, orientation='vertical', pad=0.01)
+                    im = ax5.imshow(self.ERDValueNPs[i], cmap='viridis', vmin=np.min(self.ERDValueNPs), vmax=np.max(self.ERDValueNPs), aspect='auto')
+                    ax5.set_title('ERD Values')
+                    cbar = f.colorbar(im, ax=ax5, orientation='vertical', pad=0.01)
 
                     plt.savefig(saveLocation, bbox_inches='tight')
                     plt.close()
                     #=====================
                     
-                dataFileNames = natsort.natsorted(glob.glob(dir_AnimationFrames + 'stretched_2x2_*.png'))
+                dataFileNames = natsort.natsorted(glob.glob(dir_AnimationFrames + 'stretched_2x3_*.png'))
                 height, width, layers = cv2.imread(dataFileNames[0]).shape
-                animation = cv2.VideoWriter(dir_AnimationVideos + 'stretched_2x2_' + self.sample.name + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
+                animation = cv2.VideoWriter(dir_AnimationVideos + 'stretched_2x3_' + self.sample.name + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
                 for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
                 animation.release()
                 animation = None
@@ -261,14 +268,23 @@ class Result():
                 plt.savefig(saveLocation, bbox_inches=extent)
                 
                 #Save the averaged final ERD reconstruction, no borders
-                saveLocation = dir_AnimationFrames + 'final_reconstruction_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                saveLocation = dir_AnimationFrames + 'final_ERD_reconstruction_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
                 fig=plt.figure()
                 ax=fig.add_subplot(1,1,1)
                 plt.axis('off')
                 plt.imshow(self.reconImages[i] * 255.0/self.avgGroundTruthImage.max(), cmap='hot', aspect='auto')
                 extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                 plt.savefig(saveLocation, bbox_inches=extent)
-
+                
+                #Save the averaged final reconstruction, no borders
+                saveLocation = dir_AnimationFrames + 'final_reconstruction_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                fig=plt.figure()
+                ax=fig.add_subplot(1,1,1)
+                plt.axis('off')
+                plt.imshow(self.finalReconImages[i] * 255.0/self.avgGroundTruthImage.max(), cmap='hot', aspect='auto')
+                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                plt.savefig(saveLocation, bbox_inches=extent)
+                
                 #Save the final mask, no borders
                 saveLocation = dir_AnimationFrames + 'final_mask_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
                 fig=plt.figure()
@@ -701,7 +717,7 @@ def findNewMeasurementIdxs(info, maskObject, sample, model, reconImage, ERDValue
 def avgReconAndERD(sample, info, iterNum, maskObject, model, newIdxs):
     
     #Compute reconstructions
-    reconImage = computeRecons(info, sample, maskObject, True)
+    reconImage = computeRecons(info, sample, maskObject, True, False)
 
     #Compute full ERD Values
     ERDValuesNP = computeERD(info, sample, maskObject, reconImage, model)
@@ -760,9 +776,14 @@ def computeStopCondFuncVal(oldReconImage, reconImage, stopCondParams, info, stop
     
     return stopCondFuncVal
 
-def findNeighbors(info, maskObject, measuredIdxs, unMeasuredIdxs):
+def findNeighbors(info, maskObject, measuredIdxs, unMeasuredIdxs, finalRecon):
 
-    neigh = NearestNeighbors(n_neighbors=info.numNeighbors, algorithm=algorithmNN, metric='asym', aspect=maskObject.aspectRatio)
+    #If this is a final reconstruction, use the custom asymmetric distance metric, otherwise use the symmetric neighbor method
+    if finalRecon:
+        neigh = NearestNeighbors(n_neighbors=info.numNeighbors, algorithm=algorithmNN, metric='asym', aspect=maskObject.aspectRatio)
+    else:
+        neigh = NearestNeighbors(n_neighbors=info.numNeighbors, algorithm=algorithmNN)
+
     neigh.fit(measuredIdxs)
     neighborDistances, neighborIndices = neigh.kneighbors(unMeasuredIdxs)
     neighborDistances = neighborDistances*info.resolution
@@ -792,10 +813,10 @@ def performRecon(inputImage, maskObject, neighborIndices, neighborWeights, neigh
 
     return reconImage
 
-def computeRecons(info, sample, maskObject, avgRecon):
+def computeRecons(info, sample, maskObject, avgRecon, finalRecon):
 
     #Find neighbor information for the resized point locations
-    neighborIndices, neighborWeights, neighborDistances = findNeighbors(info, maskObject, maskObject.measuredIdxs, maskObject.unMeasuredIdxs)
+    neighborIndices, neighborWeights, neighborDistances = findNeighbors(info, maskObject, maskObject.measuredIdxs, maskObject.unMeasuredIdxs, finalRecon)
 
     #If average reconstruction
     if avgRecon:
@@ -836,54 +857,28 @@ def computeFeatures(maskObject, sample, info, inputImage):
         measuredValues = inputImage[np.asarray(idxsX), np.asarray(idxsY)]
         
         #Find neighbor information
-        neighborIndices, neighborWeights, neighborDistances = findNeighbors(info, maskObject, maskObject.measuredIdxs, maskObject.unMeasuredIdxs)
+        neighborIndices, neighborWeights, neighborDistances = findNeighbors(info, maskObject, maskObject.measuredIdxs, maskObject.unMeasuredIdxs, False)
         neighborValues = measuredValues[neighborIndices]
 
-        if densityMeasures:
-            #Create array to hold features
-            feature = np.zeros((np.shape(maskObject.unMeasuredIdxs)[0],6))
-            
-            #Compute std div features
-            diffVect = computeDifference(neighborValues, np.transpose(np.matlib.repmat(inputValues, np.shape(neighborValues)[1],1)), info.imageType)
-            feature[:,0] = np.sum(neighborWeights*diffVect, axis=1)
-            feature[:,0] = normalize(feature[:,0])
-            feature[:,1] = np.sqrt(np.sum(np.power(diffVect,2),axis=1))
-            feature[:,1] = normalize(feature[:,1])
-            
-            #Compute distance/density features
-            cutoffDist = np.ceil(np.sqrt((info.featDistCutoff/100)*(maskObject.area/np.pi)))
-            feature[:,2] = neighborDistances[:,0]
-            feature[:,2] = normalize(feature[:,2])
-            feature[:,3] = (1+(np.pi*(np.power(cutoffDist, 2))))/(1+np.sum(neighborDistances <= cutoffDist, axis=1))
-            feature[:,3] = normalize(feature[:,3])
+        #Create array to hold features
+        feature = np.zeros((np.shape(maskObject.unMeasuredIdxs)[0],4))
 
-            #Compute gradient features; assume continuous features
-            gradientImageX, gradientImageY = np.gradient(inputImage)
-            feature[:,4] = abs(gradientImageY)[maskObject.unMeasuredIdxs[:,0], maskObject.unMeasuredIdxs[:,1]]
-            feature[:,4] = normalize(feature[:,4])
-            feature[:,5] = abs(gradientImageX)[maskObject.unMeasuredIdxs[:,0], maskObject.unMeasuredIdxs[:,1]]
-            feature[:,5] = normalize(feature[:,5])
-        else:
-            #Create array to hold features
-            feature = np.zeros((np.shape(maskObject.unMeasuredIdxs)[0],4))
-            
-            #Compute std div features
-            diffVect = computeDifference(neighborValues, np.transpose(np.matlib.repmat(inputValues, np.shape(neighborValues)[1],1)), info.imageType)
-            feature[:,0] = np.sum(neighborWeights*diffVect, axis=1)
-            feature[:,0] = normalize(feature[:,0])
-            feature[:,1] = np.sqrt(np.sum(np.power(diffVect,2),axis=1))
-            feature[:,1] = normalize(feature[:,1])
+        #Compute std div features
+        diffVect = computeDifference(neighborValues, np.transpose(np.matlib.repmat(inputValues, np.shape(neighborValues)[1],1)), info.imageType)
+        feature[:,0] = np.sum(neighborWeights*diffVect, axis=1)
+        feature[:,0] = normalize(feature[:,0])
+        feature[:,1] = np.sqrt(np.sum(np.power(diffVect,2),axis=1))
+        feature[:,1] = normalize(feature[:,1])
 
-            #Compute gradient features; assume continuous features
-            gradientImageX, gradientImageY = np.gradient(inputImage)
-            feature[:,2] = abs(gradientImageY)[maskObject.unMeasuredIdxs[:,0], maskObject.unMeasuredIdxs[:,1]]
-            feature[:,2] = normalize(feature[:,2])
-            feature[:,3] = abs(gradientImageX)[maskObject.unMeasuredIdxs[:,0], maskObject.unMeasuredIdxs[:,1]]
-            feature[:,3] = normalize(feature[:,3])
+        #Compute gradient features; assume continuous features
+        gradientImageX, gradientImageY = np.gradient(inputImage)
+        feature[:,2] = abs(gradientImageY)[maskObject.unMeasuredIdxs[:,0], maskObject.unMeasuredIdxs[:,1]]
+        feature[:,2] = normalize(feature[:,2])
+        feature[:,3] = abs(gradientImageX)[maskObject.unMeasuredIdxs[:,0], maskObject.unMeasuredIdxs[:,1]]
+        feature[:,3] = normalize(feature[:,3])
 
     else:
-        feature = np.zeros((np.shape(maskObject.unMeasuredIdxs)[0],1))
-        feature[:,0] = normalize(inputImage[maskObject.unMeasuredIdxs[:,0], maskObject.unMeasuredIdxs[:,1]])
+        feature = inputImage[maskObject.unMeasuredIdxs[:,0], maskObject.unMeasuredIdxs[:,1]]
 
     #Convert any nan values to 0
     feature = np.nan_to_num(feature)
