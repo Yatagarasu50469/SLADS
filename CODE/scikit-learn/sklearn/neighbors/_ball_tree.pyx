@@ -19,7 +19,7 @@ VALID_METRICS = ['EuclideanDistance', 'SEuclideanDistance',
                  'DiceDistance', 'KulsinskiDistance',
                  'RogersTanimotoDistance', 'RussellRaoDistance',
                  'SokalMichenerDistance', 'SokalSneathDistance',
-                 'PyFuncDistance', 'HaversineDistance', 'asymDistance']
+                 'PyFuncDistance', 'HaversineDistance']
 
 
 include "_binary_tree.pxi"
