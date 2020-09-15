@@ -22,13 +22,13 @@ class Isomap(TransformerMixin, BaseEstimator):
 
     Parameters
     ----------
-    n_neighbors : int, default=5
+    n_neighbors : integer
         number of neighbors to consider for each point.
 
-    n_components : int, default=2
+    n_components : integer
         number of coordinates for the manifold
 
-    eigen_solver : {'auto', 'arpack', 'dense'}, default='auto'
+    eigen_solver : ['auto'|'arpack'|'dense']
         'auto' : Attempt to choose the most efficient solver
         for the given problem.
 
@@ -38,15 +38,15 @@ class Isomap(TransformerMixin, BaseEstimator):
         'dense' : Use a direct solver (i.e. LAPACK)
         for the eigenvalue decomposition.
 
-    tol : float, default=0
+    tol : float
         Convergence tolerance passed to arpack or lobpcg.
         not used if eigen_solver == 'dense'.
 
-    max_iter : int, default=None
+    max_iter : integer
         Maximum number of iterations for the arpack solver.
         not used if eigen_solver == 'dense'.
 
-    path_method : {'auto', 'FW', 'D'}, default='auto'
+    path_method : string ['auto'|'FW'|'D']
         Method to use in finding shortest path.
 
         'auto' : attempt to choose the best algorithm automatically.
@@ -55,8 +55,7 @@ class Isomap(TransformerMixin, BaseEstimator):
 
         'D' : Dijkstra's algorithm.
 
-    neighbors_algorithm : {'auto', 'brute', 'kd_tree', 'ball_tree'}, \
-                          default='auto'
+    neighbors_algorithm : string ['auto'|'brute'|'kd_tree'|'ball_tree']
         Algorithm to use for nearest neighbors search,
         passed to neighbors.NearestNeighbors instance.
 

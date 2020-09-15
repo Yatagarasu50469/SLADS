@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    10 June 2020
+#DATE MODIFIED:	    14 July 2020
 #
-#VERSION NUM:	    0.6.6
+#VERSION NUM:	    0.6.8
 #
 #DESCRIPTION:	    Multichannel implementation of SLADS (Supervised Learning 
 #                   Algorithm for Dynamic Sampling with additional constraint to
@@ -17,7 +17,6 @@
 #                   Dong Hye Ye		EECE, Marquette University
 #
 #COLLABORATORS:	    Julia Laskin	CHEM, Purdue University
-#                   Ruichuan Yin	CHEM, Purdue University
 #                   Hang Hu		CHEM, Purdue University
 #
 #FUNDING:	    This project has received funding and was programmed for:
@@ -37,10 +36,11 @@
 #               0.6.4   Custom knn metric, SSIM calc, init computations
 #               0.6.5   Clean variables and resize to physical
 #               0.6.6   SLADS-NET NN, PSNR, and multi-config
-#               0.6.7   Asymmetric with density features
-#               ~0.7	Python 3.8 parallization
-#               ~0.8	RAW file feature extraction
-#               ~0.9	GPU acceleration
+#               0.6.7   Clean asymmetric implementation with density features
+#               0.6.8   Fixed RD generation, added metrics, and Windows compatible
+#               ~0.7	CNN with dynamic window size
+#               ~0.8	Multichannel integration
+#               ~0.9	Tissue segmentation
 #               ~1.0	Initial release
 #====================================================================
 
@@ -48,7 +48,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum="0.6.7"
+versionNum="0.6.8"
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
@@ -149,9 +149,15 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
         #Begin performing an implementation
         performImplementation(bestC, bestModel)
 
+    sectionTitle('DUPLICATING RESULTS')
+    
     #Copy the results folder
     destination = shutil.copytree('./RESULTS', destResultsFolder)
+    
+    #Pause to ensure system had time to finish the copy
+    time.sleep(10)
 
+    #Attempt to shutdown multiprocessing server
     try:
         ray.shutdown()
     except:

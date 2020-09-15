@@ -563,8 +563,7 @@ def test_make_column_transformer_kwargs():
     # invalid keyword parameters should raise an error message
     assert_raise_message(
         TypeError,
-        "make_column_transformer() got an unexpected "
-        "keyword argument 'transformer_weights'",
+        'Unknown keyword arguments: "transformer_weights"',
         make_column_transformer, (scaler, 'first'), (norm, ['second']),
         transformer_weights={'pca': 10, 'Transf': 1}
     )

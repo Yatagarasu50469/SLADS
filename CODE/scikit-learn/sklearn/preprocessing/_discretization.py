@@ -15,6 +15,7 @@ from . import OneHotEncoder
 from ..base import BaseEstimator, TransformerMixin
 from ..utils.validation import check_array
 from ..utils.validation import check_is_fitted
+from ..utils.validation import FLOAT_DTYPES
 from ..utils.validation import _deprecate_positional_args
 
 
@@ -56,11 +57,6 @@ class KBinsDiscretizer(TransformerMixin, BaseEstimator):
             Values in each bin have the same nearest center of a 1D k-means
             cluster.
 
-    dtype : {np.float32, np.float64}, default=None
-        The desired data-type for the output. If None, output dtype is
-        consistent with input dtype. Only np.float32 and np.float64 are
-        supported.
-
     Attributes
     ----------
     n_bins_ : int array, shape (n_features,)
@@ -84,13 +80,13 @@ class KBinsDiscretizer(TransformerMixin, BaseEstimator):
       np.concatenate([-np.inf, bin_edges_[i][1:-1], np.inf])
 
     You can combine ``KBinsDiscretizer`` with
-    :class:`~sklearn.compose.ColumnTransformer` if you only want to preprocess
+    :class:`sklearn.compose.ColumnTransformer` if you only want to preprocess
     part of the features.
 
     ``KBinsDiscretizer`` might produce constant features (e.g., when
     ``encode = 'onehot'`` and certain bins do not contain any data).
     These features can be removed with feature selection algorithms
-    (e.g., :class:`~sklearn.feature_selection.VarianceThreshold`).
+    (e.g., :class:`sklearn.feature_selection.VarianceThreshold`).
 
     Examples
     --------
@@ -124,12 +120,10 @@ class KBinsDiscretizer(TransformerMixin, BaseEstimator):
     """
 
     @_deprecate_positional_args
-    def __init__(self, n_bins=5, encode='onehot', strategy='quantile',
-                 dtype=None):
+    def __init__(self, n_bins=5, *, encode='onehot', strategy='quantile'):
         self.n_bins = n_bins
         self.encode = encode
         self.strategy = strategy
-        self.dtype = dtype
 
     def fit(self, X, y=None):
         """
@@ -142,25 +136,13 @@ class KBinsDiscretizer(TransformerMixin, BaseEstimator):
 
         y : None
             Ignored. This parameter exists only for compatibility with
-            :class:`~sklearn.pipeline.Pipeline`.
+            :class:`sklearn.pipeline.Pipeline`.
 
         Returns
         -------
         self
         """
         X = self._validate_data(X, dtype='numeric')
-
-        supported_dtype = (np.float64, np.float32)
-        if self.dtype in supported_dtype:
-            output_dtype = self.dtype
-        elif self.dtype is None:
-            output_dtype = X.dtype
-        else:
-            raise ValueError(
-                f"Valid options for 'dtype' are "
-                f"{supported_dtype + (None,)}. Got dtype={self.dtype} "
-                f" instead."
-            )
 
         valid_encode = ('onehot', 'onehot-dense', 'ordinal')
         if self.encode not in valid_encode:
@@ -226,11 +208,10 @@ class KBinsDiscretizer(TransformerMixin, BaseEstimator):
         if 'onehot' in self.encode:
             self._encoder = OneHotEncoder(
                 categories=[np.arange(i) for i in self.n_bins_],
-                sparse=self.encode == 'onehot',
-                dtype=output_dtype)
+                sparse=self.encode == 'onehot')
             # Fit the OneHotEncoder with toy datasets
             # so that it's ready for use after the KBinsDiscretizer is fitted
-            self._encoder.fit(np.zeros((1, len(self.n_bins_))))
+            self._encoder.fit(np.zeros((1, len(self.n_bins_)), dtype=int))
 
         return self
 
@@ -284,10 +265,7 @@ class KBinsDiscretizer(TransformerMixin, BaseEstimator):
         """
         check_is_fitted(self)
 
-        # check input and attribute dtypes
-        dtype = (np.float64, np.float32) if self.dtype is None else self.dtype
-        Xt = check_array(X, copy=True, dtype=dtype)
-
+        Xt = check_array(X, copy=True, dtype=FLOAT_DTYPES)
         n_features = self.n_bins_.shape[0]
         if Xt.shape[1] != n_features:
             raise ValueError("Incorrect number of features. Expecting {}, "
@@ -308,16 +286,7 @@ class KBinsDiscretizer(TransformerMixin, BaseEstimator):
         if self.encode == 'ordinal':
             return Xt
 
-        dtype_init = None
-        if 'onehot' in self.encode:
-            dtype_init = self._encoder.dtype
-            self._encoder.dtype = Xt.dtype
-        try:
-            Xt_enc = self._encoder.transform(Xt)
-        finally:
-            # revert the initial dtype to avoid modifying self.
-            self._encoder.dtype = dtype_init
-        return Xt_enc
+        return self._encoder.transform(Xt)
 
     def inverse_transform(self, Xt):
         """
@@ -341,7 +310,7 @@ class KBinsDiscretizer(TransformerMixin, BaseEstimator):
         if 'onehot' in self.encode:
             Xt = self._encoder.inverse_transform(Xt)
 
-        Xinv = check_array(Xt, copy=True, dtype=(np.float64, np.float32))
+        Xinv = check_array(Xt, copy=True, dtype=FLOAT_DTYPES)
         n_features = self.n_bins_.shape[0]
         if Xinv.shape[1] != n_features:
             raise ValueError("Incorrect number of features. Expecting {}, "

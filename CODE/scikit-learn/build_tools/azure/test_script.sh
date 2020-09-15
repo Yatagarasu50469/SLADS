@@ -29,11 +29,10 @@ if [[ "$COVERAGE" == "true" ]]; then
 fi
 
 if [[ -n "$CHECK_WARNINGS" ]]; then
-    # numpy's 1.19.0's tostring() deprecation is ignored until scipy and joblib removes its usage
-    TEST_CMD="$TEST_CMD -Werror::DeprecationWarning -Werror::FutureWarning -Wignore:tostring:DeprecationWarning"
+    TEST_CMD="$TEST_CMD -Werror::DeprecationWarning -Werror::FutureWarning"
 fi
 
-if [[ "$PYTEST_XDIST" == "true" ]]; then
+if [[ "$PYTHON_VERSION" == "*" ]]; then
     TEST_CMD="$TEST_CMD -n2"
 fi
 

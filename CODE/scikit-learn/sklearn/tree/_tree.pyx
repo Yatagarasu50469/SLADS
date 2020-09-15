@@ -44,7 +44,6 @@ cdef extern from "numpy/arrayobject.h":
                                 int nd, np.npy_intp* dims,
                                 np.npy_intp* strides,
                                 void* data, int flags, object obj)
-    int PyArray_SetBaseObject(np.ndarray arr, PyObject* obj)
 
 # =============================================================================
 # Types and constants
@@ -68,12 +67,22 @@ cdef SIZE_t _TREE_LEAF = TREE_LEAF
 cdef SIZE_t _TREE_UNDEFINED = TREE_UNDEFINED
 cdef SIZE_t INITIAL_STACK_SIZE = 10
 
-# Build the corresponding numpy dtype for Node.
-# This works by casting `dummy` to an array of Node of length 1, which numpy
-# can construct a `dtype`-object for. See https://stackoverflow.com/q/62448946
-# for a more detailed explanation.
-cdef Node dummy;
-NODE_DTYPE = np.asarray(<Node[:1]>(&dummy)).dtype
+# Repeat struct definition for numpy
+NODE_DTYPE = np.dtype({
+    'names': ['left_child', 'right_child', 'feature', 'threshold', 'impurity',
+              'n_node_samples', 'weighted_n_node_samples'],
+    'formats': [np.intp, np.intp, np.intp, np.float64, np.float64, np.intp,
+                np.float64],
+    'offsets': [
+        <Py_ssize_t> &(<Node*> NULL).left_child,
+        <Py_ssize_t> &(<Node*> NULL).right_child,
+        <Py_ssize_t> &(<Node*> NULL).feature,
+        <Py_ssize_t> &(<Node*> NULL).threshold,
+        <Py_ssize_t> &(<Node*> NULL).impurity,
+        <Py_ssize_t> &(<Node*> NULL).n_node_samples,
+        <Py_ssize_t> &(<Node*> NULL).weighted_n_node_samples
+    ]
+})
 
 # =============================================================================
 # TreeBuilder
@@ -83,7 +92,8 @@ cdef class TreeBuilder:
     """Interface for different tree building strategies."""
 
     cpdef build(self, Tree tree, object X, np.ndarray y,
-                np.ndarray sample_weight=None):
+                np.ndarray sample_weight=None,
+                np.ndarray X_idx_sorted=None):
         """Build a decision tree from the training set (X, y)."""
         pass
 
@@ -134,7 +144,8 @@ cdef class DepthFirstTreeBuilder(TreeBuilder):
         self.min_impurity_split = min_impurity_split
 
     cpdef build(self, Tree tree, object X, np.ndarray y,
-                np.ndarray sample_weight=None):
+                np.ndarray sample_weight=None,
+                np.ndarray X_idx_sorted=None):
         """Build a decision tree from the training set (X, y)."""
 
         # check input
@@ -164,7 +175,7 @@ cdef class DepthFirstTreeBuilder(TreeBuilder):
         cdef double min_impurity_split = self.min_impurity_split
 
         # Recursive partition (without actual recursion)
-        splitter.init(X, y, sample_weight_ptr)
+        splitter.init(X, y, sample_weight_ptr, X_idx_sorted)
 
         cdef SIZE_t start
         cdef SIZE_t end
@@ -303,7 +314,8 @@ cdef class BestFirstTreeBuilder(TreeBuilder):
         self.min_impurity_split = min_impurity_split
 
     cpdef build(self, Tree tree, object X, np.ndarray y,
-                np.ndarray sample_weight=None):
+                np.ndarray sample_weight=None,
+                np.ndarray X_idx_sorted=None):
         """Build a decision tree from the training set (X, y)."""
 
         # check input
@@ -321,7 +333,7 @@ cdef class BestFirstTreeBuilder(TreeBuilder):
         cdef SIZE_t min_samples_split = self.min_samples_split
 
         # Recursive partition (without actual recursion)
-        splitter.init(X, y, sample_weight_ptr)
+        splitter.init(X, y, sample_weight_ptr, X_idx_sorted)
 
         cdef PriorityHeap frontier = PriorityHeap(INITIAL_STACK_SIZE)
         cdef PriorityHeapRecord record
@@ -1088,8 +1100,7 @@ cdef class Tree:
         cdef np.ndarray arr
         arr = np.PyArray_SimpleNewFromData(3, shape, np.NPY_DOUBLE, self.value)
         Py_INCREF(self)
-        if PyArray_SetBaseObject(arr, <PyObject*> self) < 0:
-            raise ValueError("Can't initialize array.")
+        arr.base = <PyObject*> self
         return arr
 
     cdef np.ndarray _get_node_ndarray(self):
@@ -1110,8 +1121,7 @@ cdef class Tree:
                                    strides, <void*> self.nodes,
                                    np.NPY_DEFAULT, None)
         Py_INCREF(self)
-        if PyArray_SetBaseObject(arr, <PyObject*> self) < 0:
-            raise ValueError("Can't initialize array.")
+        arr.base = <PyObject*> self
         return arr
 
     def compute_partial_dependence(self, DTYPE_t[:, ::1] X,

@@ -50,6 +50,9 @@ def performImplementation(bestC, bestModel):
     #Run SLADS
     result = runSLADS(info, impSample, bestModel, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, bestCFlag=False)
     
+    #Call completion/printout function
+    result.complete(0, [])
+    
     #Indicate to equipment that the sample scan has concluded
     with open('./INPUT/IMP/DONE', 'w') as filehandle: filehandle.writelines('')
 

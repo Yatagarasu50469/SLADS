@@ -15,21 +15,21 @@ class PassiveAggressiveClassifier(BaseSGDClassifier):
     Parameters
     ----------
 
-    C : float, default=1.0
+    C : float
         Maximum step size (regularization). Defaults to 1.0.
 
-    fit_intercept : bool, default=True
+    fit_intercept : bool, default=False
         Whether the intercept should be estimated or not. If False, the
         data is assumed to be already centered.
 
-    max_iter : int, default=1000
+    max_iter : int, optional (default=1000)
         The maximum number of passes over the training data (aka epochs).
         It only impacts the behavior in the ``fit`` method, and not the
         :meth:`partial_fit` method.
 
         .. versionadded:: 0.19
 
-    tol : float or None, default=1e-3
+    tol : float or None, optional (default=1e-3)
         The stopping criterion. If it is not None, the iterations will stop
         when (loss > previous_loss - tol).
 
@@ -59,15 +59,15 @@ class PassiveAggressiveClassifier(BaseSGDClassifier):
     shuffle : bool, default=True
         Whether or not the training data should be shuffled after each epoch.
 
-    verbose : integer, default=0
+    verbose : integer, optional
         The verbosity level
 
-    loss : string, default="hinge"
+    loss : string, optional
         The loss function to be used:
         hinge: equivalent to PA-I in the reference paper.
         squared_hinge: equivalent to PA-II in the reference paper.
 
-    n_jobs : int or None, default=None
+    n_jobs : int or None, optional (default=None)
         The number of CPUs to use to do the OVA (One Versus All, for
         multi-class problems) computation.
         ``None`` means 1 unless in a :obj:`joblib.parallel_backend` context.
@@ -80,7 +80,7 @@ class PassiveAggressiveClassifier(BaseSGDClassifier):
         function calls.
         See :term:`Glossary <random_state>`.
 
-    warm_start : bool, default=False
+    warm_start : bool, optional
         When set to True, reuse the solution of the previous call to fit as
         initialization, otherwise, just erase the previous solution.
         See :term:`the Glossary <warm_start>`.
@@ -89,8 +89,7 @@ class PassiveAggressiveClassifier(BaseSGDClassifier):
         result in a different solution than when calling fit a single time
         because of the way the data is shuffled.
 
-    class_weight : dict, {class_label: weight} or "balanced" or None, \
-            default=None
+    class_weight : dict, {class_label: weight} or "balanced" or None, optional
         Preset for the class_weight fit parameter.
 
         Weights associated with classes. If not given, all classes
@@ -103,7 +102,7 @@ class PassiveAggressiveClassifier(BaseSGDClassifier):
         .. versionadded:: 0.17
            parameter *class_weight* to automatically weight samples.
 
-    average : bool or int, default=False
+    average : bool or int, optional
         When set to True, computes the averaged SGD weights and stores the
         result in the ``coef_`` attribute. If set to an int greater than 1,
         averaging will begin once the total number of samples seen reaches
@@ -267,21 +266,21 @@ class PassiveAggressiveRegressor(BaseSGDRegressor):
     Parameters
     ----------
 
-    C : float, default=1.0
+    C : float
         Maximum step size (regularization). Defaults to 1.0.
 
-    fit_intercept : bool, default=True
+    fit_intercept : bool
         Whether the intercept should be estimated or not. If False, the
         data is assumed to be already centered. Defaults to True.
 
-    max_iter : int, default=1000
+    max_iter : int, optional (default=1000)
         The maximum number of passes over the training data (aka epochs).
         It only impacts the behavior in the ``fit`` method, and not the
         :meth:`partial_fit` method.
 
         .. versionadded:: 0.19
 
-    tol : float or None, default=1e-3
+    tol : float or None, optional (default=1e-3)
         The stopping criterion. If it is not None, the iterations will stop
         when (loss > previous_loss - tol).
 
@@ -311,16 +310,16 @@ class PassiveAggressiveRegressor(BaseSGDRegressor):
     shuffle : bool, default=True
         Whether or not the training data should be shuffled after each epoch.
 
-    verbose : integer, default=0
+    verbose : integer, optional
         The verbosity level
 
-    loss : string, default="epsilon_insensitive"
+    loss : string, optional
         The loss function to be used:
         epsilon_insensitive: equivalent to PA-I in the reference paper.
         squared_epsilon_insensitive: equivalent to PA-II in the reference
         paper.
 
-    epsilon : float, default=DEFAULT_EPSILON
+    epsilon : float
         If the difference between the current prediction and the correct label
         is below this threshold, the model is not updated.
 
@@ -330,7 +329,7 @@ class PassiveAggressiveRegressor(BaseSGDRegressor):
         function calls.
         See :term:`Glossary <random_state>`.
 
-    warm_start : bool, default=False
+    warm_start : bool, optional
         When set to True, reuse the solution of the previous call to fit as
         initialization, otherwise, just erase the previous solution.
         See :term:`the Glossary <warm_start>`.
@@ -339,7 +338,7 @@ class PassiveAggressiveRegressor(BaseSGDRegressor):
         result in a different solution than when calling fit a single time
         because of the way the data is shuffled.
 
-    average : bool or int, default=False
+    average : bool or int, optional
         When set to True, computes the averaged SGD weights and stores the
         result in the ``coef_`` attribute. If set to an int greater than 1,
         averaging will begin once the total number of samples seen reaches

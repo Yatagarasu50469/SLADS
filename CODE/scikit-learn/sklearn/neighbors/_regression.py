@@ -107,9 +107,6 @@ class KNeighborsRegressor(NeighborsBase, KNeighborsMixin,
         `p` parameter value if the `effective_metric_` attribute is set to
         'minkowski'.
 
-    n_samples_fit_ : int
-        Number of samples in the fitted data.
-
     Examples
     --------
     >>> X = [[0], [1], [2], [3]]
@@ -285,9 +282,6 @@ class RadiusNeighborsRegressor(NeighborsBase, RadiusNeighborsMixin,
         will be same with `metric_params` parameter, but may also contain the
         `p` parameter value if the `effective_metric_` attribute is set to
         'minkowski'.
-
-    n_samples_fit_ : int
-        Number of samples in the fitted data.
 
     Examples
     --------

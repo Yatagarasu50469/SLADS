@@ -102,39 +102,39 @@ def plot_tree(decision_tree, *, max_depth=None, feature_names=None,
     decision_tree : decision tree regressor or classifier
         The decision tree to be plotted.
 
-    max_depth : int, default=None
+    max_depth : int, optional (default=None)
         The maximum depth of the representation. If None, the tree is fully
         generated.
 
-    feature_names : list of strings, default=None
+    feature_names : list of strings, optional (default=None)
         Names of each of the features.
 
-    class_names : list of strings, bool or None, default=None
+    class_names : list of strings, bool or None, optional (default=None)
         Names of each of the target classes in ascending numerical order.
         Only relevant for classification and not supported for multi-output.
         If ``True``, shows a symbolic representation of the class name.
 
-    label : {'all', 'root', 'none'}, default='all'
+    label : {'all', 'root', 'none'}, optional (default='all')
         Whether to show informative labels for impurity, etc.
         Options include 'all' to show at every node, 'root' to show only at
         the top root node, or 'none' to not show at any node.
 
-    filled : bool, default=False
+    filled : bool, optional (default=False)
         When set to ``True``, paint nodes to indicate majority class for
         classification, extremity of values for regression, or purity of node
         for multi-output.
 
-    impurity : bool, default=True
+    impurity : bool, optional (default=True)
         When set to ``True``, show the impurity at each node.
 
-    node_ids : bool, default=False
+    node_ids : bool, optional (default=False)
         When set to ``True``, show the ID number on each node.
 
-    proportion : bool, default=False
+    proportion : bool, optional (default=False)
         When set to ``True``, change the display of 'values' and/or 'samples'
         to be proportions and percentages respectively.
 
-    rotate : bool, default=False
+    rotate : bool, optional (default=False)
         This parameter has no effect on the matplotlib tree visualisation and
         it is kept here for backward compatibility.
 
@@ -142,19 +142,19 @@ def plot_tree(decision_tree, *, max_depth=None, feature_names=None,
            ``rotate`` is deprecated in 0.23 and will be removed in 0.25.
 
 
-    rounded : bool, default=False
+    rounded : bool, optional (default=False)
         When set to ``True``, draw node boxes with rounded corners and use
         Helvetica fonts instead of Times-Roman.
 
-    precision : int, default=3
+    precision : int, optional (default=3)
         Number of digits of precision for floating point in the values of
         impurity, threshold and value attributes of each node.
 
-    ax : matplotlib axis, default=None
+    ax : matplotlib axis, optional (default=None)
         Axes to plot to. If None, use current axis. Any previous content
         is cleared.
 
-    fontsize : int, default=None
+    fontsize : int, optional (default=None)
         Size of text font. If None, determined automatically to fit figure.
 
     Returns

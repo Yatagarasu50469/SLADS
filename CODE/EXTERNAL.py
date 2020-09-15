@@ -13,6 +13,7 @@ import gc
 import glob
 import logging
 import math
+import matplotlib
 import matplotlib.pyplot as plt
 import multiprocessing
 import natsort
@@ -23,6 +24,7 @@ import pandas as pd
 import pickle
 import PIL
 import PIL.ImageOps
+import platform
 import psutil
 import ray
 import re
@@ -51,12 +53,24 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.neighbors import NearestNeighbors
 from sklearn.neural_network import MLPRegressor as nnr
 from sklearn.preprocessing import *
+from sklearn.preprocessing import normalize
 from sklearn.utils import shuffle
 from skimage.util import view_as_windows as viewW
 
 from skimage import filters
+from skimage.filters import *
 from skimage.measure import compare_psnr
 from skimage.metrics import structural_similarity
 from sobol import *
 from tqdm.auto import tqdm
+
+#Determine system operating system
+systemOS = platform.system()
+
+#Operating system specific imports 
+if systemOS == 'Windows':
+    from ctypes import windll, create_string_buffer
+    import struct
+
+
 #==================================================================

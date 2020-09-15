@@ -16,18 +16,24 @@ impModel = False
 #PARAMETERS: L1
 #==================================================================
 
+#Define precision of the percentage averaging (as percentage is inconsistent between acquistion steps)
+precision = 0.01
+
+#If consistentcy in the random generator is desired for comparisons
+consistentSeed = True
+
+#Should the original SLADS reconstruction method be used (False) or the new asymmetric (True)
+ASLADS=True
+
 #Should existing results folders not be allowed to be overwritten?
 preventResultsOverwrite = False
-
-#Should the density measures be used?
-densityMeasures = True
 
 #Which regression model should be used: LS, or SLADS-Net NN
 regModel = 'LS'
 
 #Which algorithm should be used for nearest neighbor: kd_tree or ball_tree
 #ball-tree is more accurate, but cannot be run with excessive dimensions (50k)
-algorithmNN = 'ball_tree'
+algorithmNN = 'kd_tree'
 
 #Which scanning method shoud be used: pointwise or linewise
 scanMethod = 'pointwise'
@@ -42,7 +48,7 @@ lineMethod = 'percLine'
 windowSize = [15,15]
 
 #Stopping percentage for number of acquired pixels
-stopPerc = 50
+stopPerc = 40
 
 #What name should be used for sample data obtained with impModel
 impSampleName = 'SAMPLE_1'
@@ -51,10 +57,10 @@ impSampleName = 'SAMPLE_1'
 #==================================================================
 
 #Sampling percentages for training
-measurementPercs = [5, 10, 20, 30, 40]
+measurementPercs = [1, 10, 20, 30, 40]
 
 #Possible c values for RD approximation
-cValues = np.array([1, 2, 4, 8, 16, 32, 64])
+cValues = np.array([1, 2, 4, 8, 16, 32])
 
 #Should animations be generated during testing/implementation
 animationGen = True
@@ -67,9 +73,6 @@ percRAM = 90
 
 #Number of processor threads to leave free
 numFreeThreads = 2
-
-#Should the original/normlized extracted features be used, or the recon values?
-multiSubFeatures = True
 
 #Should a polynomial deg 2 fit be used (True), or a RBF sampler (False)?
 polyFit = True
@@ -103,4 +106,8 @@ imageType = 'C'
 #Not implemented at this time
 findStopThresh = False
 
+#Should the density measures be used?
+densityMeasures = True
 
+#Should the original/normlized extracted features be used, or the recon values?
+multiSubFeatures = True

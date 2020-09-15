@@ -15,14 +15,6 @@ class TrainingSample:
         self.orderForRD = orderForRD
         self.RD = RD
 
-def cGaussian_parhelper(cNum, sigma, windowSize, orderForRD, imgAsBlocksOnlyUnmeasured):
-    
-    #For each of the selected unmeasured points calculate the captured "area"
-    temp = np.zeros((windowSize[0]*windowSize[1], len(orderForRD)))
-    for index in range(0,len(orderForRD)): temp[:,index] = imgAsBlocksOnlyUnmeasured[orderForRD[index],:]*generateGaussianKernel(sigma[orderForRD[index]], windowSize)
-    
-    return cNum, np.sum(temp, axis=0)
-
 #Given a set of file names, perform the initial setup for generating SLADS Model(s)
 def initTrain(sortedTrainingSampleFolders):
     
@@ -33,6 +25,8 @@ def initTrain(sortedTrainingSampleFolders):
 
     #Create a set of training samples for each possible c Value
     trainingDatabase = [[] for cNum in range(0,len(cValues))]
+    RDPSNR_trainingResults = [[] for cNum in range(0,len(cValues))]
+    perc_trainingResults = [[] for cNum in range(0,len(cValues))]
 
     #For each physical sample, generate a training example for
     trainingSamples = []
@@ -47,13 +41,6 @@ def initTrain(sortedTrainingSampleFolders):
         #Create a mask object
         maskObject = MaskObject(imageWidth, imageHeight, measurementPercs, numMasks)
 
-        #Save copies of the measurement masks for validation; DEBUG
-        #for measurementPercNum in range(0,len(measurementPercs)):
-            #for maskNum in range(0,numMasks):
-                #plt.imshow(maskObject.percMasks[measurementPercNum][maskNum], aspect='auto', cmap='gray')
-                #plt.savefig(dir_TrainingResultsImages+ 'mask_'+ dataSampleName + '_percentage_' + str(measurementPercs[measurementPercNum]) + '_variation_' + str(maskNum) + '.png', bbox_inches='tight')
-                #plt.close()
-
         #Weight images equally
         mzWeights = np.ones(len(images))/len(images)
 
@@ -62,6 +49,19 @@ def initTrain(sortedTrainingSampleFolders):
 
         #Append the basic information for each of the provided samples for use in determining best c Value
         trainingSamples.append(sample)
+
+        #Determine averaged ground truth image
+        avgGroundTruthImage = np.average(np.asarray(images), axis=0, weights=sample.mzWeights)
+
+        #Save a copy of the averaged ground-truth
+        saveLocation = dir_TrainingResultsImages + 'groundTruth_' + sample.name + '.png'
+        fig=plt.figure()
+        ax=fig.add_subplot(1,1,1)
+        plt.axis('off')
+        plt.imshow(avgGroundTruthImage, cmap='hot', aspect='auto')
+        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        plt.savefig(saveLocation, bbox_inches=extent)
+        plt.close()
 
         #For each of the measurement percentages, extract features and initial RD values for each image
         for measurementPercNum in tqdm(range(0,len(measurementPercs)), desc = 'Measurement %', position=1, leave=False, ascii=True):
@@ -103,31 +103,110 @@ def initTrain(sortedTrainingSampleFolders):
                 maskObject.unMeasuredIdxs = []
 
                 #Compute the difference between the original and reconstructed images
-                RDPP = computeDifference(sample.avgImage, reconImage, info.imageType)
+                RDPP = computeDifference(avgGroundTruthImage, reconImage, info.imageType)
 
                 #Convert differences to int
                 RDPP.astype(int)
 
-                #Pad with zeros
+                #Pad with zeros as needed for splitting into multiple blocks
                 RDPPWithZeros = np.pad(RDPP, [(int(np.floor(windowSize[0]/2)), ), (int(np.floor(windowSize[1]/2)), )], mode='constant')
 
                 #Convert into a series of blocks and isolate unmeasured points in those blocks
-                imgAsBlocks = viewW(RDPPWithZeros, (windowSize[0],windowSize[1])).reshape(-1,windowSize[0]*windowSize[1])[:,::1]
-                imgAsBlocksOnlyUnmeasured = imgAsBlocks[np.logical_not(maskVect),:]
+                imgAsBlocksOnlyUnmeasured = viewW(RDPPWithZeros, (windowSize[0],windowSize[1])).reshape(-1,windowSize[0]*windowSize[1])[:,::1][np.logical_not(maskVect),:]
 
                 #Add static parameters to shared pool memory
-                orderForRD_id = ray.put(orderForRD)
                 imgAsBlocksOnlyUnmeasured_id = ray.put(imgAsBlocksOnlyUnmeasured)
-                windowSize_id = ray.put(windowSize)
 
                 #Perform pool function and extract variables from the results
-                idens = [cGaussian_parFunction.remote(cNum, sigmaValues[cNum], windowSize_id, orderForRD_id, imgAsBlocksOnlyUnmeasured_id) for cNum in range(0, len(cValues))]
+                idens = [cGaussian_parFunction.remote(cNum, sigmaValues[cNum], windowSize, orderForRD, imgAsBlocksOnlyUnmeasured_id) for cNum in range(0, len(cValues))]
                 for result in tqdm(parIterator(idens), total=len(idens), position=3, desc='c Values', leave=False, ascii=True):
                     trainingDatabase[result[0]].append(TrainingSample(dataSampleName, images, maskObject, massRanges, measurementPerc, polyFeatures, reconImage, orderForRD, result[1]))
+                    
+                    RDImage = np.zeros((maskObject.imageHeight, maskObject.imageWidth))
+                    RDImage[maskObject.unMeasuredIdxsList[measurementPercNum][maskNum][:,0], maskObject.unMeasuredIdxsList[measurementPercNum][maskNum][:,1]] = result[1]
+                    measuredImage = avgGroundTruthImage*maskObject.mask
+                    
+                    #Borderless
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(maskObject.mask, aspect='auto', cmap='gray')
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(cValues[result[0]]) + '_mask_'+ dataSampleName + '_percentage_' + str(measurementPercs[measurementPercNum]) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                    plt.close()
 
-    #Save the basic trainingSamples data for finding the best C
-    #pickle.dump(trainingSamples, open(dir_TrainingResults + 'trainingSamples.p', 'wb'))
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(RDImage, aspect='auto')
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(cValues[result[0]]) + '_rd_'+ dataSampleName + '_percentage_' + str(measurementPercs[measurementPercNum]) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                    plt.close()
+                    
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(measuredImage, aspect='auto', cmap='hot')
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(cValues[result[0]]) + '_measured_'+ dataSampleName + '_percentage_' + str(measurementPercs[measurementPercNum]) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                    plt.close()
+                    
+                    #Visualize and save copy of the training sample
+                    saveLocation = dir_TrainingResultsImages + 'training_ ' + 'c_' + str(cValues[result[0]]) + '_var_' + str(maskNum) + '_' + dataSampleName + '_perc_' + str(round(measurementPerc, 4))+ '.png'
 
+                    f = plt.figure(figsize=(20,5))
+                    f.subplots_adjust(top = 0.7)
+                    f.subplots_adjust(wspace=0.15, hspace=0.2)
+                    plt.suptitle('c: ' + str(cValues[result[0]]) + '  Variation: ' + str(maskNum) + '\nSample: ' + dataSampleName + '  Percent Sampled: ' + str(round(measurementPerc, 4)), fontsize=20, fontweight='bold', y = 0.95)
+
+                    reconPSNR = compare_psnr(avgGroundTruthImage, reconImage, data_range=reconImage.max() - reconImage.min())
+                    RDPSNR_trainingResults[result[0]].append(reconPSNR)
+                    perc_trainingResults[result[0]].append(measurementPerc)
+                    
+                    ax = plt.subplot2grid(shape=(1,5), loc=(0,0))
+                    ax.imshow(maskObject.mask, cmap='gray', aspect='auto')
+                    ax.set_title('Mask', fontsize=15)
+
+                    ax = plt.subplot2grid(shape=(1,5), loc=(0,1))
+                    ax.imshow(measuredImage, cmap='hot', aspect='auto')
+                    ax.set_title('Measured', fontsize=15)
+
+                    ax = plt.subplot2grid(shape=(1,5), loc=(0,2))
+                    ax.imshow(avgGroundTruthImage, cmap='hot', aspect='auto')
+                    ax.set_title('Ground-Truth', fontsize=15)
+
+                    ax = plt.subplot2grid(shape=(1,5), loc=(0,3))
+                    ax.imshow(reconImage, cmap='hot', aspect='auto')
+                    ax.set_title('Recon - PSNR: ' + str(round(reconPSNR, 4)), fontsize=15)
+
+                    ax = plt.subplot2grid(shape=(1,5), loc=(0,4))
+                    ax.imshow(RDImage, aspect='auto')
+                    ax.set_title('RD', fontsize=15)
+
+                    plt.savefig(saveLocation)
+                    plt.close()
+            
+    #Note that the PSNR curves here are always going to be the same regardless of c value, since the measurement masks were generated independent of the c value
+    for cNum in tqdm(range(0, len(cValues)), desc = 'Pool Setup', leave=False, ascii=True):
+
+        RDPSNR_data = np.asarray(RDPSNR_trainingResults[cNum]).reshape((len(sortedTrainingSampleFolders), len(measurementPercs)))
+        RDPerc_data = np.asarray(perc_trainingResults[cNum]).reshape((len(sortedTrainingSampleFolders), len(measurementPercs)))
+        
+        #Extract percentage results at the specified precision
+        percents, trainingPSNR_mean = percResults(RDPSNR_data, RDPerc_data, precision)
+        
+        np.savetxt(dir_TrainingResultsImages+'trainingAveragePSNR_Percentage.csv', np.transpose([percents, trainingPSNR_mean]), delimiter=',')
+        
+        font = {'size' : 18}
+        plt.rc('font', **font)
+        f = plt.figure(figsize=(20,8))
+        ax1 = f.add_subplot(1,1,1)    
+        ax1.plot(percents, trainingPSNR_mean, color='black') 
+        ax1.set_xlabel('% Pixels Measured')
+        ax1.set_ylabel('Average PSNR')
+        plt.savefig(dir_TrainingResultsImages + 'trainingAveragePSNR_Percentage_c_' + str(cValues[cNum]) + '.png')
+        plt.close()
+    
     return trainingSamples, trainingDatabase
 
 #Given a training database, create SLADS Model(s), noting there exists a single training sample for numCValues*numMeasurementPercs*numTrainingSamples
@@ -140,28 +219,21 @@ def trainModel(trainingDatabase):
     trainingModels = []
     for cNum in tqdm(range(0,len(cValues)), desc = 'c Values', leave = True, ascii=True): #For each of the proposed c values
         trainingDataset = trainingDatabase[cNum]
+        
+        #Build model input datasets
         for sampleNum in tqdm(range(0,len(trainingDataset)), desc = 'Training Data', leave = False, ascii=True):
-            trainingSample = trainingDataset[sampleNum]      
+            trainingSample = trainingDataset[sampleNum]                 
 
             if sampleNum == 0: #First loop
-                if info.imageType == 'C':
-                    bigPolyFeatures = trainingSample.polyFeatures
-                    bigRD = trainingSample.RD
-                elif info.imageType == 'D':
-                    bigPolyFeatures = np.column_stack((trainingSample.polyFeatures[:,0:25], trainingSample.polyFeatures[:,26]))
-                    bigRD = trainingSample.RD
+                bigPolyFeatures = trainingSample.polyFeatures
+                bigRD = trainingSample.RD
             else: #Subsequent loops
-                if info.imageType == 'C':
-                    bigPolyFeatures = np.row_stack((bigPolyFeatures, trainingSample.polyFeatures))
-                    bigRD = np.append(bigRD, trainingSample.RD)
-                elif info.imageType == 'D':
-                    tempPolyFeatures = np.column_stack((trainingSample.polyFeatures[:,0:25], trainingSample.polyFeatures[:,26]))
-                    bigPolyFeatures = np.row_stack((bigPolyFeatures, tempPolyFeatures))
-                    bigRD = np.append(bigRD, trainingSample.RD)
-
-        #Create regression model based on user selection
+                bigPolyFeatures = np.row_stack((bigPolyFeatures, trainingSample.polyFeatures))
+                bigRD = np.append(bigRD, trainingSample.RD)
+        
+        #Create regression model based on user selection - all data has been normalized prior
         if regModel == 'LS':
-            regr = linear_model.LinearRegression(normalize=True)
+            regr = linear_model.LinearRegression()
         elif regModel == 'NN':
             regr = nnr(activation='identity', solver='adam', alpha=1e-5, hidden_layer_sizes=(50, 5), random_state=1, max_iter=500)
         else:
@@ -187,12 +259,16 @@ def trainModel(trainingDatabase):
 
     return trainingModels
 
+def bestC_parhelper(info_id, trainingSamples_id, trainingModel_id, stopPerc_id, sampleNum, simulationFlag_id, trainPlotFlag_id, animationFlag_id, tqdmHide_id, bestCFlag_id):
+    result = runSLADS(info_id, trainingSamples_id, trainingModel_id, stopPerc_id, sampleNum, simulationFlag_id, trainPlotFlag_id, animationFlag_id, tqdmHide_id, bestCFlag_id)
+    return result.complete(0, [])
+
 #Given SLADS Model(s) determine the c value that minimizes the total distortion in scanned samples
 def findBestC(trainingSamples, trainingModels):
     
     #Set function for the pool
     with contextlib.redirect_stdout(None):
-        parFunction = ray.remote(runSLADS)
+        parFunction = ray.remote(bestC_parhelper)
         time.sleep(1)
 
     #Add constant static parameters to shared pool memory
@@ -215,14 +291,10 @@ def findBestC(trainingSamples, trainingModels):
         #Initialize rolling sum for total distortion levels
         areaUnderCurve = 0
         
-        #DEBUG: Serial operation
-        #for sampleNum in tqdm(range(0, len(trainingSamples)), desc = 'Training Samples', leave=False, ascii=True):
-        #    areaResult = runSLADS(info, trainingSamples, trainingModels[cNum], stopPerc, sampleNum, True, False, False, False, True)
-        #    areaUnderCurve += areaResult
-    
         #Perform pool function and extract variables from the results
         idens = [parFunction.remote(info_id, trainingSamples_id, trainingModel_id, stopPerc_id, sampleNum, simulationFlag_id, trainPlotFlag_id, animationFlag_id, tqdmHide_id, bestCFlag_id) for sampleNum in range(0, len(trainingSamples))]
-        for areaResult in tqdm(parIterator(idens), total=len(idens), desc='Training Samples', position=1, leave=False, ascii=True): areaUnderCurve += areaResult
+        for areaResult in tqdm(parIterator(idens), total=len(idens), desc='Training Samples', position=1, leave=False, ascii=True): 
+            areaUnderCurve += areaResult
 
         #Append the total distortion sum to a list corresponding to the c values
         areaUnderCurveList.append(areaUnderCurve)

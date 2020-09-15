@@ -664,7 +664,7 @@ def _name_estimators(estimators):
     return list(zip(names, estimators))
 
 
-def make_pipeline(*steps, memory=None, verbose=False):
+def make_pipeline(*steps, **kwargs):
     """Construct a Pipeline from the given estimators.
 
     This is a shorthand for the Pipeline constructor; it does not require, and
@@ -706,6 +706,11 @@ def make_pipeline(*steps, memory=None, verbose=False):
     -------
     p : Pipeline
     """
+    memory = kwargs.pop('memory', None)
+    verbose = kwargs.pop('verbose', False)
+    if kwargs:
+        raise TypeError('Unknown keyword arguments: "{}"'
+                        .format(list(kwargs.keys())[0]))
     return Pipeline(_name_estimators(steps), memory=memory, verbose=verbose)
 
 
@@ -1013,7 +1018,7 @@ class FeatureUnion(TransformerMixin, _BaseComposition):
         return _VisualBlock('parallel', transformers, names=names)
 
 
-def make_union(*transformers, n_jobs=None, verbose=False):
+def make_union(*transformers, **kwargs):
     """
     Construct a FeatureUnion from the given transformers.
 
@@ -1055,5 +1060,12 @@ def make_union(*transformers, n_jobs=None, verbose=False):
      FeatureUnion(transformer_list=[('pca', PCA()),
                                    ('truncatedsvd', TruncatedSVD())])
     """
+    n_jobs = kwargs.pop('n_jobs', None)
+    verbose = kwargs.pop('verbose', False)
+    if kwargs:
+        # We do not currently support `transformer_weights` as we may want to
+        # change its type spec in make_union
+        raise TypeError('Unknown keyword arguments: "{}"'
+                        .format(list(kwargs.keys())[0]))
     return FeatureUnion(
         _name_estimators(transformers), n_jobs=n_jobs, verbose=verbose)

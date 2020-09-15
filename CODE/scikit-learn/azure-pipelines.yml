@@ -13,19 +13,24 @@ jobs:
   pool:
     vmImage: ubuntu-18.04
   steps:
-    - task: UsePythonVersion@0
-      inputs:
-        versionSpec: '3.8'
+    - bash: echo "##vso[task.prependpath]$CONDA/bin"
+      displayName: Add conda to PATH
+    - bash: sudo chown -R $USER $CONDA
+      displayName: Take ownership of conda installation
     - bash: |
+        set -ex
+        conda create --name flake8_env --yes python=3.8
+        source activate flake8_env
         pip install flake8 mypy==0.770
-      displayName: Install linters
+      displayName: Install flake8
     - bash: |
         set -ex
         if [[ $BUILD_SOURCEVERSIONMESSAGE =~ \[lint\ skip\] ]]; then
           # skip linting
-          echo "Skipping flake8 linting"
+          echo "Skipping linting"
           exit 0
         else
+          source activate flake8_env
           ./build_tools/circle/linting.sh
         fi
       displayName: Run linting
@@ -33,9 +38,10 @@ jobs:
         set -ex
         if [[ $BUILD_SOURCEVERSIONMESSAGE =~ \[lint\ skip\] ]]; then
           # skip linting
-          echo "Skipping mypy linting"
+          echo "Skipping linting"
           exit 0
         else
+          source activate flake8_env
           mypy sklearn/ --ignore-missing-imports
         fi
       displayName: Run mypy
@@ -99,7 +105,6 @@ jobs:
         DISTRIB: 'ubuntu'
         PYTHON_VERSION: '3.6'
         JOBLIB_VERSION: '0.11'
-        PYTEST_XDIST: 'false'
         THREADPOOLCTL_VERSION: '2.0.0'
       # Linux + Python 3.6 build with OpenBLAS and without SITE_JOBLIB
       py36_conda_openblas:
@@ -118,7 +123,6 @@ jobs:
         # latest version of joblib available in conda for Python 3.6
         JOBLIB_VERSION: '0.13.2'
         THREADPOOLCTL_VERSION: '2.0.0'
-        PYTEST_XDIST: 'false'
         COVERAGE: 'true'
       # Linux environment to test the latest available dependencies and MKL.
       # It runs tests requiring lightgbm, pandas and PyAMG.

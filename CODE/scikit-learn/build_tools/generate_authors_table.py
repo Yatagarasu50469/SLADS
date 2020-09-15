@@ -15,8 +15,8 @@ from os import path
 
 print("user:", file=sys.stderr)
 user = input()
-token = getpass.getpass("access token:\n")
-auth = (user, token)
+passwd = getpass.getpass("Password or access token:\n")
+auth = (user, passwd)
 
 LOGO_URL = 'https://avatars2.githubusercontent.com/u/365630?v=4'
 REPO_FOLDER = Path(path.abspath(__file__)).parent.parent
@@ -38,15 +38,13 @@ def get(url):
 
 def get_contributors():
     """Get the list of contributor profiles. Require admin rights."""
-    # get core devs and triage team
+    # get members of scikit-learn core-dev on GitHub
     core_devs = []
-    triage_team = []
-    for team_id, lst in zip((11523, 3593183), (core_devs, triage_team)):
-        for page in [1, 2]:  # 30 per page
-            reply = get(
-                f"https://api.github.com/teams/{team_id}/members?page={page}"
-            )
-            lst.extend(reply.json())
+    team = 11523
+    for page in [1, 2]:  # 30 per page
+        reply = get("https://api.github.com/teams/%d/members?page=%d" %
+                    (team, page))
+        core_devs.extend(reply.json())
 
     # get members of scikit-learn on GitHub
     members = []
@@ -57,31 +55,32 @@ def get_contributors():
         members.extend(reply.json())
 
     # keep only the logins
-    core_devs = set(c['login'] for c in core_devs)
-    triage_team = set(c['login'] for c in triage_team)
-    members = set(c['login'] for c in members)
+    core_devs = [c['login'] for c in core_devs]
+    members = [c['login'] for c in members]
 
     # add missing contributors with GitHub accounts
-    members |= {'dubourg', 'mbrucher', 'thouis', 'jarrodmillman'}
+    members.extend(['dubourg', 'mbrucher', 'thouis', 'jarrodmillman'])
     # add missing contributors without GitHub accounts
-    members |= {'Angel Soler Gollonet'}
+    members.extend(['Angel Soler Gollonet'])
     # remove CI bots
-    members -= {'sklearn-ci', 'sklearn-lgtm', 'sklearn-wheels'}
-    triage_team -= core_devs  # remove ogrisel from triage_team
+    members.remove('sklearn-ci')
+    members.remove('sklearn-lgtm')
+    members.remove('sklearn-wheels')
 
-    emeritus = members - core_devs - triage_team
+    # remove duplicate, and get the difference of the two sets
+    core_devs = set(core_devs)
+    members = set(members)
+    emeritus = members.difference(core_devs)
 
     # get profiles from GitHub
     core_devs = [get_profile(login) for login in core_devs]
     emeritus = [get_profile(login) for login in emeritus]
-    triage_team = [get_profile(login) for login in triage_team]
 
     # sort by last name
     core_devs = sorted(core_devs, key=key)
     emeritus = sorted(emeritus, key=key)
-    triage_team = sorted(triage_team, key=key)
 
-    return core_devs, emeritus, triage_team
+    return core_devs, emeritus
 
 
 def get_profile(login):
@@ -144,13 +143,10 @@ def generate_list(contributors):
 
 if __name__ == "__main__":
 
-    core_devs, emeritus, triage_team = get_contributors()
+    core_devs, emeritus = get_contributors()
 
     with open(REPO_FOLDER / "doc" / "authors.rst", "w+") as rst_file:
         rst_file.write(generate_table(core_devs))
 
     with open(REPO_FOLDER / "doc" / "authors_emeritus.rst", "w+") as rst_file:
         rst_file.write(generate_list(emeritus))
-
-    with open(REPO_FOLDER / "doc" / "triage_team.rst", "w+") as rst_file:
-        rst_file.write(generate_table(triage_team))

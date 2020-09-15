@@ -2,8 +2,34 @@
 #INTERNAL SLADS SETUP
 #==================================================================
 
+#AESTHETIC SETUP
+#==================================================================
+#Clear the screen
+os.system('cls' if os.name=='nt' else 'clear')
+
+#Determine console size if applicable
+if consoleRunning and systemOS != 'Windows':
+    consoleRows, consoleColumns = os.popen('stty size', 'r').read().split()
+elif consoleRunning and systemOS == 'Windows':
+
+    h = windll.kernel32.GetStdHandle(-12)
+    csbi = create_string_buffer(22)
+    res = windll.kernel32.GetConsoleScreenBufferInfo(h, csbi)
+    (bufx, bufy, curx, cury, wattr, left, top, right, bottom, maxx, maxy) = struct.unpack("hhhhHhhhhhh", csbi.raw)
+    consoleRows = bottom-top
+    consoleColumns = right-left
+else:
+    consoleRows, consoleColumns = 40, 40
+
+#Specify non-interactive backend for plotting images if in console
+if consoleRunning: matplotlib.use('Agg')
+
 #INTERNAL OBJECT SETUP
 #==================================================================
+
+#If consistentcy in the random generator is desired for comparisons
+if consistentSeed: np.random.seed(0)
+
 #Initialize the information object for training and testing
 reconMethod = 'CWM'
 featReconMethod = 'CWM'
@@ -20,7 +46,9 @@ if num_threads > numFreeThreads: num_threads -= numFreeThreads
 
 #Setup worker pool; 50% for object storage, 10% for redis metadata/lineage, half-of-rest for workers
 amount_RAM = int(psutil.virtual_memory().available*(percRAM/100))
-ray.init(num_cpus=num_threads, memory=amount_RAM, object_store_memory=int(amount_RAM*0.5), log_to_driver=False, logging_level=logging.ERROR)
+
+#Initialize multiprocessing pool server
+ray.init(num_cpus=num_threads, logging_level=logging.ERROR)
 
 #Print and store all current variables in RAM
 #variableList = []
@@ -88,13 +116,3 @@ if animationGen:
     if os.path.exists(dir_mzResults): shutil.rmtree(dir_mzResults)    
     os.makedirs(dir_mzResults)
 
-#AESTHETIC SETUP
-#==================================================================
-#Clear the screen
-os.system('cls' if os.name=='nt' else 'clear')
-
-#Determine console size if applicable
-if consoleRunning:
-    consoleRows, consoleColumns = os.popen('stty size', 'r').read().split()
-else:
-    consoleRows, consoleColumns = 40, 40

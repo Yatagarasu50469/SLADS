@@ -30,7 +30,7 @@ def squared_norm(x):
 
     Parameters
     ----------
-    x : array-like
+    x : array_like
 
     Returns
     -------
@@ -56,14 +56,14 @@ def row_norms(X, squared=False):
 
     Parameters
     ----------
-    X : array-like
+    X : array_like
         The input array
     squared : bool, optional (default = False)
         If True, return squared norms.
 
     Returns
     -------
-    array-like
+    array_like
         The row-wise (squared) Euclidean norm of X.
     """
     if sparse.issparse(X):
@@ -86,7 +86,7 @@ def fast_logdet(A):
 
     Parameters
     ----------
-    A : array-like
+    A : array_like
         The matrix
     """
     sign, ld = np.linalg.slogdet(A)
@@ -100,7 +100,7 @@ def density(w, **kwargs):
 
     Parameters
     ----------
-    w : array-like
+    w : array_like
         The sparse vector
 
     Returns
@@ -385,9 +385,9 @@ def weighted_mode(a, w, *, axis=0):
 
     Parameters
     ----------
-    a : array-like
+    a : array_like
         n-dimensional array of which to find mode(s).
-    w : array-like
+    w : array_like
         n-dimensional array of weights for each value
     axis : int, optional
         Axis along which to operate. Default is 0, i.e. the first axis.
@@ -627,14 +627,14 @@ def make_nonnegative(X, min_value=0):
 
     Parameters
     ----------
-    X : array-like
+    X : array_like
         The matrix to make non-negative
     min_value : float
         The threshold value
 
     Returns
     -------
-    array-like
+    array_like
         The thresholded array
 
     Raises

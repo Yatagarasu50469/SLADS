@@ -231,20 +231,23 @@ def test_fit_docstring_attributes(name, Estimator):
     IGNORED = {'BayesianRidge', 'Birch', 'CCA', 'CategoricalNB', 'ElasticNet',
                'ElasticNetCV', 'GaussianProcessClassifier',
                'GradientBoostingRegressor', 'HistGradientBoostingClassifier',
-               'HistGradientBoostingRegressor',
-               'KernelCenterer', 'KernelDensity',
+               'HistGradientBoostingRegressor', 'IsolationForest',
+               'KNeighborsClassifier', 'KNeighborsRegressor',
+               'KNeighborsTransformer', 'KernelCenterer', 'KernelDensity',
                'LarsCV', 'Lasso', 'LassoLarsCV', 'LassoLarsIC',
-               'LocalOutlierFactor', 'MDS',
+               'LatentDirichletAllocation', 'LocalOutlierFactor', 'MDS',
                'MiniBatchKMeans', 'MLPClassifier', 'MLPRegressor',
                'MultiTaskElasticNet', 'MultiTaskElasticNetCV',
-               'MultiTaskLasso', 'MultiTaskLassoCV',
-               'OrthogonalMatchingPursuit',
-               'PLSCanonical', 'PLSSVD',
-               'PassiveAggressiveClassifier'}
-
+               'MultiTaskLasso', 'MultiTaskLassoCV', 'NearestNeighbors',
+               'NuSVR', 'OneClassSVM', 'OrthogonalMatchingPursuit',
+               'PLSCanonical', 'PLSRegression', 'PLSSVD',
+               'PassiveAggressiveClassifier', 'Perceptron', 'RBFSampler',
+               'RadiusNeighborsClassifier', 'RadiusNeighborsRegressor',
+               'RadiusNeighborsTransformer', 'RandomTreesEmbedding', 'SVR',
+               'SkewedChi2Sampler'}
     if Estimator.__name__ in IGNORED:
         pytest.xfail(
-            reason="Estimator has too many undocumented attributes.")
+            reason="Classifier has too many undocumented attributes.")
 
     fit_attr = [k for k in est.__dict__.keys() if k.endswith('_')
                 and not k.startswith('_')]
