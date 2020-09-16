@@ -154,7 +154,7 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 		pyparsing: 		2.4.6
 		pytz:			2019.3
 		PyWavelets: 		1.1.1
-		ray:			0.8.6
+		ray:			0.8.7
 		scipy:			1.4.1
 		six: 			1.13.0
 		scikit-image: 		0.16.2
@@ -169,23 +169,23 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 
 ### **Installation on Mac OSX 10.13**
 **Note:** These instructions have not been tested on a clean system running only the operating systems specified, but should be expected to function.
+
 	$ python3 --m pip install --upgrade pip
-	$ pip3 install opencv-python datetime glob3 IPython joblib pandas psutil matplotlib pillow 
-	   ray scipy sobol sobol_seq natsort multiprocess ray scikit-image sklearn tqdm
-      $ cd ./CODE/scikit-learn
-      $ make clean
-      $ pip3 install --verbose --no-build-isolation --editable .
+	$ pip3 install opencv-python datetime glob3 IPython joblib pandas psutil matplotlib pillow ray scipy sobol sobol_seq natsort multiprocess ray scikit-image sklearn tqdm
+	$ cd ./CODE/scikit-learn
+	$ make clean
+	$ pip3 install --verbose --no-build-isolation --editable .
 
 ### **Installation on Ubuntu 18.04**
 **Note:** These instructions have not been tested on a clean system running only the operating systems specified, but should be expected to function.
+	
 	$ sudo apt-get update
 	$ sudo apt-get install python3-pip
 	$ python3 -m pip install --upgrade pip
-	$ pip3 install opencv-python datetime glob3 IPython joblib pandas psutil matplotlib pillow 
-	   ray setuptools scipy sobol sobol_seq natsort multiprocess scikit-image sklearn tqdm
-      $ cd ./CODE/scikit-learn
-      $ make clean
-      $ pip3 install --verbose --no-build-isolation --editable .
+	$ pip3 install opencv-python datetime glob3 IPython joblib pandas psutil matplotlib pillow ray setuptools scipy sobol sobol_seq natsort multiprocess scikit-image sklearn tqdm
+	$ cd ./CODE/scikit-learn
+	$ make clean
+	$ pip3 install --verbose --no-build-isolation --editable .
 
 
 ### **Installation on Windows 10**
@@ -201,16 +201,16 @@ Open the command prompt as an administrator (right-click on the command prompt i
 For 64-bit Python, configure the build environment by entering the following lines into command prompt, where for 32-bit replace x64 by x86.
 Note that the actual location of the specified file may vary depending on potential past Visual Studio installations. 
 
-    $ SET DISTUTILS_USE_SDK=1
-    $ "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
+	$ SET DISTUTILS_USE_SDK=1
+	$ "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
 
 Navigate inside the command prompt to the SLADS base directory then enter the following commands:
 
-    $ cd CODE\scikit-learn
-    $ python3 -m pip install --upgrade pip
-    $ pip3 install cython wheel numpy
-    $ pip3 install --verbose --no-build-isolation --editable .
-    $ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib pillow ray scipy sobol sobol_seq natsort multiprocess scikit-image tqdm tensorflow opencv-python pydot graphviz 
+	$ cd CODE\scikit-learn
+	$ python3 -m pip install --upgrade pip
+	$ pip3 install cython wheel numpy
+	$ pip3 install --verbose --no-build-isolation --editable .
+	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib pillow ray scipy sobol sobol_seq natsort multiprocess scikit-image tqdm tensorflow opencv-python pydot graphviz 
 
 # TRAINING/TESTING PROCEDURE
 
@@ -329,4 +329,4 @@ Prior to engaging the physical equipment run SLADS with the **impModel** variabl
 
 Although the error would suggest there is something wrong with the network connectivity (can double check firewall settings that port 6375 is allowed to receive/send traffic), it is actually more likely to be an issue with available disk space. This can be handeled by manually specifying a temporary directory for the plasma memory storage on an alternate drive with more free space. Modify the **ray.init** command located in ./CODE/INTERNAL.py as shown below, replacing **/mntPoint/tmp** with a blank directory **tmp** located on another hard drive with more free space. 
 
-        ray.init(num_cpus=num_threads, memory=amount_RAM, object_store_memory=int(amount_RAM*0.5), log_to_driver=False, logging_level=logging.ERROR, plasma_directory="/mntPoint/tmp")
+	ray.init(num_cpus=num_threads, memory=amount_RAM, object_store_memory=int(amount_RAM*0.5), log_to_driver=False, logging_level=logging.ERROR, plasma_directory="/mntPoint/tmp")
