@@ -901,19 +901,20 @@ def sizeFunc(num, suffix='B'):
     return "%.1f %s%s" % (num, 'Yi', suffix)
 
 def identityBlock(inputData, numFilters):
-    conv_1 = Conv2D(numFilters, (1,1), padding='same' kernel_initializer='he_normal')(inputData)
+    conv_1 = Conv2D(numFilters, (1,1), padding='same', kernel_initializer='he_normal')(inputData)
     conv_1 = LayerNormalization()(conv_1)
     conv_1 = ReLU()(conv_1)
-    conv_1 = Conv2D(numFilters, (3,3), padding='same' kernel_initializer='he_normal')(conv_1)
+    conv_1 = Conv2D(numFilters, (3,3), padding='same', kernel_initializer='he_normal')(conv_1)
     conv_1 = LayerNormalization()(conv_1)
     conv_1 = ReLU()(conv_1)
-    conv_1 = Conv2D(numFilters, (1,1), padding='same' kernel_initializer='he_normal')(conv_1)
+    conv_1 = Conv2D(numFilters, (1,1), padding='same', kernel_initializer='he_normal')(conv_1)
     conv_1 = LayerNormalization()(conv_1)
     conv_1 = concatenate([inputData, conv_1], axis=3)
     conv_1 = ReLU()(conv_1)
-
+    
     return conv_1
 
+#CNN
 def cnn(numFilters, numChannels):
     inputs = Input(shape=(None,None,numChannels))
     conv_1 = identityBlock(inputs, numFilters)
@@ -921,8 +922,8 @@ def cnn(numFilters, numChannels):
     conv_3 = identityBlock(conv_2, numFilters)
     conv_4 = identityBlock(conv_3, numFilters)
     
-    output = Conv2D(1, (1,1), activation='linear', padding='same' kernel_initializer='he_normal')(conv_4)
-
+    output = Conv2D(1, (1,1), activation='linear', padding='same', kernel_initializer='he_normal')(conv_4)
+    
     return tf.keras.Model(inputs=inputs, outputs=output)
 
 #U-Net
