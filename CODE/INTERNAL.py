@@ -11,6 +11,7 @@ os.system('cls' if os.name=='nt' else 'clear')
 if consoleRunning and systemOS != 'Windows':
     consoleRows, consoleColumns = os.popen('stty size', 'r').read().split()
 elif consoleRunning and systemOS == 'Windows':
+
     h = windll.kernel32.GetStdHandle(-12)
     csbi = create_string_buffer(22)
     res = windll.kernel32.GetConsoleScreenBufferInfo(h, csbi)
@@ -29,13 +30,25 @@ if consoleRunning: matplotlib.use('Agg')
 #If consistentcy in the random generator is desired for comparisons
 if consistentSeed: np.random.seed(0)
 
-#If incremental data is not being used, then a model must be trained for each c value
-if incrementalTrainingMasks == False: bestCFromTrainingData=False
+#Initialize the information object for training and testing
+reconMethod = 'CWM'
+featReconMethod = 'CWM'
+neighborWeightsPower = 2
+numNeighbors = 10
+filterType = 'Gaussian'
+featDistCutoff = 0.25
+resolution = 1
+info = Info(reconMethod, featReconMethod, neighborWeightsPower, numNeighbors, filterType, featDistCutoff, resolution, imageType)
 
-#Set the multiple for which the input data must be for network compatability
-depthFactor=2**numConvolutionLayers
+#Set the number of available CPU threads, leave 2 free if possilbe
+num_threads = multiprocessing.cpu_count()
+if num_threads > numFreeThreads: num_threads -= numFreeThreads
+
+#Setup worker pool; 50% for object storage, 10% for redis metadata/lineage, half-of-rest for workers
+amount_RAM = int(psutil.virtual_memory().available*(percRAM/100))
 
 #Initialize multiprocessing pool server
+ray.shutdown()
 ray.init(logging_level=logging.ERROR)
 
 #Print and store all current variables in RAM
@@ -57,8 +70,7 @@ dir_ImpData = dir_InputData + 'IMP' + os.path.sep
 #Results directories
 dir_Results = '.' + os.path.sep + 'RESULTS' + os.path.sep
 dir_TrainingResults = dir_Results + 'TRAIN' + os.path.sep
-dir_TrainingModelResults = dir_TrainingResults + 'Model Training Images' + os.path.sep
-dir_TrainingResultsImages = dir_TrainingResults + 'Training Data Images' + os.path.sep
+dir_TrainingResultsImages = dir_TrainingResults + 'Images' + os.path.sep
 dir_TestingResults = dir_Results + 'TEST' + os.path.sep
 dir_TestingResultsImages = dir_TestingResults + 'Images' + os.path.sep
 dir_ImpResults = dir_Results + 'IMP'+ os.path.sep
@@ -77,15 +89,10 @@ if not os.path.exists(dir_ImpData) and impModel: sys.exit('Error - dir_ImpData d
 if not os.path.exists(dir_Results): sys.exit('Error - dir_Results does not exist')
 
 #As needed, reset the results' directories
-if trainingModel and not loadTrainingDataset:
+if trainingModel:
     if os.path.exists(dir_TrainingResults): shutil.rmtree(dir_TrainingResults)
     os.makedirs(dir_TrainingResults)
-    os.makedirs(dir_TrainingModelResults)
-    os.makedirs(dir_TrainingResultsImages)
-
-if trainingModel and loadTrainingDataset:
-    if os.path.exists(dir_TrainingModelResults): shutil.rmtree(dir_TrainingModelResults)
-    os.makedirs(dir_TrainingModelResults)
+    os.makedirs(dir_TrainingResultsImages)    
     
 if testingModel:
     if os.path.exists(dir_TestingResults): shutil.rmtree(dir_TestingResults)

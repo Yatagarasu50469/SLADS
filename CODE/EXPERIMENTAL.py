@@ -14,10 +14,7 @@ def equipWait():
             break
 
 #Perform SLADS with external equipment
-def performImplementation(bestC):
-
-    #Load the best model
-    model = tf.keras.models.load_model(dir_TrainingModelResults+'model_cValue_'+str(bestC))
+def performImplementation(bestC, bestModel):
 
     #Clean up files from previous runs if they exist
     if os.path.isfile('./INPUT/IMP/DONE'): os.remove('./INPUT/IMP/DONE')
@@ -30,7 +27,7 @@ def performImplementation(bestC):
     images, massRanges, imageHeight, imageWidth = readScanData('./INPUT/IMP/')
     
     #Create a mask object
-    maskObject = MaskObject(imageWidth, imageHeight, [], 0, scanMethod)
+    maskObject = MaskObject(imageWidth, imageHeight, [], 0)
     
     #For each of the initial sets that must be obtained
     for setNum in range(0, len(maskObject.initialSets)):
@@ -51,10 +48,10 @@ def performImplementation(bestC):
     impSample = Sample(impSampleName, images, massRanges, maskObject, mzWeights, dir_ImpResults)
     
     #Run SLADS
-    result = runSLADS(impSample, bestModel, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, bestCFlag=False)
+    result = runSLADS(info, impSample, bestModel, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, bestCFlag=False)
     
     #Call completion/printout function
-    result.complete(0)
+    result.complete(0, [])
     
     #Indicate to equipment that the sample scan has concluded
     with open('./INPUT/IMP/DONE', 'w') as filehandle: filehandle.writelines('')

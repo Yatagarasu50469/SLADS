@@ -3,13 +3,10 @@
 #==================================================================
 
 #Given a set of sample paths, perform testing using a trained SLADS Model
-def testSLADS(sortedTestingSampleFolders, bestC):
-
+def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
+    
     #If consistentcy in the random generator is desired for comparisons
     if consistentSeed: np.random.seed(0)
-
-    #Load the best model
-    model = tf.keras.models.load_model(dir_TrainingModelResults+'model_cValue_'+str(bestC))
     
     #Setup testing samples
     testingSamples = []
@@ -20,13 +17,19 @@ def testSLADS(sortedTestingSampleFolders, bestC):
         images, massRanges, imageHeight, imageWidth = readScanData(testingSampleFolder + '/')
         
         #Create a mask object
-        maskObject = MaskObject(imageWidth, imageHeight, initialPercToScan, scanMethod)
+        maskObject = MaskObject(imageWidth, imageHeight, [], 0)
         
         #Weight images equally
         mzWeights = np.ones(len(images))/len(images)
 
         #Define information as a new Sample object
         testingSamples.append(Sample(dataSampleName, images, massRanges, maskObject, mzWeights, dir_TestingResults))
+
+    #If an animation will be produced
+    if animationGen:
+        dir_AnimationVideos = dir_Animations + 'Videos/'
+        if os.path.exists(dir_AnimationVideos): shutil.rmtree(dir_AnimationVideos)
+        os.makedirs(dir_AnimationVideos)
 
     #Create holding arrays for all of the results
     MSE_testingResults = []
@@ -50,9 +53,10 @@ def testSLADS(sortedTestingSampleFolders, bestC):
 
     for sampleNum in tqdm(range(0,len(testingSamples)), desc='Testing Samples', position=0, leave=True, ascii=True):
         t0 = time.time()
-        result = runSLADS([testingSamples[sampleNum]], model, stopPerc, 0, simulationFlag=True, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, bestCFlag=False)
+        result = runSLADS(info, [testingSamples[sampleNum]], bestModel, stopPerc, 0, simulationFlag=True, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, bestCFlag=False)
+        
         time_testingResults.append(time.time()-t0)
-        result.complete(bestC)
+        result.complete(bestC, windowSize)
         MSE_testingResults.append(result.MSEList)
         SSIM_testingResults.append(result.SSIMList)
         PSNR_testingResults.append(result.PSNRList)

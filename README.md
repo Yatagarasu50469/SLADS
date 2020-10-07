@@ -16,7 +16,7 @@
 
 
     NAME: 		SLADS
-    VERSION NUM:	0.7
+    VERSION NUM:	0.6.9
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
 			points along a single axis. 
@@ -46,8 +46,8 @@
                     0.6.6   SLADS-NET NN, PSNR, asymFinal, and multi-config
                     0.6.7   Clean asymmetric implementation with density features
                     0.6.8   Fixed RD generation, added metrics, and Windows compatible
-                    0.7     CNN/Unet/RBDN with dynamic window size
-                    0.71    c value selection performed before model training
+                    0.6.9   Do not use -- Original SLADS(-Net) variations for testing
+                    0.7     CNN with dynamic window size
                     ~0.8    Multichannel integration
                     ~0.9    Tissue segmentation
                     ~1.0    Initial release
@@ -120,7 +120,7 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 		Mac: 			10.13.6
 
 	System
-		Python			3.8.5
+		Python			3.8.1
 		pip			19.3.1
 
 	Python Packages
@@ -155,7 +155,7 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 		pyparsing: 		2.4.6
 		pytz:			2019.3
 		PyWavelets: 		1.1.1
-		ray:			1.0.0
+		ray:			0.8.7
 		scipy:			1.4.1
 		six: 			1.13.0
 		scikit-image: 		0.16.2
@@ -177,15 +177,13 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 	$ make clean
 	$ pip3 install --verbose --no-build-isolation --editable .
 
-TensorFlow is not currently officially supported on OS X machines. Although official support may become available in the  future, installation and patch instructions for Tensorflow v2.2.0 may be found at https://github.com/TomHeaven/tensorflow-osx-build. These instructions have been confirmed to work on a OS X build with a 1080 TI GPU. Instructions for v2.3.0 are not currently functional with Python 3.8. 
-
 ### **Installation on Ubuntu 18.04**
 **Note:** These instructions have not been tested on a clean system running only the operating systems specified, but should be expected to function.
 	
 	$ sudo apt-get update
 	$ sudo apt-get install python3-pip
 	$ python3 -m pip install --upgrade pip
-	$ pip3 install opencv-python datetime glob3 IPython joblib pandas psutil matplotlib pillow ray setuptools scipy sobol sobol_seq tensorflow natsort multiprocess scikit-image sklearn tqdm
+	$ pip3 install opencv-python datetime glob3 IPython joblib pandas psutil matplotlib pillow ray setuptools scipy sobol sobol_seq natsort multiprocess scikit-image sklearn tqdm
 	$ cd ./CODE/scikit-learn
 	$ make clean
 	$ pip3 install --verbose --no-build-isolation --editable .
@@ -242,22 +240,51 @@ Each of these folders may then be placed either into ./INPUT/TEST, or ./INPUT/TR
 ###  **CONFIGURATION**
 **Warning:** This section is no longer entirely up to date, refer to ./CONFIG_0.py for updated variable descriptions. Several of the parameters listed may either not implemented at this time, replaced, removed, or have been disabled. 
 
-**Note:** 
+**Note:** Multiple configuration files in the form of CONFIG_*descriptor*.py, can be generated for which SLADS will be run sequentially. RESULTS_*descriptor* folders will correspond with the numbering of the CONFIG files, with the RESULTS folder without a description, containing results from the last run performed. 
 
-All critical parameters for SLADS may be altered in a configuration file (Ex. ./CONFIG_0.py). Variable descriptions are provided inside of an example configuration provided and are grouped according to the following method:
+All critical parameters for SLADS may be altered in a configuration file: Ex. ./CONFIG_0.py where:
 
-    L0:     Tasks to be performed
-    L1:     Task methods
-        L1-0:   Pointwise
-        L1-1:   Linewise
-        L1-2:   Training Data Generation
-    L2:     Model parameters
-    L3:     Runtime/Output settings
-    L4:     Non-operational - Do not change
-    L5:     Debug/Deprecated - Will most likely be removed in future
+	L0: Specifies the overall program function(s) to be performed
+		trainingModel: Should a new SLADS model be generated
+			- Uses data from ./INPUT/TRAIN/
+		testingModel: Should a SLADS model be evaluated
+			- Uses data from ./INPUT/TEST/
+		LOOCV: Should Leave-One-Out Cross Validation be performed 
+			- Disables testingModel by default, uses data from ./INPUT/TRAIN/
+		impModel: Is a SLADS model being physically implemented
+			- Uses data from ./INPUT/IMP/
+	
+	L1: Specifies general model training parameters
+        preventResultsOverwrite: Should existing results folders not be allowed to be overwritten
+        densityMeasures: Should the density measures be used
+        regModel: Which regression model should be used: LS, or SLADS-Net NN
+        algorithmNN: Which algorithm should be used for nearest neighbor
+        scanMethod: Which scanning method shoud be used: pointwise or linewise
+        partialLineFlag: If linewise, should partial segments of a line be scanned
+        lineMethod: What method should be used for linewise point selection
+        windowSize: Window size for approximate RD summation; 15 for 64x64, (width,height)
+        stopPerc: What percentage of pixels should be measured before termination
+        impSampleName: What name should be used for sample data obtained with impModel
 
-
-Multiple configuration files in the form of CONFIG_*descriptor*.py, can be generated for which SLADS will be run sequentially. RESULTS_*descriptor* folders will correspond with the numbering of the CONFIG files, with the RESULTS folder without a description, containing results from the last run performed. 
+	L2: Specifies variables that should not typically be changed
+        measurementPercs: What sampling percentages should be used during training
+        cValues: What possible c values should be tested for distortion calculations
+        animationGen: Should animations be generated for testing/implementation
+        lineRevistFlag: Should lines be allowed to be revisited
+        percRAM: Percent free RAM to allocate pool; leave enough free for results overhead
+        numFreeThreads: Number of processor threads to leave free
+        multiSubFeatures: Should the original/normlized extracted features be used, or the recon values
+        polyFit: Should a polynomial deg 2 fit be used, or a RBF sampler
+        numMasks: How many masks should be used for each percentage during training
+        consoleRunning: Running in a console/True, jupyter-notebook/False
+    
+    L3: Specifies variables that should not be changed
+        mzWeighting: How should the mz visualizations be weighted: 'equal'
+        LOOCV: Is LOOCV to be performed
+    
+    L4: Specifies variables that will most likely be removed, or radically altered in the future
+        imageType: Type of Images: D - for discrete (binary) image; C - for continuous
+        findStopThresh: Should a stopping threshold be found
     
 ###  **RUN**
 After configuration, to run the program perform the following command in the root directory:
@@ -269,10 +296,9 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 
 	TRAIN: Training results
 		bestC.npy: Determined optimal c value determined in training
-		Training Data Images: Training images with/without borders, summary sample images, c value curves 
-        Model Training Images: Visualized training convergence images
-        trainingSamples.p: Database of training sample inputs, suffix indicates intended acquisition method (point/line)
-        trainingDatabase.p: Final training database for each c value, suffix indicates intended acquisition method (point/line)
+		bestTheta.npy: Best model corresponding with the determined best c value
+		cValues.npy: List of possible c values that the best c value was chosen from
+		Images: Empty directory for debug use; observation of training convergence
 		trainedModels.npy: Trained models corresponding to each possible c value
 
 	TEST: Testing results
@@ -283,7 +309,6 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 					TEST_SAMPLE_1.avi: Video of scan for sample
 					TEST_SAMPLE_2.avi: Video of scan for sample
 		dataPrintout.csv: Averaged final test results
-        *.csv: Metric progressions averaged across testing samples
 		mzResults: Final measurement results at specified mz ranges
 			TEST_SAMPLE_1: Folder of final measurements at mz ranges
 			TEST_SAMPLE_2: Folder of final measurements at mz Ranges
@@ -303,7 +328,6 @@ Prior to engaging the physical equipment run SLADS with the **impModel** variabl
 # FAQ
 ###  **SLADS procdues an error: Could not connect to socket /tmp/ray/session_.../sockets/raylet**
 
-Although the error would suggest there is something wrong with the network connectivity (can double check firewall settings that port 6375 is allowed to receive/send traffic), it is actually more likely to be an issue with Ray's ability to connect to its dependent services. At this time there isn't a fix available, though some success can be had simply continuing to re-run the script until it does manage to connect. If using Mac OS X, you might be able to mitigate the issue (albeit with additional text written onscreen) by installing ray at version 0.8.6.
+Although the error would suggest there is something wrong with the network connectivity (can double check firewall settings that port 6375 is allowed to receive/send traffic), it is actually more likely to be an issue with available disk space. This can be handeled by manually specifying a temporary directory for the plasma memory storage on an alternate drive with more free space. Modify the **ray.init** command located in ./CODE/INTERNAL.py as shown below, replacing **/mntPoint/tmp** with a blank directory **tmp** located on another hard drive with more free space. 
 
-    pip3 uninstall ray
-    pip3 install ray==0.8.6
+	ray.init(num_cpus=num_threads, memory=amount_RAM, object_store_memory=int(amount_RAM*0.5), log_to_driver=False, logging_level=logging.ERROR, plasma_directory="/mntPoint/tmp")
