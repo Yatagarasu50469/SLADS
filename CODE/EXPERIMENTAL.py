@@ -14,7 +14,7 @@ def equipWait():
             break
 
 #Perform SLADS with external equipment
-def performImplementation(bestC, bestModel):
+def performImplementation(model, bestC):
 
     #Clean up files from previous runs if they exist
     if os.path.isfile('./INPUT/IMP/DONE'): os.remove('./INPUT/IMP/DONE')
@@ -27,7 +27,7 @@ def performImplementation(bestC, bestModel):
     images, massRanges, imageHeight, imageWidth = readScanData('./INPUT/IMP/')
     
     #Create a mask object
-    maskObject = MaskObject(imageWidth, imageHeight, [], 0)
+    maskObject = MaskObject(imageWidth, imageHeight, [], 0, scanMethod)
     
     #For each of the initial sets that must be obtained
     for setNum in range(0, len(maskObject.initialSets)):
@@ -48,10 +48,10 @@ def performImplementation(bestC, bestModel):
     impSample = Sample(impSampleName, images, massRanges, maskObject, mzWeights, dir_ImpResults)
     
     #Run SLADS
-    result = runSLADS(info, impSample, bestModel, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, bestCFlag=False)
+    result = runSLADS(impSample, bestModel, bestC, percToScan, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
     
     #Call completion/printout function
-    result.complete(0, [])
+    result.complete(0)
     
     #Indicate to equipment that the sample scan has concluded
     with open('./INPUT/IMP/DONE', 'w') as filehandle: filehandle.writelines('')

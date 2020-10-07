@@ -3,8 +3,8 @@
 #==================================================================
 
 #Given a set of sample paths, perform testing using a trained SLADS Model
-def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
-    
+def testSLADS(sortedTestingSampleFolders, model, bestC):
+
     #If consistentcy in the random generator is desired for comparisons
     if consistentSeed: np.random.seed(0)
     
@@ -17,19 +17,13 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
         images, massRanges, imageHeight, imageWidth = readScanData(testingSampleFolder + '/')
         
         #Create a mask object
-        maskObject = MaskObject(imageWidth, imageHeight, [], 0)
+        maskObject = MaskObject(imageWidth, imageHeight, initialPercToScan, scanMethod)
         
         #Weight images equally
         mzWeights = np.ones(len(images))/len(images)
 
         #Define information as a new Sample object
         testingSamples.append(Sample(dataSampleName, images, massRanges, maskObject, mzWeights, dir_TestingResults))
-
-    #If an animation will be produced
-    if animationGen:
-        dir_AnimationVideos = dir_Animations + 'Videos/'
-        if os.path.exists(dir_AnimationVideos): shutil.rmtree(dir_AnimationVideos)
-        os.makedirs(dir_AnimationVideos)
 
     #Create holding arrays for all of the results
     MSE_testingResults = []
@@ -53,10 +47,9 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
 
     for sampleNum in tqdm(range(0,len(testingSamples)), desc='Testing Samples', position=0, leave=True, ascii=True):
         t0 = time.time()
-        result = runSLADS(info, [testingSamples[sampleNum]], bestModel, stopPerc, 0, simulationFlag=True, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, bestCFlag=False)
-        
+        result = runSLADS([testingSamples[sampleNum]], model, bestC, percToScan, stopPerc, 0, simulationFlag=True, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
         time_testingResults.append(time.time()-t0)
-        result.complete(bestC, windowSize)
+        result.complete(bestC)
         MSE_testingResults.append(result.MSEList)
         SSIM_testingResults.append(result.SSIMList)
         PSNR_testingResults.append(result.PSNRList)
@@ -68,7 +61,7 @@ def testSLADS(sortedTestingSampleFolders, bestC, bestModel):
         threshTD_testingResults.append(result.threshTDList)
         ERDPSNR_testingResults.append(result.ERDPSNRList)
         perc_testingResults.append(result.percMeasuredList)
-        
+    
     #Extract percentage results at the specified precision
     percents, testingMSE_mean = percResults(MSE_testingResults, perc_testingResults, precision)
     percents, testingSSIM_mean = percResults(SSIM_testingResults, perc_testingResults, precision)
