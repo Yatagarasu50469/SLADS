@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    14 July 2020
+#DATE MODIFIED:	    7 October 2020
 #
-#VERSION NUM:	    0.6.8
+#VERSION NUM:	    0.7
 #
 #DESCRIPTION:	    Multichannel implementation of SLADS (Supervised Learning 
 #                   Algorithm for Dynamic Sampling with additional constraint to
@@ -38,17 +38,18 @@
 #               0.6.6   SLADS-NET NN, PSNR, and multi-config
 #               0.6.7   Clean asymmetric implementation with density features
 #               0.6.8   Fixed RD generation, added metrics, and Windows compatible
-#               ~0.7	CNN with dynamic window size
-#               ~0.8	Multichannel integration
-#               ~0.9	Tissue segmentation
-#               ~1.0	Initial release
+#               0.7     CNN/Unet/RBDN with dynamic window size
+#               0.71    c value selection performed before model training
+#               ~0.8    Multichannel integration
+#               ~0.9    Tissue segmentation
+#               ~1.0    Initial release
 #====================================================================
 
 #==================================================================
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum="0.6.8"
+versionNum="0.7"
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
@@ -82,7 +83,6 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
     Version:\t"+versionNum+"\n \
     Config:\t"+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0])
 
-
     destResultsFolder = './RESULTS_'+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0]
     
     #If the destination exists, output an error, or delete the folder
@@ -90,7 +90,6 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
         sys.exit('Error! - The destination results folder already exists')
     else:
         if os.path.exists(destResultsFolder): shutil.rmtree(destResultsFolder)
-
 
     #If a SLADS model needs to be trained
     if trainingModel:
@@ -101,25 +100,33 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
         #Obtain the file paths for the intended training data
         trainSamplePaths = natsort.natsorted(glob.glob(dir_TrainingData + '/*'), reverse=False)
 
-        sectionTitle('PERFORMING INTITIAL TRAINING COMPUTATIONS')
-        
-        #Perform initial computations
-        trainingSamples, trainingDatabase = initTrain(trainSamplePaths)
+        if not loadTrainingDataset:
+            sectionTitle('TRAINING DATABASE GENERATION')
+            
+            #Perform initial computations
+            initTrain(trainSamplePaths)
+
+        if scanMethod == 'pointwise':
+            trainingSamples = pickle.load(open(dir_TrainingResults + 'trainingSamples-pointwise.p', "rb" ))
+            trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase-pointwise.p', "rb" ))
+        elif scanMethod == 'linewise':
+            trainingSamples = pickle.load(open(dir_TrainingResults + 'trainingSamples-linewise.p', "rb" ))
+            trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase-linewise.p', "rb" ))
 
         sectionTitle('TRAINING MODEL(S)')
 
         #Generate SLADS model(s) for the given training database
-        trainingModels = trainModel(trainingDatabase)
+        trainModel(trainingDatabase, cValues)
 
         sectionTitle('DETERMINING BEST MODEL')
 
         #Identify the best Model; saves to training results
-        bestC, bestModel = findBestC(trainingSamples, trainingModels)
+        if not bestCFromTrainingData: bestC = findBestC(trainingSamples)
 
-    #Load in the best model information if training wasn't performed
-    if not trainingModel:
+    #If a new model shouldn't be generated, then the best c value should have already been selected
+    if not trainingModel or bestCFromTrainingData:
         bestC = np.load(dir_TrainingResults + 'bestC.npy', allow_pickle=True).item()
-        bestModel = np.load(dir_TrainingResults + 'bestModel.npy', allow_pickle=True).item()
+        print('Loaded c value determined by PSNR curves generated in the initial computations')
 
     #If a SLADS model needs to be tested
     if testingModel:
@@ -132,7 +139,7 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
         testSamplePaths = natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False)
 
         #Perform testing
-        testSLADS(testSamplePaths, bestC, bestModel)
+        testSLADS(testSamplePaths, bestC)
 
     #If Leave-One-Out Cross Validation is to be performed
     if LOOCV:
@@ -147,17 +154,11 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
         exec(open("./CODE/EXPERIMENTAL.py").read())
 
         #Begin performing an implementation
-        performImplementation(bestC, bestModel)
+        performImplementation(bestC)
 
-    sectionTitle('DUPLICATING RESULTS')
-    
     #Copy the results folder
     destination = shutil.copytree('./RESULTS', destResultsFolder)
-    
-    #Pause to ensure system had time to finish the copy
-    time.sleep(10)
 
-    #Attempt to shutdown multiprocessing server
     try:
         ray.shutdown()
     except:
