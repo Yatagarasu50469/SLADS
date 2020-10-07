@@ -283,7 +283,7 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 					TEST_SAMPLE_1.avi: Video of scan for sample
 					TEST_SAMPLE_2.avi: Video of scan for sample
 		dataPrintout.csv: Averaged final test results
-        *.csv: Metric progressions averaged across testing samples
+		*.csv: Metric progressions averaged across testing samples
 		mzResults: Final measurement results at specified mz ranges
 			TEST_SAMPLE_1: Folder of final measurements at mz ranges
 			TEST_SAMPLE_2: Folder of final measurements at mz Ranges
