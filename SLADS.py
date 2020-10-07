@@ -7,7 +7,7 @@
 #
 #DATE MODIFIED:	    7 October 2020
 #
-#VERSION NUM:	    0.71
+#VERSION NUM:	    0.7.1
 #
 #DESCRIPTION:	    Multichannel implementation of SLADS (Supervised Learning 
 #                   Algorithm for Dynamic Sampling with additional constraint to
@@ -39,7 +39,7 @@
 #               0.6.7   Clean asymmetric implementation with density features
 #               0.6.8   Fixed RD generation, added metrics, and Windows compatible
 #               0.7     CNN/Unet/RBDN with dynamic window size
-#               0.71    c value selection performed before model training
+#               0.7.1   c value selection performed before model training
 #               ~0.8    Multichannel integration
 #               ~0.9    Tissue segmentation
 #               ~1.0    Initial release
