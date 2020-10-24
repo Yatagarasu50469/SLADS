@@ -17,7 +17,7 @@ class TrainingSample:
         self.RDImage = RDImage
 
 #Extract model performance/statistics from the validation data, must be run prior to epochDisplay
-def epochCalculate(model, inputValidationTensors, outputValidationTensors, validationPadding, totalValidationPSNR):
+def epochCalculate(model, inputValidationTensors, outputValidationTensors, validationShapes, totalValidationPSNR):
     
     #If there are no validation tensors, then return empty data
     if len(inputValidationTensors) == 0: return [], 0, []
@@ -33,10 +33,9 @@ def epochCalculate(model, inputValidationTensors, outputValidationTensors, valid
         ERDImages.append(pred_ERD)
         RD = outputValidationTensors[index][0,:,:,0].numpy()
         
-        #Remove network compatability padding
-        dimWithoutPadding = np.asarray(pred_ERD.shape)-validationPadding[index]
-        pred_ERD = pred_ERD[:dimWithoutPadding[0],:dimWithoutPadding[1]]
-        RD = RD[:dimWithoutPadding[0],:dimWithoutPadding[1]]
+        #Revert to original shapes
+        pred_ERD = resize(pred_ERD, (validationShapes[index]), order=0)
+        RD = resize(RD, (validationShapes[index]), order=0)
         
         #Determine statistics
         psnrList.append(compare_psnr(RD, pred_ERD, data_range=pred_ERD.max() - pred_ERD.min()))
@@ -48,7 +47,7 @@ def epochCalculate(model, inputValidationTensors, outputValidationTensors, valid
     return psnrList, avgPSNR, ERDImages
 
 #Visualize the network's current training progression/status
-def epochDisplay(epoch, trainingDatabase, inputValidationTensors, outputValidationTensors, validationPadding, totalValidationPSNR, totalTrainingLosses, totalValidationLosses, cValue, bestCIndex, numTraining, patience, maxPatience, bestPSNR, bestEpoch, psnrList, avgPSNR, ERDImages):
+def epochDisplay(epoch, trainingDatabase, inputValidationTensors, outputValidationTensors, validationShapes, totalValidationPSNR, totalTrainingLosses, totalValidationLosses, cValue, bestCIndex, numTraining, patience, maxPatience, bestPSNR, bestEpoch, psnrList, avgPSNR, ERDImages):
     
     #If there are no validation tensors, then just save a plot of the training losses
     f = plt.figure()
@@ -70,7 +69,7 @@ def epochDisplay(epoch, trainingDatabase, inputValidationTensors, outputValidati
         
         return 0
     
-    f = plt.figure(figsize=(25,20))
+    f = plt.figure(figsize=(35,25))
     f.subplots_adjust(wspace=0.2, hspace=0.2)
     plt.suptitle('Epoch: '+str(epoch)+'\nPatience: '+str(patience)+'/'+str(maxPatience)+'   Best PSNR: '+str(round(bestPSNR, 4))+' at Epoch: '+str(bestEpoch), fontsize=20, fontweight='bold', y = 0.92)
 
@@ -81,34 +80,39 @@ def epochDisplay(epoch, trainingDatabase, inputValidationTensors, outputValidati
         
         inputValidationTensor = inputValidationTensors[sampleLocations[rowNum-1]]
         outputValidationTensor = outputValidationTensors[sampleLocations[rowNum-1]]
-        validationTensorPadding = validationPadding[sampleLocations[rowNum-1]]
+        validationTensorShape = validationShapes[sampleLocations[rowNum-1]]
         
         #Retrieve data
         RD = outputValidationTensor[0,:,:,0].numpy()
         measuredImage = inputValidationTensor[0,:,:,0].numpy()
+        reconValueImage = inputValidationTensor[0,:,:,1].numpy()
         pred_ERD = ERDImages[sampleLocations[rowNum-1]]
         PSNR = psnrList[sampleLocations[rowNum-1]]
         
-        #Remove network compatability padding
-        dimWithoutPadding = np.asarray(pred_ERD.shape)-validationTensorPadding
-        pred_ERD = pred_ERD[:dimWithoutPadding[0],:dimWithoutPadding[1]]
-        RD = RD[:dimWithoutPadding[0],:dimWithoutPadding[1]]
-        measuredImage = measuredImage[:dimWithoutPadding[0],:dimWithoutPadding[1]]
+        #Revert to original shapes
+        pred_ERD = resize(pred_ERD, (validationTensorShape), order=0)
+        RD = resize(RD, (validationTensorShape), order=0)
+        measuredImage = resize(measuredImage, (validationTensorShape), order=0)
+        reconValueImage = resize(reconValueImage, (validationTensorShape), order=0)
         
-        ax = plt.subplot2grid((3,3), (rowNum,0))
+        ax = plt.subplot2grid((3,4), (rowNum,0))
         ax.imshow(measuredImage, aspect='auto', cmap='hot')
-        ax.set_title('Measured', fontsize=15, fontweight='bold')
+        ax.set_title('Input: Measured Values', fontsize=15, fontweight='bold')
+
+        ax = plt.subplot2grid((3,4), (rowNum,1))
+        ax.imshow(reconValueImage, aspect='auto', cmap='hot')
+        ax.set_title('Input: Recon Values', fontsize=15, fontweight='bold')
         
-        ax = plt.subplot2grid((3,3), (rowNum,1))
+        ax = plt.subplot2grid((3,4), (rowNum,2))
         im = ax.imshow(RD, aspect='auto', vmin=0.0)
         ax.set_title('RD', fontsize=15, fontweight='bold')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
         
-        ax = plt.subplot2grid((3,3), (rowNum,2))
+        ax = plt.subplot2grid((3,4), (rowNum,3))
         im = ax.imshow(pred_ERD, aspect='auto')
         ax.set_title('ERD PSNR: ' + str(round(PSNR,4)), fontsize=15, fontweight='bold')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
-    
+
     ax = plt.subplot2grid((3,2), (0,0))
     if epoch < 1:
         ax.plot()
@@ -157,14 +161,14 @@ def generateDataset(dataset, RDValues, percValues, sample, avgGroundTruthImage, 
                 sample.avgImage = avgGroundTruthImage*maskObject.mask
                 firstIteration = False
             else:
-                maskObject, newIdxs = findNewMeasurementIdxs(maskObject, sample, RDImage, measurementPerc-percMeasured, True)
+                maskObject, newIdxs = findNewMeasurementIdxs(maskObject, sample, RDImage, measurementPerc-percMeasured, 'random')
                 sample, maskObject = performMeasurements(sample, maskObject, newIdxs, True)
             
             #Update the percentage by what was actually measured
             percMeasured = (np.sum(maskObject.mask)/maskObject.area)*100
             
             #Find neighbor information
-            neighborIndices, neighborWeights, neighborDistances = findNeighbors(maskObject, maskObject.measuredIdxs, maskObject.unMeasuredIdxs)
+            neighborIndices, neighborWeights, neighborDistances = findNeighbors(maskObject)
 
             #Compute reconstruction
             reconImage = performRecon(sample.avgImage, maskObject, neighborIndices, neighborWeights, neighborDistances)
@@ -296,12 +300,8 @@ def initTrain(sortedTrainingSampleFolders):
                 trainingDatabase[cNum] = trainingDatabase[cNum]+dataset
 
     #Save the database and samples
-    if scanMethod == 'pointwise':
-        pickle.dump(trainingSamples, open(dir_TrainingResults + 'trainingSamples-pointwise.p', 'wb'))
-        pickle.dump(trainingDatabase, open(dir_TrainingResults + 'trainingDatabase-pointwise.p', 'wb'))
-    elif scanMethod == 'linewise':
-        pickle.dump(trainingSamples, open(dir_TrainingResults + 'trainingSamples-linewise.p', 'wb'))
-        pickle.dump(trainingDatabase, open(dir_TrainingResults + 'trainingDatabase-linewise.p', 'wb'))
+    pickle.dump(trainingSamples, open(dir_TrainingResults + 'trainingSamples.p', 'wb'))
+    pickle.dump(trainingDatabase, open(dir_TrainingResults + 'trainingDatabase.p', 'wb'))
 
     #Determine the c value that minimizes the total distortion in scanned samples
     areaUnderCurveList = []
@@ -310,7 +310,7 @@ def initTrain(sortedTrainingSampleFolders):
         PSNRLists = []
         percLists = []
         for sampleNum in tqdm(range(0, len(trainingSamples)), desc = 'Samples', leave=False, ascii=True):
-            result = runSLADS(trainingSamples, None, cValues[cNum], percToScan, stopPerc, sampleNum, simulationFlag=True, trainPlotFlag=True, animationFlag=False, tqdmHide=False, oracleFlag=True, bestCFlag=True)
+            result = runSLADS(trainingSamples, None, scanMethod, cValues[cNum], percToScan, stopPerc, sampleNum, simulationFlag=True, trainPlotFlag=True, animationFlag=False, tqdmHide=False, oracleFlag=True, bestCFlag=True)
             PSNRList, percMeasuredList = result.complete(None)
             PSNRLists.append(PSNRList)
             percLists.append(percMeasuredList)
@@ -348,74 +348,65 @@ def initTrain(sortedTrainingSampleFolders):
 
 #Given a training database, create SLADS Model(s), noting there exists a single training sample for numCValues*numMeasurementPercs*numTrainingSamples
 def trainModel(trainingDatabase, bestCIndex):
-
-    #Copy learning rate into a local variable (since it can be manipulated during training)
-    currentLearningRate = copy.deepcopy(learningRate)
     
     #Create arrays to hold training data, network inputs, and metadata
     inputTensors = []
     outputTensors = []
-    imagesPadding = []
+    imagesShapes = []
     
     for trainingSample in tqdm(trainingDatabase[bestCIndex], desc = 'Setup', leave=True, ascii=True):
         
         #Extract data of interest from the database
-        dataSampleName = trainingSample.name
-        maskNum = trainingSample.maskNum
-        measurementPerc = trainingSample.measurementPerc
-        cValue = trainingSample.cValue
-        mask = trainingSample.maskObject.mask
         reconImage = trainingSample.reconImage
-        measuredImage = trainingSample.measuredImage
-        RDImage = trainingSample.RDImage
         maskObject = trainingSample.maskObject
-        avgGroundTruthImage = trainingSample.avgGroundTruthImage
-
+        
         #Compute PSNR between reconstruction and the ground truth
-        reconPSNR = compare_psnr(avgGroundTruthImage, reconImage, data_range=reconImage.max() - reconImage.min())
-
+        reconPSNR = compare_psnr(trainingSample.avgGroundTruthImage, reconImage, data_range=reconImage.max() - reconImage.min())
+        
+        #Use nan values in measured image
+        measuredImage = np.empty((maskObject.mask.shape))
+        measuredImage[np.where(maskObject.mask)] = trainingSample.avgGroundTruthImage[np.where(maskObject.mask)]
+        measuredImage[np.where(maskObject.mask==0)] = np.nan
+        
         #Compute features of the reconstruction
-        featureImage = featureExtractor(maskObject, measuredImage)
-
+        featureImage = featureExtractor(maskObject, measuredImage, reconImage)
+        
         #Extract/create the input/output data
         inputImage = featureImage
-        outputImage = RDImage
-
+        outputImage = trainingSample.RDImage
+        
         #Convert to symmetric tensors
         inputTensor, originalShape = makeTensor(inputImage)
         outputTensor, originalShape = makeTensor(outputImage)
-
-        #Convert to padded tensors
-        inputTensor, padding = makeTensor(inputImage)
-        outputTensor, padding = makeTensor(outputImage)
         
         inputTensors.append(inputTensor)
         outputTensors.append(outputTensor)
-        imagesPadding.append(padding)
-
+        imagesShapes.append(originalShape)
+    
     #Randomly shuffle the input/output tensors
     #temp = list(zip(inputTensors, outputTensors))
     #random.shuffle(temp)
     #inputTensors, outputTensors = zip(*temp)
     
     #Determine the number of samples to be used for training, rest are used for validation
-    numTraining = (int(len(trainingSamples)*trainingSplit)*(len(measurementPercs)))
     
+    numTraining = (int(len(trainingSamples)*trainingSplit)*(len(measurementPercs)))
+
     #If there is no validation set, then use the training data for visualization/validation/early-cutoff values
     if numTraining == len(trainingDatabase[bestCIndex]):
         inputTrainingTensors = inputTensors
         outputTrainingTensors = outputTensors
-        trainingPadding = imagesPadding
+        trainingShapes = imagesShapes
         inputValidationTensors = []
         outputValidationTensors = []
-        validationPadding = []
+        validationShapes = []
     else:
         inputTrainingTensors = inputTensors[:numTraining]
         outputTrainingTensors = outputTensors[:numTraining]
-        trainingPadding = imagesPadding[:numTraining]
+        trainingShapes = imagesShapes[:numTraining]
         inputValidationTensors = inputTensors[numTraining:]
         outputValidationTensors = outputTensors[numTraining:]
-        validationPadding = imagesPadding[numTraining:]
+        validationShapes = imagesShapes[numTraining:]
 
     #Go through the training tensors and split according to shape
     trainingShapes = [inputTrainingTensor.shape.as_list() for inputTrainingTensor in inputTrainingTensors]
@@ -432,7 +423,7 @@ def trainModel(trainingDatabase, bestCIndex):
         for batch in outputBatches: globalOutputBatches.append(batch)
 
     #Initialize model optimizer and loss functions
-    trainOptimizer = tf.keras.optimizers.Nadam(learning_rate=currentLearningRate)
+    trainOptimizer = tf.keras.optimizers.Nadam(learning_rate=learningRate)
 
     #Define and compile the network appropriate for the number of features
     try:
@@ -454,14 +445,13 @@ def trainModel(trainingDatabase, bestCIndex):
     totalValidationPSNR = []
 
     #Calculate results for the validation data
-    psnrList, currentValidationPSNR, ERDImages = epochCalculate(model, inputValidationTensors, outputValidationTensors, validationPadding, totalValidationPSNR)
-
+    psnrList, currentValidationPSNR, ERDImages = epochCalculate(model, inputValidationTensors, outputValidationTensors, validationShapes, totalValidationPSNR)
+    
     #Set initial values for visuals
     patience, bestPSNR, bestEpoch = 0, 0, 0
-
+    
     #Perform an initial visualization if enabled
-    if trainingProgressionVisuals:
-        epochDisplay(0, trainingDatabase, inputValidationTensors, outputValidationTensors, validationPadding, totalValidationPSNR, totalTrainingLosses, totalValidationLosses, cValues[bestCIndex], bestCIndex, numTraining, patience, maxPatience, bestPSNR, bestEpoch, psnrList, currentValidationPSNR, ERDImages)
+    if trainingProgressionVisuals: epochDisplay(0, trainingDatabase, inputValidationTensors, outputValidationTensors, validationShapes, totalValidationPSNR, totalTrainingLosses, totalValidationLosses, cValues[bestCIndex], bestCIndex, numTraining, patience, maxPatience, bestPSNR, bestEpoch, psnrList, currentValidationPSNR, ERDImages)
 
     #Train the network
     for epoch in tqdm(range(1,numEpochs+1), desc='Epoch', leave=True, ascii=True):
@@ -489,8 +479,8 @@ def trainModel(trainingDatabase, bestCIndex):
             totalValidationMSEs.append(np.mean(epochValidationMSEs))
 
         #Calculate results for the validation data
-        psnrList, currentValidationPSNR, ERDImages = epochCalculate(model, inputValidationTensors, outputValidationTensors, validationPadding, totalValidationPSNR)
-
+        psnrList, currentValidationPSNR, ERDImages = epochCalculate(model, inputValidationTensors, outputValidationTensors, validationShapes, totalValidationPSNR)
+        
         #If the number of minimum epochs has been reached, but the current result is worse than the best, increase the counter for early cutoff
         if earlyCutoff and (epoch >= minimumEpochs) and (currentValidationPSNR <= bestPSNR):
             patience += 1
@@ -501,18 +491,14 @@ def trainModel(trainingDatabase, bestCIndex):
             patience = 0
             bestPSNR = currentValidationPSNR
             bestEpoch = epoch
-            
-            #If displaying training progression, then have it do so even if its not due for this iteration
-            if trainingProgressionVisuals: epochDisplay(epoch, trainingDatabase, inputValidationTensors, outputValidationTensors, validationPadding, totalValidationPSNR, totalTrainingLosses, totalValidationLosses, cValues[bestCIndex], bestCIndex, numTraining, patience, maxPatience, bestPSNR, bestEpoch, psnrList, currentValidationPSNR, ERDImages)
 
+            #If displaying training progression, then have it do so even if its not due for this iteration
+            if trainingProgressionVisuals:
+                epochDisplay(epoch, trainingDatabase, inputValidationTensors, outputValidationTensors, validationShapes, totalValidationPSNR, totalTrainingLosses, totalValidationLosses, cValues[bestCIndex], bestCIndex, numTraining, patience, maxPatience, bestPSNR, bestEpoch, psnrList, currentValidationPSNR, ERDImages)
+        
         #Otherwise, check if a visualization should be done for this iteration
         elif trainingProgressionVisuals and (epoch % trainingVizSteps == 0):
-            epochDisplay(epoch, trainingDatabase, inputValidationTensors, outputValidationTensors, validationPadding, totalValidationPSNR, totalTrainingLosses, totalValidationLosses, cValues[bestCIndex], bestCIndex, numTraining, patience, maxPatience, bestPSNR, bestEpoch, psnrList, currentValidationPSNR, ERDImages)
-
+            epochDisplay(epoch, trainingDatabase, inputValidationTensors, outputValidationTensors, validationShapes, totalValidationPSNR, totalTrainingLosses, totalValidationLosses, cValues[bestCIndex], bestCIndex, numTraining, patience, maxPatience, bestPSNR, bestEpoch, psnrList, currentValidationPSNR, ERDImages)
+        
         #If the model has not improved within maxPatience (+1 to ensure final visualization) epochs then stop training
-        if earlyCutoff and (patience >= maxPatience+1):
-            return model
-            #if currentLearningRate <= 1e-6: return model
-            #currentLearningRate = currentLearningRate*0.1
-            #K.set_value(model.optimizer.learning_rate, currentLearningRate)
-            #patience = 0
+        if earlyCutoff and (patience >= maxPatience+1): return model

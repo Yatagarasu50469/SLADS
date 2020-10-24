@@ -3,7 +3,7 @@
 #==================================================================
 
 #==================================================================
-#LIBRARY IMPORTS
+#GENERAL LIBRARY IMPORTS
 #==================================================================
 from __future__ import absolute_import, division, print_function
 import cv2
@@ -36,12 +36,6 @@ import sklearn
 import time
 import warnings
 
-#Make tensorflow only report errors (3), warnings (2), information (1), all (0)
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-import tensorflow as tf
-tf.get_logger().setLevel('ERROR')
-warnings.filterwarnings("ignore")
-
 from datetime import datetime
 from IPython import display
 from IPython.core.debugger import Tracer
@@ -61,19 +55,35 @@ from sklearn.neural_network import MLPRegressor as nnr
 from sklearn.preprocessing import *
 from sklearn.utils import shuffle
 from skimage.util import view_as_windows as viewW
-
 from skimage import filters
 from skimage.filters import *
 from skimage.metrics import peak_signal_noise_ratio as compare_psnr
-#from skimage.measure import compare_psnr
 from skimage.metrics import structural_similarity
 from skimage.transform import resize
 from sobol import *
-from tensorflow import keras
-from tensorflow.keras.layers import *
-from tensorflow.keras.optimizers import *
 from tqdm.auto import tqdm
 
+#==================================================================
+#TENSORFLOW IMPORT AND SETUP
+#==================================================================
+
+#Make tensorflow only report errors (3), warnings (2), information (1), all (0)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import tensorflow as tf
+tf.get_logger().setLevel('ERROR')
+warnings.filterwarnings("ignore")
+
+#Import remaining needed tensorflow libraries
+from tensorflow import keras
+from tensorflow.keras import backend as K
+from tensorflow.keras.layers import *
+from tensorflow.keras.optimizers import *
+
+#==================================================================
+
+#==================================================================
+#OS SPECIFIC IMPORTS
+#==================================================================
 #Determine system operating system
 systemOS = platform.system()
 
@@ -82,5 +92,4 @@ if systemOS == 'Windows':
     from ctypes import windll, create_string_buffer
     import struct
 
-from tensorflow.keras import backend as K
 #==================================================================

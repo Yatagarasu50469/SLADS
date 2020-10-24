@@ -5,9 +5,11 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    7 October 2020
+#DATE MODIFIED:	    24 October 2020
 #
-#VERSION NUM:	    0.7.1
+#VERSION NUM:	    0.7.2
+#
+#LICENSE:           GNU General Public License v3.0
 #
 #DESCRIPTION:	    Multichannel implementation of SLADS (Supervised Learning 
 #                   Algorithm for Dynamic Sampling with additional constraint to
@@ -38,8 +40,10 @@
 #               0.6.6   SLADS-NET NN, PSNR, and multi-config
 #               0.6.7   Clean asymmetric implementation with density features
 #               0.6.8   Fixed RD generation, added metrics, and Windows compatible
+#               0.6.9   Do not use -- Original SLADS(-Net) variations for comparison
 #               0.7     CNN/Unet/RBDN with dynamic window size
 #               0.7.1   c value selection performed before model training
+#               0.7.2   Remove custom pkg. dependency, use NN resize, recon+measured input
 #               ~0.8    Multichannel integration
 #               ~0.9    Tissue segmentation
 #               ~1.0    Initial release
@@ -49,7 +53,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum="0.7.1"
+versionNum="0.7.2"
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
@@ -80,6 +84,7 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
      ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀\n \
     Author(s):\tDavid Helminiak\t\tEECE Marquette University\n \
     \t\tDong Hye Ye\t\tEECE Marquette University\n \
+    Licence:\tGNU General Public License v3.0\n \
     Version:\t"+versionNum+"\n \
     Config:\t"+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0])
 
@@ -110,12 +115,8 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
             bestC = np.load(dir_TrainingResults + 'bestC.npy', allow_pickle=True).item()
             bestCIndex = np.load(dir_TrainingResults + 'bestCIndex.npy', allow_pickle=True).item()
 
-        if scanMethod == 'pointwise':
-            trainingSamples = pickle.load(open(dir_TrainingResults + 'trainingSamples-pointwise.p', "rb" ))
-            trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase-pointwise.p', "rb" ))
-        elif scanMethod == 'linewise':
-            trainingSamples = pickle.load(open(dir_TrainingResults + 'trainingSamples-linewise.p', "rb" ))
-            trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase-linewise.p', "rb" ))
+        trainingSamples = pickle.load(open(dir_TrainingResults + 'trainingSamples.p', "rb" ))
+        trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase.p', "rb" ))
 
         sectionTitle('TRAINING MODEL(S)')
 

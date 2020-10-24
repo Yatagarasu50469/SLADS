@@ -47,7 +47,7 @@ def testSLADS(sortedTestingSampleFolders, model, bestC):
 
     for sampleNum in tqdm(range(0,len(testingSamples)), desc='Testing Samples', position=0, leave=True, ascii=True):
         t0 = time.time()
-        result = runSLADS([testingSamples[sampleNum]], model, bestC, percToScan, stopPerc, 0, simulationFlag=True, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
+        result = runSLADS([testingSamples[sampleNum]], model, scanMethod, bestC, percToScan, stopPerc, 0, simulationFlag=True, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
         time_testingResults.append(time.time()-t0)
         result.complete(bestC)
         MSE_testingResults.append(result.MSEList)

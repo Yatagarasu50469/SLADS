@@ -4,9 +4,6 @@
 
 #AESTHETIC SETUP
 #==================================================================
-#Clear the screen
-os.system('cls' if os.name=='nt' else 'clear')
-
 #Determine console size if applicable
 if consoleRunning and systemOS != 'Windows':
     consoleRows, consoleColumns = os.popen('stty size', 'r').read().split()
@@ -30,11 +27,21 @@ if consoleRunning: matplotlib.use('Agg')
 if consistentSeed: np.random.seed(0)
 
 #Set the multiple for which the input data must be for network compatability
+if modelDef == 'cnn':
+    numConvolutionLayers = 1
+elif modelDef == 'unet':
+    numConvolutionLayers = 3
+elif modelDef == 'rbdn':
+    numConvolutionLayers = 3
+
 depthFactor=2**numConvolutionLayers
 
 #Initialize multiprocessing pool server
 ray.shutdown()
 ray.init(logging_level=logging.ERROR)
+
+#Force tensorflow to use (a) specific GPU(s) if indicated
+if availableGPUs != None: os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
 
 #PATH/DIRECTORY SETUP
 #==================================================================
@@ -101,3 +108,5 @@ if animationGen:
     if os.path.exists(dir_mzResults): shutil.rmtree(dir_mzResults)    
     os.makedirs(dir_mzResults)
 
+#Clear the screen
+os.system('cls' if os.name=='nt' else 'clear')

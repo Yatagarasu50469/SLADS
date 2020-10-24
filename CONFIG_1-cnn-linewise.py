@@ -32,7 +32,7 @@ impSampleName = 'SAMPLE_1'
 ##################################################################
 
 #Which scanning method shoud be used: pointwise or linewise
-scanMethod = 'pointwise'
+scanMethod = 'linewise'
 
 #Stopping percentage for number of acquired pixels
 stopPerc = 40

@@ -16,7 +16,8 @@
 
 
     NAME: 		SLADS
-    VERSION NUM:	0.7.1
+    VERSION NUM:	0.7.2
+    LICENSE:    GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
 			points along a single axis. 
@@ -46,8 +47,10 @@
                     0.6.6   SLADS-NET NN, PSNR, asymFinal, and multi-config
                     0.6.7   Clean asymmetric implementation with density features
                     0.6.8   Fixed RD generation, added metrics, and Windows compatible
+                    0.6.9   Do not use -- Original SLADS(-Net) variations for comparison
                     0.7     CNN/Unet/RBDN with dynamic window size
-                    0.7.1    c value selection performed before model training
+                    0.7.1   c value selection performed before model training
+                    0.7.2   Remove custom pkg. dependency, use NN resize, recon+measured input
                     ~0.8    Multichannel integration
                     ~0.9    Tissue segmentation
                     ~1.0    Initial release
@@ -173,9 +176,6 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 
 	$ python3 --m pip install --upgrade pip
 	$ pip3 install opencv-python datetime glob3 IPython joblib pandas psutil matplotlib pillow ray scipy sobol sobol_seq natsort multiprocess ray scikit-image sklearn tqdm
-	$ cd ./CODE/scikit-learn
-	$ make clean
-	$ pip3 install --verbose --no-build-isolation --editable .
 
 TensorFlow is not currently officially supported on OS X machines. Although official support may become available in the  future, installation and patch instructions for Tensorflow v2.2.0 may be found at https://github.com/TomHeaven/tensorflow-osx-build. These instructions have been confirmed to work on a OS X build with a 1080 TI GPU. Instructions for v2.3.0 are not currently functional with Python 3.8. 
 
@@ -186,9 +186,6 @@ TensorFlow is not currently officially supported on OS X machines. Although offi
 	$ sudo apt-get install python3-pip
 	$ python3 -m pip install --upgrade pip
 	$ pip3 install opencv-python datetime glob3 IPython joblib pandas psutil matplotlib pillow ray setuptools scipy sobol sobol_seq tensorflow natsort multiprocess scikit-image sklearn tqdm
-	$ cd ./CODE/scikit-learn
-	$ make clean
-	$ pip3 install --verbose --no-build-isolation --editable .
 
 
 ### **Installation on Windows 10**
@@ -209,11 +206,8 @@ Note that the actual location of the specified file may vary depending on potent
 
 Navigate inside the command prompt to the SLADS base directory then enter the following commands:
 
-	$ cd CODE\scikit-learn
 	$ python3 -m pip install --upgrade pip
-	$ pip3 install cython wheel numpy
-	$ pip3 install --verbose --no-build-isolation --editable .
-	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib pillow ray scipy sobol sobol_seq natsort multiprocess scikit-image tqdm tensorflow opencv-python pydot graphviz 
+	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib pillow ray scipy sobol sobol_seq natsort multiprocess scikit-image sklearn tqdm tensorflow numpy opencv-python pydot graphviz
 
 # TRAINING/TESTING PROCEDURE
 

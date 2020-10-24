@@ -48,10 +48,10 @@ def performImplementation(model, bestC):
     impSample = Sample(impSampleName, images, massRanges, maskObject, mzWeights, dir_ImpResults)
     
     #Run SLADS
-    result = runSLADS(impSample, bestModel, bestC, percToScan, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
+    result = runSLADS(impSample, bestModel, scanMethod, bestC, percToScan, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
     
     #Call completion/printout function
-    result.complete(0)
+    result.complete(None)
     
     #Indicate to equipment that the sample scan has concluded
     with open('./INPUT/IMP/DONE', 'w') as filehandle: filehandle.writelines('')
