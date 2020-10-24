@@ -17,7 +17,7 @@
 
     NAME: 		SLADS
     VERSION NUM:	0.7.2
-    LICENSE:    GNU General Public License v3.0
+    LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
 			points along a single axis. 
