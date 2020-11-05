@@ -17,7 +17,7 @@
 
     NAME: 		SLADS
     VERSION NUM:	0.6.9
-    LICENSE:    GNU General Public License v3.0
+    LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
 			points along a single axis. 
@@ -32,29 +32,29 @@
     		NIH Grant 1UG3HL145593-01
     
     GLOBAL
-    CHANGELOG:    0.1     Multithreading adjustments to pointwise SLADS
-    0.1.1   Line constraints, concatenation, pruning, and results organization            
-    0.2     Line bounded constraints addition
-    0.3    Complete code rewrite, computational improvements
-    0.4    Class/function segmentation
-    0.5    Overhead reduction; switch multiprocessing package
-    0.6    Modifications for Nano-DESI microscope integration
-    0.6.1   Model robustness and reduction of memory overhead
-    0.6.2   Model loading and animation production patches
-    0.6.3   Start/End point selection with Canny
-    0.6.4   Custom knn metric, SSIM calc, init computations
-    0.6.5   Clean variables and resize to physical
-    0.6.6   SLADS-NET NN, PSNR, asymFinal, and multi-config
-    0.6.7   Clean asymmetric implementation with density features
-    0.6.8   Fixed RD generation, added metrics, and Windows compatible
-    0.7     CNN/Unet/RBDN with dynamic window size
-    0.7.1   c value selection performed before model training
-    0.7.2   Remove custom pkg. dependency, use NN resize, recon+measured input
-    0.7.3   Start/End line patch, SLADS(-Net) options, normalization optimization
-    0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
-    ~0.8    Multichannel integration
-    ~0.9    Tissue segmentation
-    ~1.0    Initial release
+    CHANGELOG:	0.1     Multithreading adjustments to pointwise SLADS
+    		0.1.1   Line constraints, concatenation, pruning, and results organization            
+    		0.2     Line bounded constraints addition
+    		0.3    Complete code rewrite, computational improvements
+    		0.4    Class/function segmentation
+    		0.5    Overhead reduction; switch multiprocessing package
+    		0.6    Modifications for Nano-DESI microscope integration
+    		0.6.1   Model robustness and reduction of memory overhead
+    		0.6.2   Model loading and animation production patches
+    		0.6.3   Start/End point selection with Canny
+    		0.6.4   Custom knn metric, SSIM calc, init computations
+    		0.6.5   Clean variables and resize to physical
+    		0.6.6   SLADS-NET NN, PSNR, asymFinal, and multi-config
+    		0.6.7   Clean asymmetric implementation with density features
+    		0.6.8   Fixed RD generation, added metrics, and Windows compatible
+    		0.7     CNN/Unet/RBDN with dynamic window size
+    		0.7.1   c value selection performed before model training
+    		0.7.2   Remove custom pkg. dependency, use NN resize, recon+measured input
+		0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
+    		0.7.3   Start/End line patch, SLADS(-Net) options, normalization optimization
+    		~0.8    Multichannel integration
+    		~0.9    Tissue segmentation
+    		~1.0    Initial release
 
 # PROGRAM FILE STRUCTURE
 **Note:** If testing/training is not to be performed, then contents of 'TEST', 'TRAIN', may be disregarded, but a trained SLADS model must be present in: ./RESULTS/TRAIN/.
