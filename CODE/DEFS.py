@@ -755,6 +755,7 @@ def findNewMeasurementIdxs(info, maskObject, sample, model, reconImage, ERDValue
         #==========================================
         #If not partial lines, select all ordered points between the first and last position with an ERD above threshold
         if (not partialLineFlag) and (len(newIdxs) > 1):
+            newIdxs = np.asarray(newIdxs)
             orderedNewIdxs = newIdxs[np.argsort(newIdxs[:,0]*newIdxs[:,1])]
             startLocation, endLocation = orderedNewIdxs[0], orderedNewIdxs[len(orderedNewIdxs)-1]
             newIdxs = np.asarray(lineToScanIdxs[lineToScanIdxs.index(startLocation.tolist()):lineToScanIdxs.index(endLocation.tolist())])
