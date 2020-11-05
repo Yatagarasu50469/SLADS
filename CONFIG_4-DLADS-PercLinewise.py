@@ -157,7 +157,7 @@ trainingVizSteps = 10
 
 ##################################################################
 #PARAMETERS: L3
-#GENERALLY NOT CHANGED
+#RUNTIME/OUTPUT SETTINGS
 ##################################################################
 
 #Which system GPU(s) are available; ('None', whichever is available; '-1', CPU only)
