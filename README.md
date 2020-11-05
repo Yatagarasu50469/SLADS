@@ -17,7 +17,7 @@
 
     NAME: 		SLADS
     VERSION NUM:	0.7.3
-    LICENSE:    GNU General Public License v3.0
+    LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
 			points along a single axis. 
@@ -109,7 +109,7 @@
     	|	|------->TRAIN
     	|	|	|------->bestC.npy
     	|	|	|------->bestCIndex.npy
-        |    |    |------->cValues.npy
+    	|	|	|------->cValues.npy
     	|	|	|------->model_cValue_*.npy
     	|	|	|------->Images
     	|	|	|	|-------N/A
@@ -129,27 +129,27 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
 		pip			20.2.4
 
 	Python Packages
-        opencv-python   4.4.0.46
-        datetime        4.3
-        glob3           0.0.1
-        IPython         7.16.1
-        joblib          0.17.0
-        pandas          1.1.4
-        psutil          5.7.3
-        matplotlib      3.3.2
-        pillow          8.0.1
-        ray             1.0.0
-        setuptools      50.3.0
-        scipy           1.5.3
-        sobol           0.9
-        sobol-seq       0.2.0
-        tensorflow      2.3.1
-        natsort         7.0.1
-        multiprocess    0.70.11.1
-        scikit-image    0.17.2
-        scikit-learn    0.23.2
-        sklearn         0.0
-        tqdm            4.51.0
+        	opencv-python   	4.4.0.46
+        	datetime        	4.3
+        	glob3           	0.0.1
+        	IPython         	7.16.1
+        	joblib          	0.17.0
+        	pandas          	1.1.4
+        	psutil          	5.7.3
+        	matplotlib      	3.3.2
+        	pillow          	8.0.1
+        	ray             	1.0.0
+        	setuptools      	50.3.0
+        	scipy           	1.5.3
+        	sobol           	0.9
+        	sobol-seq       	0.2.0
+        	tensorflow      	2.3.1
+        	natsort         	7.0.1
+        	multiprocess    	0.70.11.1
+        	scikit-image    	0.17.2
+        	scikit-learn    	0.23.2
+        	sklearn         	0.0
+        	tqdm            	4.51.0
 
 ### **Installation on Mac OSX 10.13**
 **Note:** These instructions have not been tested on a clean system running only the operating systems specified, but should be expected to function.
@@ -198,12 +198,12 @@ Assuming the desired equipment intended for end application of SLADS, outputs Th
 
 Please note that at this time in development, each mz value should be specified with exactly 8 characters. Therefore, the following sample parameters:
 
-    sampleName: 	Slide1-Wnt-3
-    numRows: 	72
-    lowMZ1: 	454.8740
-    highMZ1: 	454.8922
-    lowMZ2: 	454.8844
-    highMZ2: 	454.9026
+    sampleName:    Slide1-Wnt-3
+    numRows:       72
+    lowMZ1:        454.8740
+    highMZ1:       454.8922
+    lowMZ2:        454.8844
+    highMZ2:       454.9026
 
 should yield the following folder hierarchy:
 
@@ -220,15 +220,17 @@ Each of these folders may then be placed either into ./INPUT/TEST, or ./INPUT/TR
 
 All critical parameters for SLADS may be altered in a configuration file (Ex. ./CONFIG_0.py). Variable descriptions are provided inside of an example configuration provided and are grouped according to the following method:
 
-    L0:     Tasks to be performed
-    L1:     Task methods
-        L1-0:   Pointwise
-        L1-1:   Linewise
-        L1-2:   Training Data Generation
-    L2:     DLADS model parameters
-    L3:     Runtime/Output settings
-    L4:     Non-operational - Do not change
-    L5:     Debug/Deprecated - Will most likely be removed in future
+    L0: Tasks to be performed
+    L1: Task methods
+        L1-0: Pointwise
+        L1-1: Linewise
+        L1-2: Training Data Generation
+    L2: Model Parameters
+        L2-1: SLADS(-Net) model parameters
+        L2-2: DLADS model parameters
+    L3: Runtime/Output settings
+    L4: Non-operational - Do not change
+    L5: Debug/Deprecated - Will most likely be removed in future
 
 
 Multiple configuration files in the form of CONFIG_*descriptor*.py, can be generated for which SLADS will be run sequentially. RESULTS_*descriptor* folders will correspond with the numbering of the CONFIG files, with the RESULTS folder without a description, containing results from the last run performed. 
@@ -274,7 +276,7 @@ In the case that multiple configuration files are provided in the form of: CONFI
 
 **Note:** In order to use a SLADS model in a physical implementation, the files resultant from the training procedure must be located within './RESULTS/TRAIN_RESULTS/', particularly:  bestC.npy and bestTheta.npy.
 
-Prior to engaging the physical equipment run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in .csv files for each of the specified mz ranges in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. 
+Prior to engaging the physical equipment|	|	|------->cValues.npy run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in .csv files for each of the specified mz ranges in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. 
 
 # FAQ
 ###  **SLADS procdues an error: Could not connect to socket /tmp/ray/session_.../sockets/raylet**
