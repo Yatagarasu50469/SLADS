@@ -7,7 +7,7 @@
 #
 #DATE MODIFIED:	    4 November 2020
 #
-#VERSION NUM:	    0.6.9
+#VERSION NUM:	    0.7.3
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -54,7 +54,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum="0.6.9"
+versionNum="0.7.3"
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
@@ -85,9 +85,9 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
      ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀\n \
     Author(s):\tDavid Helminiak\t\tEECE Marquette University\n \
     \t\tDong Hye Ye\t\tEECE Marquette University\n \
+    Licence:\tGNU General Public License v3.0\n \
     Version:\t"+versionNum+"\n \
     Config:\t"+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0])
-
 
     destResultsFolder = './RESULTS_'+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0]
     
@@ -96,7 +96,6 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
         sys.exit('Error! - The destination results folder already exists')
     else:
         if os.path.exists(destResultsFolder): shutil.rmtree(destResultsFolder)
-
 
     #If a SLADS model needs to be trained
     if trainingModel:
@@ -107,27 +106,42 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
         #Obtain the file paths for the intended training data
         trainSamplePaths = natsort.natsorted(glob.glob(dir_TrainingData + '/*'), reverse=False)
 
-        sectionTitle('PERFORMING INTITIAL TRAINING COMPUTATIONS')
+        #If the dataset has not been generated then generate and find the best c for one, otherwise load the best c previously determined
+        if not loadTrainingDataset:
+            sectionTitle('TRAINING DATABASE GENERATION')
+            
+            #Perform initial computations
+            trainingSamples, trainingDatabase = initTrain(trainSamplePaths)
+            
+            sectionTitle('DETERMINING BEST C VALUE')
+            
+            #Optimize the c value
+            bestC, cValues, bestCIndex = findBestC(trainingSamples, trainingDatabase)
         
-        #Perform initial computations
-        trainingSamples, trainingDatabase = initTrain(trainSamplePaths)
+        else:
+            bestC = np.load(dir_TrainingResults + 'bestC.npy', allow_pickle=True).item()
+            bestCIndex = np.load(dir_TrainingResults + 'bestCIndex.npy', allow_pickle=True).item()
+            cValues = np.load(dir_TrainingResults + 'cValues.npy', allow_pickle=True)
+
+        trainingSamples = pickle.load(open(dir_TrainingResults + 'trainingSamples.p', "rb" ))
+        trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase.p', "rb" ))
 
         sectionTitle('TRAINING MODEL(S)')
 
-        #Generate SLADS model(s) for the given training database
-        trainingModels = trainModel(trainingDatabase)
+        #Train model(s) for the given database and index of the best c value
+        model = trainModel(trainingDatabase, cValues, bestCIndex)
 
-        sectionTitle('DETERMINING BEST MODEL')
-
-        #Identify the best Model; saves to training results
-        bestC, bestModel = findBestC(trainingSamples, trainingModels)
-
-    #Load in the best model information if training wasn't performed
+    #If a new model shouldn't be generated, then the best c value should have already been selected
     if not trainingModel:
         bestC = np.load(dir_TrainingResults + 'bestC.npy', allow_pickle=True).item()
-        bestModel = np.load(dir_TrainingResults + 'bestModel.npy', allow_pickle=True).item()
+        bestCIndex = np.load(dir_TrainingResults + 'bestCIndex.npy', allow_pickle=True).item()
+        cValues = np.load(dir_TrainingResults + 'cValues.npy', allow_pickle=True)
+        if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net':
+            model = np.load(dir_TrainingResults+'model_cValue_'+str(cValues[bestCIndex])+'.npy', allow_pickle=True).item()
+        elif erdModel == 'DLADS':
+            model = tf.keras.models.load_model(dir_TrainingResults+'model_cValue_'+str(bestC))
 
-    #If a SLADS model needs to be tested
+    #If a model needs to be tested
     if testingModel:
         sectionTitle('PERFORMING TESTING')
 
@@ -138,32 +152,32 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
         testSamplePaths = natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False)
 
         #Perform testing
-        testSLADS(testSamplePaths, bestC, bestModel)
+        testSLADS(testSamplePaths, model, bestC)
 
     #If Leave-One-Out Cross Validation is to be performed
     if LOOCV:
         sectionTitle('PERFORMING LOOCV')
         sys.exit('Error! - LOOCV is not implemented at this time')
 
-    #If a SLADS model is to be used in an implementation
+    #If a model is to be used in an implementation
     if impModel:
-        sectionTitle('PERFORMING SLADS')
+        sectionTitle('RUNNING EXPERIMENTAL MODEL')
 
         #Import any specific implementation function and class definitions
         exec(open("./CODE/EXPERIMENTAL.py").read())
 
         #Begin performing an implementation
-        performImplementation(bestC, bestModel)
+        performImplementation(model, bestC)
 
-    sectionTitle('DUPLICATING RESULTS')
-    
-    #Copy the results folder
-    destination = shutil.copytree('./RESULTS', destResultsFolder)
+    #Copy the results folder and the config file into it
+    resultCopy = shutil.copytree('./RESULTS', destResultsFolder)
     configCopy = shutil.copy(configFileName, destResultsFolder+'/'+os.path.basename(configFileName))
 
-    #Attempt to shutdown multiprocessing server
+    #Shutdown the ray server
     ray.shutdown()
 
     #AFTER INTENDED PROCEDURES (TRAINING/TESTING) HAVE BEEN PERFORMED
     sectionTitle('PROGRAM COMPLETE')
 
+#Shutdown python kernel
+exit()
