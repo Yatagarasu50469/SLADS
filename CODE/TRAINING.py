@@ -501,7 +501,8 @@ def trainModel(trainingDatabase, cValues, bestCIndex):
                 history = model.train_on_batch(globalInputBatches[index], globalOutputBatches[index])
                 epochTrainingLosses.append(history[0])
                 epochTrainingMSEs.append(history[1])
-            totalTrainingLosses.append(np.mean(epochTrainingLosses))
+            currentTrainingLoss = np.mean(epochTrainingLosses)
+            totalTrainingLosses.append(currentTrainingLoss)
             totalTrainingMSEs.append(np.mean(epochTrainingMSEs))
 
             #If there are validation samples
@@ -511,17 +512,18 @@ def trainModel(trainingDatabase, cValues, bestCIndex):
                     results = model.evaluate(inputValidationTensors[index], outputValidationTensors[index], verbose=0)
                     epochValidationLosses.append(results[0]) #loss
                     epochValidationMSEs.append(results[1]) #mse
-                totalValidationLosses.append(np.mean(epochValidationLosses))
+                currentValidationLoss = np.mean(epochValidationLosses)
+                totalValidationLosses.append(currentValidationLoss)
                 totalValidationMSEs.append(np.mean(epochValidationMSEs))
 
             #Calculate results for the validation data
             psnrList, currentValidationPSNR, ERDImages = epochCalculate(model, inputValidationTensors, outputValidationTensors, validationShapes, totalValidationPSNR)
             
-            #If the number of minimum epochs has been reached, but the current result is worse than the best, increase the counter for early cutoff
-            if earlyCutoff and (epoch >= minimumEpochs) and (currentValidationPSNR <= bestPSNR):
+            #If the number of minimum epochs has been reached, the current validation PSNR result is worse than the best, and the val loss is less than the train, increase early cutoff counter
+            if earlyCutoff and (epoch >= minimumEpochs) and (currentValidationPSNR <= bestPSNR) and (currentTrainingLoss <= currentValidationLoss):
                 patience += 1
 
-            #If there is a new best result and the minimum number of epochs has been reached, save the new model, reset the patience counter, and produce a display if not already done
+            #If there is a new best result and the minimum number of epochs has been reached, save the new model, reset the patience counter, and produce display
             if ((epoch > minimumEpochs) and (currentValidationPSNR > bestPSNR)) or (epoch == minimumEpochs):
                 model.save(dir_TrainingResults+'model_cValue_'+str(cValues[bestCIndex]))
                 patience = 0
