@@ -98,11 +98,12 @@ def epochDisplay(epoch, trainingDatabase, inputValidationTensors, outputValidati
         reconValueImage = resize(reconValueImage, (validationTensorShape), order=0)
         
         ax = plt.subplot2grid((3,4), (rowNum,0))
-        ax.imshow(np.nan_to_num(measuredImage), aspect='auto', cmap='hot')
+        ax.imshow(measuredImage, aspect='auto', cmap='hot')
         ax.set_title('Input: Measured Values', fontsize=15, fontweight='bold')
 
         ax = plt.subplot2grid((3,4), (rowNum,1))
-        ax.imshow(np.nan_to_num(reconValueImage), aspect='auto', cmap='hot')
+        ax.imshow(reconValueImage
+, aspect='auto', cmap='hot')
         ax.set_title('Input: Recon Values', fontsize=15, fontweight='bold')
         
         ax = plt.subplot2grid((3,4), (rowNum,2))
@@ -404,10 +405,9 @@ def trainModel(trainingDatabase, cValues, bestCIndex):
             #Compute PSNR between reconstruction and the ground truth
             reconPSNR = compare_psnr(trainingSample.avgGroundTruthImage, reconImage, data_range=reconImage.max() - reconImage.min())
             
-            #Use nan values in measured image
-            measuredImage = np.empty((maskObject.mask.shape))
+            #Set measured image
+            measuredImage = np.zeros((maskObject.mask.shape))
             measuredImage[np.where(maskObject.mask)] = trainingSample.avgGroundTruthImage[np.where(maskObject.mask)]
-            measuredImage[np.where(maskObject.mask==0)] = np.nan
 
             #Compute features of the reconstruction
             featureImage = featureExtractor(maskObject, measuredImage, reconImage)

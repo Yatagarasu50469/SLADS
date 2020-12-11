@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    5 November 2020
+#DATE MODIFIED:	    10 December 2020
 #
-#VERSION NUM:	    0.7.3
+#VERSION NUM:	    0.7.4
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -45,6 +45,7 @@
 #               0.7.2   Remove custom pkg. dependency, use NN resize, recon+measured input
 #               0.7.3   Start/End line patch, SLADS(-Net) options, normalization optimization
 #               0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
+#               0.7.4   CPU compatibility patch, removal of NaN values
 #               ~0.8    Multichannel integration
 #               ~0.9    Tissue segmentation
 #               ~1.0    Initial release
@@ -54,7 +55,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum="0.7.3"
+versionNum="0.7.4"
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())

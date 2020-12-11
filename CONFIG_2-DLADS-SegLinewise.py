@@ -161,7 +161,7 @@ trainingVizSteps = 10
 ##################################################################
 
 #Which system GPU(s) are available; ('None', whichever is available; '-1', CPU only)
-availableGPUs = '1'
+availableGPUs = 'None'
 
 #Should the training data be visualized and saved; turning off will save notable time in training
 trainingDataPlot = True

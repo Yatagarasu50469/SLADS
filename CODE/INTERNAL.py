@@ -62,19 +62,19 @@ dir_TestingResultsImages = dir_TestingResults + 'Images' + os.path.sep
 dir_ImpResults = dir_Results + 'IMP'+ os.path.sep
 dir_ImpResultsImages = dir_ImpResults + 'Images' + os.path.sep
 
-#Check general directory structure
-if not os.path.exists(dir_Results): sys.exit('Error - dir_Results does not exist')
+#Check that the result directory exists for cases where existing training data/model are to be used
+if (not os.path.exists(dir_Results)) and (not trainingModel): 
+    sys.exit('Error - dir_Results: ./RESULTS/ does not exist')
+elif not os.path.exists(dir_Results):
+    os.makedirs(dir_Results)
 
 #Input data directories
-if not os.path.exists(dir_InputData): sys.exit('Error - dir_InputData does not exist')
-if not os.path.exists(dir_TrainingData) and trainingModel: sys.exit('Error - dir_TrainingData does not exist')
-if not os.path.exists(dir_TestingData) and testingModel: sys.exit('Error - dir_InputData does not exist')
-if not os.path.exists(dir_ImpData) and impModel: sys.exit('Error - dir_ImpData does not exist')
+if not os.path.exists(dir_InputData): sys.exit('Error - dir_InputData: ./INPUT/ does not exist')
+if not os.path.exists(dir_TrainingData) and trainingModel: sys.exit('Error - dir_TrainingData: ./INPUT/TRAIN/ does not exist')
+if not os.path.exists(dir_TestingData) and testingModel: sys.exit('Error - dir_InputData: ./INPUT/TEST/ does not exist')
+if not os.path.exists(dir_ImpData) and impModel: sys.exit('Error - dir_ImpData: ./INPUT/IMP/ does not exist')
 
-#Results directories - reset results folders for new runs
-if not os.path.exists(dir_Results): sys.exit('Error - dir_Results does not exist')
-
-#As needed, reset the results' directories
+#As needed, reset the results' sub-directories
 if trainingModel and not loadTrainingDataset:
     if os.path.exists(dir_TrainingResults): shutil.rmtree(dir_TrainingResults)
     os.makedirs(dir_TrainingResults)

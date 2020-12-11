@@ -599,7 +599,6 @@ def computePolyFeatures(maskObject, reconImage):
     
     return polyFeatures
 
-
 def computeERD(iterNum, measuredAvgImage, reconImage, maskObject, model):
     
     if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net':
@@ -617,10 +616,9 @@ def computeERD(iterNum, measuredAvgImage, reconImage, maskObject, model):
     
     elif erdModel == 'DLADS':
         
-        #Use nan values in measured image
-        measuredImage = np.empty((maskObject.mask.shape))
+        #Form measured image
+        measuredImage = np.zeros((maskObject.mask.shape))
         measuredImage[np.where(maskObject.mask)] = measuredAvgImage[np.where(maskObject.mask)]
-        measuredImage[np.where(maskObject.mask==0)] = np.nan
 
         #Compute feature image for network input
         featureImage = featureExtractor(maskObject, measuredImage, reconImage)
@@ -1075,9 +1073,9 @@ def featureExtractor(maskObject, measuredImage, reconImage):
     #Stack measured value image
     featureImage = np.dstack((featureImage, measuredImage))
 
-    #Stack recon image for only unmeasured locations
+    #Stack recon values for only unmeasured locations
     tempReconImage = copy.deepcopy(reconImage)
-    tempReconImage[maskObject.measuredIdxs[:,0], maskObject.measuredIdxs[:,1]] = np.nan
+    tempReconImage[maskObject.measuredIdxs[:,0], maskObject.measuredIdxs[:,1]] = 0
     featureImage = np.dstack((featureImage, tempReconImage))
     
     #Delete the blank first channel
