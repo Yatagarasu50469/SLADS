@@ -16,7 +16,7 @@
 
 
     NAME: 		SLADS
-    VERSION NUM:	0.7.4
+    VERSION NUM:	0.7.5
     LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
@@ -52,6 +52,7 @@
                     0.7.2   Remove custom pkg. dependency, use NN resize, recon+measured input
                     0.7.3   Start/End line patch, SLADS(-Net) options, normalization optimization
                     0.7.4   CPU compatibility patch, removal of NaN values
+                    0.7.5   c value selection performed before training database generation
                     0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
                     ~0.8    Multichannel integration
                     ~0.9    Tissue segmentation

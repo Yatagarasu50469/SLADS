@@ -14,7 +14,7 @@ def equipWait():
             break
 
 #Perform SLADS with external equipment
-def performImplementation(model, bestC):
+def performImplementation(model, optimalC):
 
     #Clean up files from previous runs if they exist
     if os.path.isfile('./INPUT/IMP/DONE'): os.remove('./INPUT/IMP/DONE')
@@ -44,11 +44,11 @@ def performImplementation(model, bestC):
     #Weight images equally
     mzWeights = np.ones(len(images))/len(images)
 
-    #Define information as a new Sample object
-    impSample = Sample(impSampleName, images, massRanges, maskObject, mzWeights, dir_ImpResults)
+    #Define information as a new sample object
+    impSample = Sample(impSampleName, images, massRanges, maskObject, mzWeights, None, dir_ImpResults)
     
     #Run SLADS
-    result = runSLADS(impSample, bestModel, scanMethod, bestC, percToScan, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
+    result = runSLADS(impSample, bestModel, scanMethod, optimalC, percToScan, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
     
     #Call completion/printout function
     result.complete(None)

@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    10 December 2020
+#DATE MODIFIED:	    11 December 2020
 #
-#VERSION NUM:	    0.7.4
+#VERSION NUM:	    0.7.5
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -46,6 +46,7 @@
 #               0.7.3   Start/End line patch, SLADS(-Net) options, normalization optimization
 #               0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
 #               0.7.4   CPU compatibility patch, removal of NaN values
+#               0.7.5   c value selection performed before training database generation
 #               ~0.8    Multichannel integration
 #               ~0.9    Tissue segmentation
 #               ~1.0    Initial release
@@ -55,7 +56,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum="0.7.4"
+versionNum='0.7.5'
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
@@ -63,11 +64,11 @@ exec(open("./CODE/EXTERNAL.py").read())
 #For each of the configuration files that are present, run SLADS
 for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
 
+    #Import basic definitions
+    exec(open("./CODE/DEFS.py").read())
+
     #Load in variable definitions from the configuration file
     exec(open(configFileName).read())
-
-    #Import basic SLADS functions
-    exec(open("./CODE/DEFS.py").read())
 
     #Setup directories and internal variables
     exec(open("./CODE/INTERNAL.py").read())
@@ -109,38 +110,34 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
 
         #If the dataset has not been generated then generate and find the best c for one, otherwise load the best c previously determined
         if not loadTrainingDataset:
-            sectionTitle('TRAINING DATABASE GENERATION')
             
-            #Perform initial computations
-            trainingSamples, trainingDatabase = initTrain(trainSamplePaths)
-            
-            sectionTitle('DETERMINING BEST C VALUE')
+            #Import training/validation data
+            sectionTitle('IMPORTING TRAINING SAMPLES')
+            trainingSamples = importInitialData(trainSamplePaths)
             
             #Optimize the c value
-            bestC, cValues, bestCIndex = findBestC(trainingSamples, trainingDatabase)
-        
+            sectionTitle('OPTIMIZING C VALUE')
+            optimalC = optimizeC(trainingSamples)
+            
+            #Generate a training database for the optimal c value and training samples
+            sectionTitle('GENERATING TRAINING DATASET')
+            trainingDatabase = generateTrainingData(trainingSamples, optimalC)
+            
         else:
-            bestC = np.load(dir_TrainingResults + 'bestC.npy', allow_pickle=True).item()
-            bestCIndex = np.load(dir_TrainingResults + 'bestCIndex.npy', allow_pickle=True).item()
-            cValues = np.load(dir_TrainingResults + 'cValues.npy', allow_pickle=True)
+            optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
+            trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase.p', "rb" ))
 
-        trainingSamples = pickle.load(open(dir_TrainingResults + 'trainingSamples.p', "rb" ))
-        trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase.p', "rb" ))
-
-        sectionTitle('TRAINING MODEL(S)')
-
-        #Train model(s) for the given database and index of the best c value
-        model = trainModel(trainingDatabase, cValues, bestCIndex)
+        #Train model(s) for the given database and c value
+        sectionTitle('PERFORMING TRAINING')
+        model = trainModel(trainingDatabase, optimalC)
 
     #If a new model shouldn't be generated, then the best c value should have already been selected
     if not trainingModel:
-        bestC = np.load(dir_TrainingResults + 'bestC.npy', allow_pickle=True).item()
-        bestCIndex = np.load(dir_TrainingResults + 'bestCIndex.npy', allow_pickle=True).item()
-        cValues = np.load(dir_TrainingResults + 'cValues.npy', allow_pickle=True)
+        optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
         if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net':
-            model = np.load(dir_TrainingResults+'model_cValue_'+str(cValues[bestCIndex])+'.npy', allow_pickle=True).item()
+            model = np.load(dir_TrainingResults+'model_cValue_'+str(optimalC)+'.npy', allow_pickle=True).item()
         elif erdModel == 'DLADS':
-            model = tf.keras.models.load_model(dir_TrainingResults+'model_cValue_'+str(bestC))
+            model = tf.keras.models.load_model(dir_TrainingResults+'model_cValue_'+str(optimalC))
 
     #If a model needs to be tested
     if testingModel:
@@ -153,7 +150,7 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
         testSamplePaths = natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False)
 
         #Perform testing
-        testSLADS(testSamplePaths, model, bestC)
+        testSLADS(testSamplePaths, model, optimalC)
 
     #If Leave-One-Out Cross Validation is to be performed
     if LOOCV:
@@ -162,13 +159,13 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
 
     #If a model is to be used in an implementation
     if impModel:
-        sectionTitle('RUNNING EXPERIMENTAL MODEL')
+        sectionTitle('IMPLEMENTING MODEL')
 
         #Import any specific implementation function and class definitions
         exec(open("./CODE/EXPERIMENTAL.py").read())
 
         #Begin performing an implementation
-        performImplementation(model, bestC)
+        performImplementation(model, optimalC)
 
     #Copy the results folder and the config file into it
     resultCopy = shutil.copytree('./RESULTS', destResultsFolder)

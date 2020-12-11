@@ -3,7 +3,7 @@
 #==================================================================
 
 #Given a set of sample paths, perform testing using a trained SLADS Model
-def testSLADS(sortedTestingSampleFolders, model, bestC):
+def testSLADS(sortedTestingSampleFolders, model, optimalC):
 
     #If consistentcy in the random generator is desired for comparisons
     if consistentSeed: np.random.seed(0)
@@ -23,7 +23,7 @@ def testSLADS(sortedTestingSampleFolders, model, bestC):
         mzWeights = np.ones(len(images))/len(images)
 
         #Define information as a new Sample object
-        testingSamples.append(Sample(dataSampleName, images, massRanges, maskObject, mzWeights, dir_TestingResults))
+        testingSamples.append(Sample(dataSampleName, images, massRanges, maskObject, mzWeights, None, dir_TestingResults))
 
     #Create holding arrays for all of the results
     MSE_testingResults = []
@@ -47,9 +47,9 @@ def testSLADS(sortedTestingSampleFolders, model, bestC):
 
     for sampleNum in tqdm(range(0,len(testingSamples)), desc='Testing Samples', position=0, leave=True, ascii=True):
         t0 = time.time()
-        result = runSLADS([testingSamples[sampleNum]], model, scanMethod, bestC, percToScan, stopPerc, 0, simulationFlag=True, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
+        result = runSLADS([testingSamples[sampleNum]], model, scanMethod, optimalC, percToScan, stopPerc, 0, simulationFlag=True, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
         time_testingResults.append(time.time()-t0)
-        result.complete(bestC)
+        result.complete(optimalC)
         MSE_testingResults.append(result.MSEList)
         SSIM_testingResults.append(result.SSIMList)
         PSNR_testingResults.append(result.PSNRList)

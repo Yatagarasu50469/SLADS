@@ -43,6 +43,9 @@ ray.init(logging_level=logging.ERROR)
 #Force tensorflow to use (a) specific GPU(s) if indicated
 if availableGPUs != 'None': os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
 
+#Check chosen regression model is available
+if not erdModel in ['SLADS-LS', 'SLADS-Net', 'DLADS']: sys.exit('Error - Specified erdModel is not available')
+
 #PATH/DIRECTORY SETUP
 #==================================================================
 

@@ -4,26 +4,26 @@
 
 #General information regarding samples, used for testing and best C value determination
 class Sample:
-    def __init__(self, name, images, massRanges, maskObject, mzWeights, resultsPath):
-        self.name = name
-        self.images = images
-        self.massRanges = massRanges
-        self.maskObject = maskObject
-        self.mzWeights = mzWeights
+    def __init__(self, name, images, massRanges, maskObject, mzWeights, avgGroundTruthImage, resultsPath):
+        self.name = copy.deepcopy(name)
+        self.images = copy.deepcopy(images)
+        self.massRanges = copy.deepcopy(massRanges)
+        self.maskObject = copy.deepcopy(maskObject)
+        self.mzWeights = copy.deepcopy(mzWeights)
         self.measuredImages = [np.zeros([maskObject.imageHeight, maskObject.imageWidth]) for rangeNum in range(0,len(massRanges))]
-        self.resultsPath = resultsPath
+        self.resultsPath = copy.deepcopy(resultsPath)
         self.measuredLines = []
-        self.avgImage = None
+        self.avgImage = copy.deepcopy(avgGroundTruthImage)
 
 #Singular result generated through runSLADS
 class Result():
     def __init__(self, sample, maskObject, avgGroundTruthImage, bestCFlag, oracleFlag, simulationFlag, animationFlag):
-        self.sample = sample
-        self.avgGroundTruthImage = avgGroundTruthImage
-        self.simulationFlag = simulationFlag
-        self.animationFlag = animationFlag
-        self.bestCFlag = bestCFlag
-        self.oracleFlag = oracleFlag
+        self.sample = copy.deepcopy(sample)
+        self.avgGroundTruthImage = copy.deepcopy(avgGroundTruthImage)
+        self.simulationFlag = copy.deepcopy(simulationFlag)
+        self.animationFlag = copy.deepcopy(animationFlag)
+        self.bestCFlag = copy.deepcopy(bestCFlag)
+        self.oracleFlag = copy.deepcopy(oracleFlag)
         self.avgImages = []
         self.reconImages = []
         self.RDImages = []
@@ -58,11 +58,11 @@ class Result():
         self.maskObjects.append(copy.deepcopy(maskObject))
         self.ERDValueNPs.append(copy.deepcopy(ERDValuesNP))
         self.avgImages.append(copy.deepcopy(sample.avgImage))
-        self.sample = sample
-        self.percMeasuredList.append(percMeasured)
-        self.reconImages.append(reconImage)
+        self.sample = copy.deepcopy(sample)
+        self.percMeasuredList.append(copy.deepcopy(percMeasured))
+        self.reconImages.append(copy.deepcopy(reconImage))
     
-    def complete(self, bestC): 
+    def complete(self, optimalC): 
         if self.simulationFlag:
 
             #Perform statistics extraction for all images
@@ -104,7 +104,7 @@ class Result():
 
             #Calculate the actual RD Image and relative error of the ERD for each of the masks; bestCFlag data must be returned before this subroutine
             for index in tqdm(range(0, len(self.maskObjects)), desc='RD Calc', leave = False, ascii=True):
-                RDImage = calcRD(self.maskObjects[index], self.reconImages[index], bestC, self.avgGroundTruthImage)
+                RDImage = calcRD(self.maskObjects[index], self.reconImages[index], optimalC, self.avgGroundTruthImage)
                 self.RDImages.append(RDImage)
                 ERDPSNR = compare_psnr(RDImage, self.ERDValueNPs[index], data_range=self.ERDValueNPs[index].max() - self.ERDValueNPs[index].min())
                 self.ERDPSNRList.append(ERDPSNR)
@@ -381,8 +381,8 @@ class Result():
 #Each sample needs a mask object
 class MaskObject():
     def __init__(self, imageWidth, imageHeight, initialPercToScan, scanMethod):
-        self.imageWidth = imageWidth
-        self.imageHeight = imageHeight
+        self.imageWidth = copy.deepcopy(imageWidth)
+        self.imageHeight = copy.deepcopy(imageHeight)
         self.aspectRatio = imageWidth/imageHeight if imageWidth>imageHeight else imageHeight/imageWidth
         self.area = imageWidth*imageHeight
         self.measuredIdxs = []
