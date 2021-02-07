@@ -2,22 +2,6 @@
 #TRAINING SLADS SPECIFIC  
 #==================================================================
 
-#Sample information object for training the regression model
-class TrainingSample:
-    def __init__(self, name, avgGroundTruthImage, maskObject, massRanges, measurementPerc, maskNum, cValue, reconImage, measuredImage, RDImage, RDValues, polyFeatures):
-        self.name = copy.deepcopy(name)
-        self.avgGroundTruthImage = copy.deepcopy(avgGroundTruthImage)
-        self.maskObject = copy.deepcopy(maskObject)
-        self.massRanges = copy.deepcopy(massRanges)
-        self.maskNum = copy.deepcopy(maskNum)
-        self.cValue = copy.deepcopy(cValue)
-        self.measurementPerc = copy.deepcopy(measurementPerc)
-        self.measuredImage = copy.deepcopy(measuredImage)
-        self.reconImage = copy.deepcopy(reconImage)
-        self.RDImage = copy.deepcopy(RDImage)
-        self.RDValues = copy.deepcopy(RDValues)
-        self.polyFeatures = copy.deepcopy(polyFeatures)
-
 #Extract model performance/statistics from the validation data, must be run prior to epochDisplay
 def epochCalculate(model, inputValidationTensors, outputValidationTensors, validationShapes, totalValidationPSNR):
     
@@ -149,38 +133,44 @@ def importInitialData(sortedTrainingSampleFolders):
     trainingSamples = []
     for trainingSampleFolder in tqdm(sortedTrainingSampleFolders, desc = 'Training Samples', ascii=True):
 
-        #Obtain the name of the training sample
-        dataSampleName = os.path.basename(trainingSampleFolder)
+        #Read all available scan data into a sample object
+        sample = Sample(trainingSampleFolder)
+        sample.readScanData(lineRevistMethod)
 
-        #Import each of the images according to their mz range order
-        images, massRanges, imageHeight, imageWidth = readScanData(trainingSampleFolder + '/')
+        #Create a mask object; will be used in optimizing c
+        sample.maskObject = MaskObject(sample.numColumns, sample.numLines, initialPercToScan, scanMethod)
 
-        #Weight images equally
-        mzWeights = np.ones(len(images))/len(images)
-
-        #Create a temporary mask object
-        maskObject = MaskObject(imageWidth, imageHeight, initialPercToScan, scanMethod)
-
-        #Determine averaged ground truth image, normalizing the result
-        avgGroundTruthImage = np.average(np.asarray(images), axis=0, weights=mzWeights)
-        avgGroundTruthImage = MinMaxScaler().fit_transform(avgGroundTruthImage.reshape(-1, 1)).reshape(avgGroundTruthImage.shape)
+        #Perform averaging of the multiple channels and subsequent normalization
+        sample.avgGroundTruthImage = np.average(np.asarray(sample.mzImages), axis=0, weights=sample.mzWeights)
+        sample.avgGroundTruthImage = MinMaxScaler().fit_transform(sample.avgGroundTruthImage.reshape(-1, 1)).reshape(sample.avgGroundTruthImage.shape)
 
         #Save a visual of the averaged ground-truth
-        saveLocation = dir_TrainingResultsImages + 'groundTruth_' + dataSampleName + '.png'
+        saveLocation = dir_TrainingResultsImages + 'groundTruth_' + sample.name + '.png'
         fig=plt.figure()
         ax=fig.add_subplot(1,1,1)
         plt.axis('off')
-        plt.imshow(avgGroundTruthImage, cmap='hot', aspect='auto')
+        plt.imshow(sample.avgGroundTruthImage, cmap='hot', aspect='auto')
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         plt.savefig(saveLocation, bbox_inches=extent)
         plt.close()
+        
+        #Save a visual of the normalization image
+        if sample.normMethod != 'none':
+            saveLocation = dir_TrainingResultsImages + 'norm_' + sample.name + '.png'
+            fig=plt.figure()
+            ax=fig.add_subplot(1,1,1)
+            plt.axis('off')
+            plt.imshow(sample.normArray, cmap='hot', aspect='auto')
+            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+            plt.savefig(saveLocation, bbox_inches=extent)
+            plt.close()
 
-        #Append the basic information for each of the provided samples for use in determining an optimal c value
-        trainingSamples.append(Sample(dataSampleName, images, massRanges, maskObject, mzWeights, avgGroundTruthImage, dir_TrainingResults))
+        #Append the basic sample information for use in determining an optimal c value
+        trainingSamples.append(sample)
         
-        #Save the samples database
-        pickle.dump(trainingSamples, open(dir_TrainingResults + 'trainingSamples.p', 'wb'))
-        
+    #Save the samples database
+    pickle.dump(trainingSamples, open(dir_TrainingResults + 'trainingSamples.p', 'wb'))
+    
     return trainingSamples
 
 #Given a set of training samples, determine an optimal c value
@@ -236,78 +226,71 @@ def generateTrainingData(samples, optimalC):
     trainingDatabase = []
     for sample in tqdm(samples, desc = 'Samples', leave=True, ascii=True):
         
-        #Make a deep copy of the ground-truth image, since variable location will be overwritten during database generation
-        avgGroundTruthImage = copy.deepcopy(sample.avgImage)
-        imageWidth, imageHeight = copy.deepcopy(sample.maskObject.imageWidth), copy.deepcopy(sample.maskObject.imageHeight)
-        massRanges = copy.deepcopy(sample.massRanges)
-
         #For the number of mask iterations specified, create and extract training databases for each of the c values
         for maskNum in tqdm(range(0,numMasks), desc = 'Masks', leave=False, ascii=True):
-
-            #Initialize percMeasured, RDImage and maskObject prior to loop
-            percMeasured = 0
-            RDImage, maskObject = None, None
+            
+            #Create a duplicate of the sample, so the original can be used for reference, reseting information as needed from optimizeC
+            newSample = copy.deepcopy(sample)
+            newSample.percMeasured = 0
             firstIteration = True
             
-            #For each of the measurement percentages, create a training sample, evaluate it, and note the results
+            #For each of the measurement percentages, update a training sample, evaluate it, and store the results
             for measurementPerc in tqdm(measurementPercs, desc = '%', leave=False, ascii=True):
 
-                #Until the next measurement percetnage has been reached, continue scanning
-                while (round(percMeasured) < measurementPerc):
+                #Until the next measurement percentage has been reached, continue scanning
+                while (round(newSample.percMeasured) < measurementPerc):
 
-                    #If this is the first iteration, then create a new mask object, set initial avgImage, deactivate first iteration flag, otherwise sample pointwise randomly
+                    #If this is the first iteration, then create a new mask object and deactivate first iteration flag, otherwise pointwise scan randomly
                     if firstIteration:
-                        maskObject = MaskObject(imageWidth, imageHeight, measurementPerc, 'pointwise')
-                        sample.avgImage = avgGroundTruthImage*maskObject.mask
+                        newSample.maskObject, newIdxs = MaskObject(newSample.numColumns, newSample.numLines, measurementPerc, 'pointwise'), []
                         firstIteration = False
                     else:
-                        maskObject, newIdxs = findNewMeasurementIdxs(maskObject, sample, RDImage, measurementPerc-percMeasured, 'random')
-                        sample, maskObject = performMeasurements(sample, maskObject, newIdxs, True)
+                        newSample.maskObject, newIdxs = findNewMeasurementIdxs(newSample.maskObject, newSample, newSample.RDImage, measurementPerc-newSample.percMeasured, 'random')
+                    
+                    #Perform measurements
+                    newSample.performMeasurements(newIdxs, True)
 
                     #Update the percentage by what was actually measured
-                    percMeasured = (np.sum(maskObject.mask)/maskObject.area)*100
+                    newSample.percMeasured = (np.sum(newSample.maskObject.mask)/newSample.maskObject.area)*100
                     
                     #Compute reconstruction
-                    reconImage = performRecon(sample.avgImage, maskObject)
+                    newSample.reconImage = performRecon(newSample.avgMeasuredImage, newSample.maskObject)
 
                     #Calculate the RD Image
-                    RDImage = calcRD(maskObject, reconImage, optimalC, avgGroundTruthImage)
-
-                    #Extract image of only measured values
-                    measuredImage = avgGroundTruthImage*maskObject.mask
+                    newSample.RDImage = calcRD(newSample.maskObject, newSample.reconImage, optimalC, newSample.avgGroundTruthImage)
 
                     #Append the result into the training database
-                    polyFeatures = computePolyFeatures(maskObject, reconImage)
-                    RDValues = RDImage[np.where(maskObject.mask==0)]
-                    trainingDatabase.append(TrainingSample(sample.name, avgGroundTruthImage, maskObject, massRanges, percMeasured, maskNum, optimalC, reconImage, measuredImage, RDImage, RDValues, polyFeatures))
+                    newSample.polyFeatures = computePolyFeatures(newSample.maskObject, newSample.reconImage)
+                    newSample.RDValues = newSample.RDImage[np.where(newSample.maskObject.mask==0)]
+                    trainingDatabase.append(copy.deepcopy(newSample))
 
                     #Visualize and save data if desired
                     if trainingDataPlot:
-                        saveLocation = dir_TrainingResultsImages+ 'training_c_' + str(optimalC) + '_var_' + str(maskNum) + '_' + sample.name + '_perc_' + str(round(percMeasured, 4))+ '.png'
+                        saveLocation = dir_TrainingResultsImages+ 'training_c_' + str(optimalC) + '_var_' + str(maskNum) + '_' + newSample.name + '_perc_' + str(round(newSample.percMeasured, 4))+ '.png'
                         
                         f = plt.figure(figsize=(20,5))
                         f.subplots_adjust(top = 0.7)
                         f.subplots_adjust(wspace=0.15, hspace=0.2)
-                        plt.suptitle('c: ' + str(optimalC) + '  Variation: ' + str(maskNum) + '\nSample: ' + sample.name + '  Percent Sampled: ' + str(round(percMeasured, 4)), fontsize=20, fontweight='bold', y = 0.95)
+                        plt.suptitle('c: ' + str(optimalC) + '  Variation: ' + str(maskNum) + '\nSample: ' + newSample.name + '  Percent Sampled: ' + str(round(newSample.percMeasured, 4)), fontsize=20, fontweight='bold', y = 0.95)
                         
                         ax = plt.subplot2grid(shape=(1,5), loc=(0,0))
-                        ax.imshow(maskObject.mask, cmap='gray', aspect='auto')
+                        ax.imshow(newSample.maskObject.mask, cmap='gray', aspect='auto')
                         ax.set_title('Mask', fontsize=15)
 
                         ax = plt.subplot2grid(shape=(1,5), loc=(0,1))
-                        ax.imshow(measuredImage, cmap='hot', aspect='auto')
+                        ax.imshow(newSample.avgMeasuredImage, cmap='hot', aspect='auto')
                         ax.set_title('Measured', fontsize=15)
 
                         ax = plt.subplot2grid(shape=(1,5), loc=(0,2))
-                        ax.imshow(avgGroundTruthImage, cmap='hot', aspect='auto')
+                        ax.imshow(newSample.avgGroundTruthImage, cmap='hot', aspect='auto')
                         ax.set_title('Ground-Truth', fontsize=15)
 
                         ax = plt.subplot2grid(shape=(1,5), loc=(0,3))
-                        ax.imshow(reconImage, cmap='hot', aspect='auto')
-                        ax.set_title('Recon - PSNR: ' + str(round(compare_psnr(avgGroundTruthImage, reconImage, data_range=reconImage.max() - reconImage.min()), 4)), fontsize=15)
+                        ax.imshow(newSample.reconImage, cmap='hot', aspect='auto')
+                        ax.set_title('Recon - PSNR: ' + str(round(compare_psnr(newSample.avgGroundTruthImage, newSample.reconImage, data_range=newSample.reconImage.max() - newSample.reconImage.min()), 4)), fontsize=15)
 
                         ax = plt.subplot2grid(shape=(1,5), loc=(0,4))
-                        ax.imshow(RDImage, aspect='auto')
+                        ax.imshow(newSample.RDImage, aspect='auto')
                         ax.set_title('RD', fontsize=15)
                         plt.savefig(saveLocation)
                         plt.close()
@@ -316,31 +299,36 @@ def generateTrainingData(samples, optimalC):
                         fig=plt.figure()
                         ax=fig.add_subplot(1,1,1)
                         plt.axis('off')
-                        plt.imshow(maskObject.mask, aspect='auto', cmap='gray')
+                        plt.imshow(newSample.maskObject.mask, aspect='auto', cmap='gray')
                         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                        plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ sample.name + '_percentage_' + str(round(percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                        plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
                         plt.close()
                         
                         fig=plt.figure()
                         ax=fig.add_subplot(1,1,1)
                         plt.axis('off')
-                        plt.imshow(RDImage, aspect='auto')
+                        plt.imshow(newSample.RDImage, aspect='auto')
                         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                        plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ sample.name + '_percentage_' + str(round(percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                        plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
                         plt.close()
                         
                         fig=plt.figure()
                         ax=fig.add_subplot(1,1,1)
                         plt.axis('off')
-                        plt.imshow(measuredImage, aspect='auto', cmap='hot')
+                        plt.imshow(newSample.avgMeasuredImage, aspect='auto', cmap='hot')
                         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                        plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ sample.name + '_percentage_' + str(round(percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                        plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
                         plt.close()
                         
     #Save the database
     pickle.dump(trainingDatabase, open(dir_TrainingResults + 'trainingDatabase.p', 'wb'))
-    
+
     return trainingDatabase
+
+
+def generator():
+    for el in sequence:
+        yield el
 
 #Given a training database, train a regression model
 def trainModel(trainingDatabase, optimalC):
@@ -417,6 +405,7 @@ def trainModel(trainingDatabase, optimalC):
             inputValidationTensors = []
             outputValidationTensors = []
             validationShapes = []
+            currentValidationLoss = np.inf
         else:
             inputTrainingTensors = inputTensors[:numTraining]
             outputTrainingTensors = outputTensors[:numTraining]
@@ -477,7 +466,7 @@ def trainModel(trainingDatabase, optimalC):
             epochTrainingMSEs = []
             epochValidationLosses = []
             epochValidationMSEs = []
-            
+
             #Training loop
             for index in tqdm(range(0,len(globalInputBatches)), desc='Train Samples', leave=False, ascii=True):
                 history = model.train_on_batch(globalInputBatches[index], globalOutputBatches[index])

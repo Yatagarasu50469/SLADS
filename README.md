@@ -16,7 +16,7 @@
 
 
     NAME: 		SLADS
-    VERSION NUM:	0.7.5
+    VERSION NUM:	0.8.0
     LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
@@ -54,7 +54,8 @@
                     0.7.4   CPU compatibility patch, removal of NaN values
                     0.7.5   c value selection performed before training database generation
                     0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
-                    ~0.8    Multichannel integration
+                    0.8.0   Raw MSI file integration (Thermo .raw, Agilent .d), only Windows compatible
+                    ~0.8.1  Multichannel integration
                     ~0.9    Tissue segmentation
                     ~1.0    Initial release
 
@@ -62,6 +63,7 @@
 **Note:** If testing/training is not to be performed, then contents of 'TEST', 'TRAIN', may be disregarded, but a trained SLADS model must be present in: ./RESULTS/TRAIN/.
 
 **Warning:** If training is enabled, any model already in ./RESULTS/TRAIN/ will be overwritten. Likewise, if testing or implementation is enabled, then any data in ./RESULTS/TEST/ and/or ./RESULT/IMP/, respectively will be overwritten.
+
 
     ------->ROOT_DIR
     	|------->README
@@ -77,54 +79,68 @@
     	|------->INPUT
     	|	|------->TEST
     	|	|	|------->TEST_SAMPLE_1
-    	|	|	|	|-------> mzlowMZ1_highMZ1fnsampleNamensnumRows.csv
-    	|	|	|	|-------> mzlowMZ2_highMZ2fnsampleNamensnumRows.csv
+    	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->mz.csv
+    	|	|	|	|------->sampleName-line1.RAW
+    	|	|	|	|------->sampleName-line2.RAW
+    	|	|	|	|------->...
     	|	|	|------->TEST_SAMPLE_2
-    	|	|	|	|-------> mzlowMZ1_highMZ1fnsampleNamensnumRows.csv
-    	|	|	|	|-------> mzlowMZ2_highMZ2fnsampleNamensnumRows.csv
+    	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->mz.csv
+    	|	|	|	|------->sampleName-line1.RAW
+    	|	|	|	|------->sampleName-line2.RAW
+    	|	|	|	|------->...
     	|	|------->TRAIN
     	|	|	|------->TRAIN_SAMPLE_1
-    	|	|	|	|-------> mzlowMZ1_highMZ1fnsampleNamensnumRows.csv
-    	|	|	|	|-------> mzlowMZ2_highMZ2fnsampleNamensnumRows.csv
+    	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->mz.csv
+    	|	|	|	|------->sampleName-line1.RAW
+    	|	|	|	|------->sampleName-line2.RAW
+    	|	|	|	|------->...
     	|	|	|------->TEST_SAMPLE_2
-    	|	|	|	|-------> mzlowMZ1_highMZ1fnsampleNamensnumRows.csv
-    	|	|	|	|-------> mzlowMZ2_highMZ2fnsampleNamensnumRows.csv
+    	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->mz.csv
+    	|	|	|	|------->sampleName-line1.RAW
+    	|	|	|	|------->sampleName-line2.RAW
+    	|	|	|	|------->...
     	|	|------->IMP
-    	|	|	|-------> mzlowMZ1_highMZ1fnsampleNamensnumRows.csv
-    	|	|	|-------> mzlowMZ2_highMZ2fnsampleNamensnumRows.csv
+    	|	|	|------->sampleInfo.txt
+    	|	|	|------->mz.csv
+    	|	|	|------->sampleName-line1.RAW
+    	|	|	|------->sampleName-line2.RAW
+    	|	|	|------->...
     	|	|	|-------> UNLOCK
     	|	|	|-------> LOCK
     	|	|	|-------> DONE
     	|------->RESULTS
     	|	|------->TEST
     	|	|	|------->Animations
-    	|	|	|------->dataPrintout.csv
+    	|	|	|	|------->TEST_SAMPLE_1
+    	|	|	|	|------->TEST_SAMPLE_2
+    	|	|	|	|------->...
     	|	|	|------->mzResults
     	|	|	|	|------->TEST_SAMPLE_1
-    	|	|	|	|	|-------> lowMZ1_highMZ1.png
-    	|	|	|	|	|-------> lowMZ2_highMZ2.png
     	|	|	|	|------->TEST_SAMPLE_2
-    	|	|	|	|	|-------> lowMZ1_highMZ1.png
-    	|	|	|	|	|-------> lowMZ2_highMZ2.png
+    	|	|	|	|------->...
+    	|	|	|------->dataPrintout.csv
     	|	|	|------->testingAverageSSIM_Percentage.csv
     	|	|	|------->testingAverageSSIM_Percentage.png
     	|	|------->TRAIN
-    	|	|	|------->bestC.npy
-    	|	|	|------->bestCIndex.npy
-        |    |    |------->cValues.npy
-    	|	|	|------->model_cValue_*.npy
-    	|	|	|------->Images
-    	|	|	|	|-------N/A
-    	|	|	|------->trainedModels.npy
+    	|	|	|------->Model Training Images
+    	|	|	|	|------->...
+    	|	|	|------->Training Data Images
+    	|	|	|	|------->...
+    	|	|	|------->optimalC.npy
+    	|	|	|------->trainingDatabase.npy
+    	|	|	|------->trainingSamples.npy
+    	|	|	|------->model_cValue_
 
 
 # INSTALLATION
-This implementation of SLADS has functioned on Windows, Mac, and Linux operating systems. The package versions do not necessarily need to match with those listed, but should the program produce unexpected errors, installing a specific version of a package might be able to resolve the issue. 
+This implementation of SLADS is only functional within Windows 10, given a reliance on vendor provided .dll's, as utilized by the multiplierz package. The package versions do not necessarily need to match with those listed. However, should the program produce unexpected errors, installing a specific version of a package might be able to resolve the issue. Note that the multiplierz pacakage, must be installed from the provided link under the installation commands.
 
 	Operating System
-		Win. 10:		Updated as of Jan 1 2020
-		Ubuntu:			18.04
-		Mac: 			10.13.6
+		Win. 10:		Updated as of Jan 1 2021
 
 	System
 		Python			3.8.5
@@ -145,7 +161,7 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
         scipy           1.5.3
         sobol           0.9
         sobol-seq       0.2.0
-        tensorflow      2.3.1
+        tensorflow      2.4.1
         natsort         7.0.1
         multiprocess    0.70.11.1
         scikit-image    0.17.2
@@ -153,30 +169,14 @@ This implementation of SLADS has functioned on Windows, Mac, and Linux operating
         sklearn         0.0
         tqdm            4.51.0
 
-### **Installation on Mac OSX 10.13**
-**Note:** These instructions have not been tested on a clean system running only the operating systems specified, but should be expected to function.
-
-	$ python3 --m pip install --upgrade pip
-	$ pip3 install opencv-python datetime glob3 IPython joblib pandas psutil matplotlib pillow ray scipy sobol sobol-seq natsort multiprocess ray scikit-image sklearn tqdm
-
-TensorFlow is not currently officially supported on OS X machines. Although official support may become available in the  future, installation and patch instructions for Tensorflow v2.2.0 may be found at https://github.com/TomHeaven/tensorflow-osx-build. These instructions have been confirmed to work on a OS X build with a 1080 TI GPU. Instructions for v2.3.0 are not currently functional with Python 3.8. 
-
-### **Installation on Ubuntu 18.04**
-**Note:** These instructions have not been tested on a clean system running only the operating systems specified, but should be expected to function.
-	
-	$ sudo apt-get update
-	$ sudo apt-get install python3-pip
-	$ python3 -m pip install --upgrade pip
-	$ pip3 install opencv-python datetime glob3 IPython joblib pandas psutil matplotlib pillow ray setuptools scipy sobol sobol-seq tensorflow natsort multiprocess scikit-image sklearn tqdm
-
-
 ### **Installation on Windows 10**
-**Note:** At this time, the multiprocessing package **ray** is only experimentally functional, unexpected behaviors may occur during startup/shutdown of the program
+
+If GPU acceleration is to be used, a compatible CUDA Toolkit and cuDNN must be installed on the system. Installation instructions may be found through NVIDIA: https://docs.nvidia.com/deeplearning/cudnn/install-guide/
 
 Install Visual Studio Community 2019, with the additional options: "Desktop development with C++" and "Python development":  https://visualstudio.microsoft.com/downloads/
 Also install the "Build Tools for Visual Studio 2019", under "All downloads"/"Tools for Visual Studio 2019"
 
-Install Python 3.8.3: choosing to install with advanced options, selecting to install for all users, and add python to environment variables
+Install Python 3.8.3+: choosing to install with advanced options, selecting to install for all users, and add python to environment variables
 
 Open the command prompt as an administrator (right-click on the command prompt icon and choose "Run as administrator")
 
@@ -190,36 +190,12 @@ Navigate inside the command prompt to the SLADS base directory then enter the fo
 
 	$ python3 -m pip install --upgrade pip
 	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib pillow ray scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tqdm tensorflow numpy opencv-python pydot graphviz
+	$ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
 
 # TRAINING/TESTING PROCEDURE
-
-###  PRE-PROCESSING
-Assuming the desired equipment intended for end application of SLADS, outputs Thermo-Finnigan .RAW files, the data will need to be pre-processed prior to training a SLADS model. Each data sample must be aligned between rows using a simple linear interpolation scheme according to the unique acquisition times. Each individual mz range of interest must then be exported as a .csv file. For example, given a singular sample: **sampleName**, with a number of rows: **numRows** (corresponding to the number of acquired .RAW files, or number intended for acquisition),  and a set of mz ranges: **lowMZ1**-**highMZ1**, **lowMZ2**-**highMZ2**, etc., a folder should be created which contains files named according to the convention: 
-
-	mzlowMZ_highMZfnsampleNamensnumRows.csv
-
-Please note that at this time in development, each mz value should be specified with exactly 8 characters. Therefore, the following sample parameters:
-
-    sampleName: 	Slide1-Wnt-3
-    numRows: 	72
-    lowMZ1: 	454.8740
-    highMZ1: 	454.8922
-    lowMZ2: 	454.8844
-    highMZ2: 	454.9026
-
-should yield the following folder hierarchy:
-
-    -------> Slide1-Wnt-3
-    	|-------> mz454.8740_454.8922fnSlide1-Wnt-3ns72.csv
-    	|-------> mz454.8844_454.9026fnSlide1-Wnt-3ns72.csv
-
-Each of these folders may then be placed either into ./INPUT/TEST, or ./INPUT/TRAIN as desired. An example of the desired multichannel sample input format is included in the ./EXAMPLE/ folder. 
-
 ###  **CONFIGURATION**
-**Warning:** This section is no longer entirely up to date, refer to ./CONFIG_0.py for updated variable descriptions. Several of the parameters listed may either not implemented at this time, replaced, removed, or have been disabled. 
 
 **Note:** 
-
 All critical parameters for SLADS may be altered in a configuration file (Ex. ./CONFIG_0.py). Variable descriptions are provided inside of an example configuration provided and are grouped according to the following method:
 
     L0:     Tasks to be performed
@@ -234,7 +210,40 @@ All critical parameters for SLADS may be altered in a configuration file (Ex. ./
 
 
 Multiple configuration files in the form of CONFIG_*descriptor*.py, can be generated for which SLADS will be run sequentially. RESULTS_*descriptor* folders will correspond with the numbering of the CONFIG files, with the RESULTS folder without a description, containing results from the last run performed. 
-    
+
+Two files must be included in each of the sample folders (specifically within the subdirectories in TRAIN, TEST, and IMP, as the tasks to be performed may dictate). sampleInfo.txt should include the following ordered information:
+
+	Number of lines in the sample (not to be confused with the number of files in the directory!)
+	File extention for the MSI data (Thermo .raw, Agilent .d, etc.)
+	Time resolution (Column spacing for row alignment; < 0.001 is not recommended given computational expense)
+	Maximum line time (Maximum location (time) on any given line in the scan)
+	m/z visualization method (Allowable values include: 'sum', or 'xic', though 'xic' is the recommended setting)
+	m/z specification method (Allowable values include: 'range', or 'value', where 'value' will use the m/z tolerance to determine the final ranges)
+	Normalization method (Allowable values include: 'tic', 'standard', 'none')
+	m/z tolerance (ppm) (only needs to be specified if m/z specification is set to 'value', or if 'standard' is being used for the normalization method)
+
+Each piece of information should be on its own line without additional description, as shown in the EXAMPLE sample directory. 
+
+mz.csv can either contain line separated values of m/z locations or comma/line separated values of m/z ranges to be extracted and used for a sample (as specified in sampleInfo.txt). At this time, each m/z should be handpicked to highlight underlying biological structures, as they will be averaged together during SLADS operation to form the ERD. 
+
+If using 'value', then the file should contain:
+
+	central_mz_1
+	central_mz_2
+	...
+Else if using 'range, then the file should contain:
+
+	low_mz_1, high_mz_1
+	low_mz_1, high_mz_1
+	...
+
+
+If the normalization method is specified as standard, then an additional file: mzStandards.csv should also be included. The file should contain line separated values of m/z locations (m/z tolerance will be used to determine the final ranges) to be used for normalization.
+
+	mz_1
+	mz_2
+	...
+
 ###  **RUN**
 After configuration, to run the program perform the following command in the root directory:
 
@@ -244,13 +253,11 @@ After configuration, to run the program perform the following command in the roo
 All results will be placed in ./RESULTS/ (in the case of testing, at the conclusion of a sample's scan) as follows:
 
 	TRAIN: Training results
-		bestC.npy: Determined optimal c value determined in training
-        bestCIndex.npy: Index of the optimal c value in the configuration file(s) cValue list
-        cValues.npy: Original list of c values examined to find bestC and bestCIndex
+		optimalC.npy: Determined optimal c value determined in training
 		Training Data Images: Training images with/without borders, summary sample images, c value curves 
-        Model Training Images: Visualized training convergence images
-        trainingSamples.p: Database of training sample inputs, suffix indicates intended acquisition method (point/line)
-        trainingDatabase.p: Final training database for each c value, suffix indicates intended acquisition method (point/line)
+		Model Training Images: Visualized training convergence images
+		trainingSamples.p: Database of training sample inputs, suffix indicates intended acquisition method (point/line)
+		trainingDatabase.p: Final training database for each c value, suffix indicates intended acquisition method (point/line)
 		model_cValue_: Trained model corresponding to the indicated c value (.npy for SLADS(-Net))
 
 	TEST: Testing results
@@ -276,7 +283,7 @@ In the case that multiple configuration files are provided in the form of: CONFI
 
 **Note:** In order to use a SLADS model in a physical implementation, the files resultant from the training procedure must be located within './RESULTS/TRAIN_RESULTS/', particularly:  bestC.npy and bestTheta.npy.
 
-Prior to engaging the physical equipment run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in .csv files for each of the specified mz ranges in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. 
+Prior to engaging the physical equipment run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, (Can multiply by Time Resolution, as specified in the sample's sampleInfo.txt to find equivalent times to scan) saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in .csv files for each of the specified mz ranges in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. A sampleInfo.txt and mz.csv must be included in the implementation directory as outlined in the CONFIGURATION section. 
 
 # FAQ
 ###  **SLADS procdues an error: Could not connect to socket /tmp/ray/session_.../sockets/raylet**
@@ -285,3 +292,16 @@ Although the error would suggest there is something wrong with the network conne
 
     pip3 uninstall ray
     pip3 install ray==0.8.6
+
+###  **Why is SLADS not compatible with Linux distributions, or Mac operating systems**
+
+As of v0.8.0, SLADS obtains information directly from MSI raw files, rather than pre-processed .csv m/z visualizations. These operations are reliant on vendor specific .dll files as provided in the multiplierz package. Supperficially it appears as though the multiplierz API might function within Linux. For example, the packages pythonnet and comtypes can be installed, albeit with some difficulty, but cannot actually function in a linux environment. An alternative approach, that may work, might be to attempt an installation through wineDocker. 
+
+While it does not currently function, multiplierz may be installed directly on Ubuntu 18.04 with the following commands:
+
+	wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
+	sudo dpkg -i packages-microsoft-prod.deb
+	sudo apt-get install apt-transport-https clang libglib2.0-dev mono-dev nuget
+	pip3 install git+https://github.com/pythonnet/pythonnet.git@master
+	pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
+

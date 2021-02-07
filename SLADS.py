@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    11 December 2020
+#DATE MODIFIED:	    6 February 2021
 #
-#VERSION NUM:	    0.7.5
+#VERSION NUM:	    0.8.0
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -47,8 +47,9 @@
 #               0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
 #               0.7.4   CPU compatibility patch, removal of NaN values
 #               0.7.5   c value selection performed before training database generation
-#               ~0.8    Multichannel integration
-#               ~0.9    Tissue segmentation
+#               0.8.0   Raw MSI file integration (Thermo .raw, Agilent .d), only Windows compatible
+#               ~0.8.1  Multichannel integration
+#               ~0.9    Multimodal integration
 #               ~1.0    Initial release
 #====================================================================
 
@@ -56,7 +57,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum='0.7.5'
+versionNum='0.8.0'
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())

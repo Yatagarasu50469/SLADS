@@ -15,6 +15,7 @@ import logging
 import math
 import matplotlib
 import matplotlib.pyplot as plt
+import multiplierz
 import multiprocessing
 import natsort
 import numpy as np
@@ -41,6 +42,8 @@ from IPython import display
 from IPython.core.debugger import Tracer
 from joblib import Parallel, delayed
 from matplotlib.pyplot import figure
+from multiplierz.mzAPI import mzFile
+from multiplierz.spectral_process import mz_range
 from PIL import Image
 from scipy import misc
 from scipy import signal
@@ -70,6 +73,10 @@ from tqdm.auto import tqdm
 
 #Make tensorflow only report errors (3), warnings (2), information (1), all (0)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+#Disable tensorflow's autotune function as network uses a custom training loop
+os.environ['TF_CUDNN_USE_AUTOTUNE'] = '0'
+
 import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
 warnings.filterwarnings("ignore")
@@ -79,7 +86,6 @@ from tensorflow import keras
 from tensorflow.keras import backend as K
 from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import *
-
 #==================================================================
 
 #==================================================================

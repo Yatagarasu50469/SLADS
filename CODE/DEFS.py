@@ -2,18 +2,156 @@
 #SLADS DEFINITIONS GENERAL
 #==================================================================
 
-#General information regarding samples, used for testing and best C value determination
+#Perform summation and alignment over an mz range for a given line; mzFile cannot be pickled and passed into function
+@ray.remote
+def mzrange_parhelper(mzRange, scanFileName, mzMethod, newTimes, origTimes):
+    data = mzFile(scanFileName)
+    lineNum = int(scanFileName.split('line')[1].split('.')[0])-1
+    
+    if mzMethod == 'sum':
+        lineData = np.asarray([np.sum(mz_range(data.scan(px, 'profile'), mzRange)) for px in range(data.scan_range()[0], data.scan_range()[1]+1)])
+    elif mzMethod =='xic':
+        lineData = np.asarray(list(map(list, data.xic(data.time_range()[0], data.time_range()[1], mzRange[0], mzRange[1]))))[:,1]
+    else:
+        sys.exit('Error! - mzMethod: ' + mzMethod + 'for: ' + scanFileName + 'has not been implemented')
+ 
+    return lineNum, np.interp(newTimes, origTimes[lineNum], lineData)
+
+#All information pertaining to a sample
 class Sample:
-    def __init__(self, name, images, massRanges, maskObject, mzWeights, avgGroundTruthImage, resultsPath):
-        self.name = copy.deepcopy(name)
-        self.images = copy.deepcopy(images)
-        self.massRanges = copy.deepcopy(massRanges)
-        self.maskObject = copy.deepcopy(maskObject)
-        self.mzWeights = copy.deepcopy(mzWeights)
-        self.measuredImages = [np.zeros([maskObject.imageHeight, maskObject.imageWidth]) for rangeNum in range(0,len(massRanges))]
-        self.resultsPath = copy.deepcopy(resultsPath)
+    def __init__(self, sampleFolder):
+    
+        #Location of MSI data and sample name
+        self.sampleFolder = sampleFolder + os.path.sep
+        self.name = os.path.basename(sampleFolder)
+    
+        #Which files have already been read
+        self.readScanFiles = []
+
+        #Read in data from sampleInfo.txt
+        sampleInfo = open(self.sampleFolder+'sampleInfo.txt').readlines()
+        self.numLines = int(sampleInfo[0].rstrip())
+        self.lineExt = sampleInfo[1].rstrip()
+        self.timeRes = float(sampleInfo[2].rstrip())
+        self.maxTime = float(sampleInfo[3].rstrip())
+        self.mzMethod = sampleInfo[4].rstrip()
+        self.mzSpec = sampleInfo[5].rstrip()
+        self.normMethod = sampleInfo[6].rstrip()
+        if self.normMethod == 'standard' or self.mzSpec == 'value': self.mzTolerance = float(sampleInfo[7].rstrip())*1e-6
+        
+        #Read in all m/z locations/ranges (.csv)
+        if self.mzSpec == 'value':
+            mzLocations = np.loadtxt(self.sampleFolder+'mz.csv', delimiter=',')
+            self.mzRanges = [[mzLocation-self.mzTolerance, mzLocation+self.mzTolerance] for mzLocation in mzLocations]
+        elif self.mzSpec == 'range':
+            self.mzRanges = np.loadtxt(self.sampleFolder+'mz.csv', delimiter=',')
+        
+        #Prepare variables to hold sample data
+        self.mzWeights = np.ones(len(self.mzRanges))/len(self.mzRanges)
+        self.numColumns = int(1/self.timeRes)
+        self.mzImages = [np.zeros((self.numLines, self.numColumns)) for mzRangeNum in range(0, len(self.mzRanges))]
+        self.measuredmzImages = copy.deepcopy(self.mzImages)
+        self.newTimes = np.linspace(0, self.maxTime, self.numColumns)
+        self.origTIC = [np.zeros(self.numColumns) for line in range(self.numLines+1)]
+        self.origTimes = copy.deepcopy(self.origTIC) 
+
+        #If using a standard, then also read in standards locations (.csv)
+        if  self.normMethod == 'standard': 
+            mzStandardLocations = np.loadtxt(self.sampleFolder+'mzStandards.csv', delimiter=',')
+            if mzStandardLocations.shape != ():
+                self.mzStandardRanges = [[mzStandardLocation-self.mzTolerance, mzStandardLocation+self.mzTolerance] for mzStandardLocation in mzStandardLocations]
+            else:
+                self.mzStandardRanges = [[mzStandardLocations-self.mzTolerance, mzStandardLocations+self.mzTolerance]]
+            self.mzStandardImages = [np.zeros((self.numLines, self.numColumns)) for mzRangeNum in range(0, len(self.mzStandardRanges))]
+
+        #Declare variables used in training/testing/implementation
+        self.normArray = None
+        self.avgMeasuredImage = None
+        self.avgGroundTruthImage = []
+        self.maskObject = None
+        self.resultsPath = ''
         self.measuredLines = []
-        self.avgImage = copy.deepcopy(avgGroundTruthImage)
+        self.reconImage = None
+        self.RDImage = None
+        self.RDValues = None
+        self.polyFeatures = None
+        self.percMeasured = 0
+        
+    #Update mzImages, TIC, origTIC, and origTimes by information in the present line files
+    def readScanData(self, lineRevistMethod):
+
+        #Obtain and sort the available line files pertaining to the current scan
+        scanFiles = natsort.natsorted(glob.glob(self.sampleFolder+'*'+self.lineExt), reverse=False)
+
+        #Identify which files have not yet been scanned, if line revisiting is disabled (update not replace)
+        if lineRevistMethod == False:
+            scannedBool = [scanFile not in self.readScanFiles for scanFile in scanFiles]
+            scanFiles = np.asarray(scanFiles)[scannedBool].tolist()
+
+        #Read in each of the lines, obtain the TIC and original sampling locations (times)
+        for scanFileName in scanFiles:
+            
+            #Add file name to those already scanned
+            self.readScanFiles.append(scanFileName)
+
+            #Establish file pointer and line number (1 indexed) for the specific scan
+            data = mzFile(scanFileName)
+            lineNum = int(scanFileName.split('line')[1].split('.')[0])-1
+            
+            #Obtain the total ion chromatogram over all mz available
+            xicData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
+            self.origTimes[lineNum] = xicData[:,0]
+            self.origTIC[lineNum] = xicData[:,1]
+
+        #Align the rows in the original TIC
+        self.TIC = np.asarray([np.interp(self.newTimes, self.origTimes[lineNum], self.origTIC[lineNum]) for lineNum in range(0, self.numLines)])
+
+        #Check and setup for normalization
+        if self.normMethod == 'tic':
+            self.normArray = self.TIC
+        elif self.normMethod == 'standard':
+            for mzRangeNum in range(0, len(self.mzStandardRanges)): 
+                results = ray.get([mzrange_parhelper.remote(self.mzStandardRanges[mzRangeNum], scanFileName, self.mzMethod, self.newTimes, self.origTimes) for scanFileName in scanFiles])
+                for result in results: self.mzStandardImages[mzRangeNum][result[0]] = result[1]
+            self.normArray = np.sum(self.mzStandardImages, axis=0)
+        elif self.normMethod == 'none':
+            self.normArray = None
+        else:
+            sys.exit('Error! - Unknown normalization method: ' + self.normMethod + ' specified for sample: ' + self.name)
+
+        #For each mzRange generate a visualization
+        for mzRangeNum in range(0, len(self.mzRanges)): 
+            results = ray.get([mzrange_parhelper.remote(self.mzRanges[mzRangeNum], scanFileName, self.mzMethod, self.newTimes, self.origTimes) for scanFileName in scanFiles])
+            for result in results: self.mzImages[mzRangeNum][result[0]] = result[1]
+
+        #Perform normalization
+        if self.normMethod != 'none': self.mzImages = np.asarray([np.nan_to_num(mzImage/self.normArray) for mzImage in self.mzImages])
+
+    #Scan new locations in the sample
+    def performMeasurements(self, newIdxs, simulationFlag):
+
+        #Update the maskObject according to the newIdxs
+        if len(newIdxs) != 0: self.maskObject.update(newIdxs)
+
+        #If this is not a simulation then inform equipment what points to scan, wait, read in new data, update images
+        if not simulationFlag:
+            with open('./INPUT/IMP/UNLOCK', 'w') as filehandle: filehandle.writelines(str(tuple(newIdxs[0])) + ', ' + str(tuple(newIdxs[len(newIdxs)-1])))
+            equipWait()
+            self.readScanData()
+            self.measuredmzImages = copy.deepcopy(self.mzImages)
+        else:
+            #Obtain masked values from the stored image information
+            for imageNum in range(0,len(self.measuredmzImages)):
+                temp = np.asarray(self.mzImages[imageNum]).copy()
+                temp[self.maskObject.mask == 0] = 0
+                self.measuredmzImages[imageNum] = temp.copy()
+
+        #Perform averaging of the multiple channels and subsequent image normalization
+        self.avgMeasuredImage = np.average(np.asarray(self.measuredmzImages), axis=0, weights=self.mzWeights)
+        self.avgMeasuredImage = MinMaxScaler().fit_transform(self.avgMeasuredImage.reshape(-1, 1)).reshape(self.avgMeasuredImage.shape)
+        
+        #Update percentage pixels measured
+        self.percMeasured = (np.sum(self.maskObject.mask)/self.maskObject.area)*100
 
 #Singular result generated through runSLADS
 class Result():
@@ -27,29 +165,18 @@ class Result():
         self.avgImages = []
         self.reconImages = []
         self.RDImages = []
-        self.threshReconImages = []
         self.mzRecons = []
         self.maskObjects = []
         self.ERDValueNPs = []
         
-        self.iouList = []
         self.MSEList = []
         self.SSIMList = []
         self.PSNRList = []
         self.TDList = []
-        self.ERDPSNRList = []
-
-        self.threshMSEList = []
-        self.threshSSIMList = []
-        self.threshPSNRList = []
-        self.threshTDList = []        
+        self.ERDPSNRList = []   
         
         self.percMeasuredList = []
 
-        #Threshold out the foreground
-        self.threshMask = avgGroundTruthImage > threshold_triangle(avgGroundTruthImage)
-        self.thresheldGroundTruth = self.threshMask*avgGroundTruthImage
-        
         self.maximumValue = np.max(avgGroundTruthImage)
 
     def update(self, percMeasured, sample, maskObject, reconImage, ERDValuesNP, iterNum):
@@ -57,7 +184,7 @@ class Result():
         #Save the model development
         self.maskObjects.append(copy.deepcopy(maskObject))
         self.ERDValueNPs.append(copy.deepcopy(ERDValuesNP))
-        self.avgImages.append(copy.deepcopy(sample.avgImage))
+        self.avgImages.append(copy.deepcopy(sample.avgMeasuredImage))
         self.sample = copy.deepcopy(sample)
         self.percMeasuredList.append(copy.deepcopy(percMeasured))
         self.reconImages.append(copy.deepcopy(reconImage))
@@ -80,22 +207,6 @@ class Result():
                 self.SSIMList.append(SSIM)
                 self.PSNRList.append(PSNR)
                 
-                #Find statistics of interest for thesheld image
-                threshReconImage = self.threshMask*self.reconImages[index]
-                self.threshReconImages.append(threshReconImage)
-                
-                #Measure and save statistics
-                difference = np.sum(computeDifference(self.thresheldGroundTruth, threshReconImage))
-                TD = difference/self.maskObjects[index].area
-                MSE = mean_squared_error(self.thresheldGroundTruth, threshReconImage)
-                SSIM = structural_similarity(self.thresheldGroundTruth, threshReconImage, data_range=threshReconImage.max() - threshReconImage.min())
-                PSNR = compare_psnr(self.thresheldGroundTruth, threshReconImage, data_range=threshReconImage.max() - threshReconImage.min())
-
-                self.threshTDList.append(TD)
-                self.threshMSEList.append(MSE)
-                self.threshSSIMList.append(SSIM)
-                self.threshPSNRList.append(PSNR)
-
             #If determining the best c, return the area under the TD curve
             if self.bestCFlag: return self.PSNRList, self.percMeasuredList
 
@@ -108,8 +219,6 @@ class Result():
                 self.RDImages.append(RDImage)
                 ERDPSNR = compare_psnr(RDImage, self.ERDValueNPs[index], data_range=self.ERDValueNPs[index].max() - self.ERDValueNPs[index].min())
                 self.ERDPSNRList.append(ERDPSNR)
-
-            for maskObject in self.maskObjects: self.iouList.append(iou(self.threshMask, maskObject.mask))
                     
         #If an animation will be produced and the run has completed
         if self.animationFlag:
@@ -136,19 +245,19 @@ class Result():
                 percSampled = "{:.2f}".format(self.percMeasuredList[-1])
                 
                 #Perform reconstructions and statistics extraction for all images
-                results = ray.get([performRecon_parhelper.remote(self.sample.measuredImages[mzImageNum], self.maskObjects[-1]) for mzImageNum in range(0,len(self.sample.measuredImages))])
+                results = ray.get([performRecon_parhelper.remote(self.sample.measuredmzImages[mzImageNum], self.maskObjects[-1]) for mzImageNum in range(0,len(self.sample.measuredmzImages))])
                 self.mzRecons = [result for result in results]
 
-                for massNum in tqdm(range(0, len(self.sample.massRanges)), desc='mz Images', leave = False, ascii=True):
+                for massNum in tqdm(range(0, len(self.sample.mzRanges)), desc='mz Images', leave = False, ascii=True):
                     
                     #mz image with only the actual measurements made
-                    subMeasuredImage = self.sample.measuredImages[massNum].astype("float")
+                    subMeasuredImage = self.sample.measuredmzImages[massNum].astype("float")
                     
                     #Retreive reconstruction for the specific mz image
                     subReconImage = self.mzRecons[massNum]
 
                     #Retreive ground truth for the specific mz image
-                    mzImage = self.sample.images[massNum].astype("float")
+                    mzImage = self.sample.mzImages[massNum].astype("float")
                     
                     #SSIM relative to the measured
                     measureSSIM = "{:.2f}".format(structural_similarity(mzImage, subMeasuredImage, data_range=subMeasuredImage.max() - subMeasuredImage.min()))
@@ -163,7 +272,7 @@ class Result():
                     reconPSNR ="{:.2f}".format(compare_psnr(mzImage, subReconImage, data_range=subReconImage.max() - subReconImage.min()))
 
                     #Mass range string
-                    massRange = str(self.sample.massRanges[massNum][0]) + '-' + str(self.sample.massRanges[massNum][1])
+                    massRange = str(self.sample.mzRanges[massNum][0]) + '-' + str(self.sample.mzRanges[massNum][1])
 
                     mzMaxValue = np.max([np.max(mzImage), np.max(subReconImage)])
 
@@ -221,14 +330,14 @@ class Result():
                 #Generate each of the frames
                 for i in tqdm(range(0, len(self.maskObjects)), desc='Result Images', leave = False, ascii=True):
                     
-                    #2x2 with ERD printout
+                    #Image printout
                     #=====================
-                    saveLocation = dir_AnimationFrames + 'stretched_2x2_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                    saveLocation = dir_AnimationFrames + 'stretched_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
 
                     f = plt.figure(figsize=(35,15))
                     f.subplots_adjust(top = 0.85)
                     f.subplots_adjust(wspace=0.15, hspace=0.2)
-                    plt.suptitle("Percent Sampled: %.2f,  Iteration: %.0f\nRecon PSNR: %.2f,  Foreground PSNR: %.2f\nRecon IoU: %.2f,  ERD PSNR: %.2f" % (self.percMeasuredList[i], i+1, self.PSNRList[i], self.threshPSNRList[i], self.iouList[i], self.ERDPSNRList[i]), fontsize=20, fontweight='bold', y = 0.95)
+                    plt.suptitle("Percent Sampled: %.2f,  Iteration: %.0f\nRecon PSNR: %.2f, ERD PSNR: %.2f" % (self.percMeasuredList[i], i+1, self.PSNRList[i], self.ERDPSNRList[i]), fontsize=20, fontweight='bold', y = 0.95)
 
                     ax1 = plt.subplot2grid(shape=(2,3), loc=(0,0))
                     im = ax1.imshow(self.avgGroundTruthImage, cmap='hot', aspect='auto', vmin=0, vmax=self.maximumValue)
@@ -275,16 +384,6 @@ class Result():
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                     plt.savefig(saveLocation, bbox_inches=extent)
                     plt.close()
-                    
-                    #Save the thresheld reconstruction, no borders
-                    saveLocation = dir_AnimationFrames + 'threshold_reconstruction_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
-                    fig=plt.figure()
-                    ax=fig.add_subplot(1,1,1)
-                    plt.axis('off')
-                    plt.imshow(self.threshReconImages[i], cmap='hot', aspect='auto', vmin=0, vmax=self.maximumValue)
-                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                    plt.savefig(saveLocation, bbox_inches=extent)
-                    plt.close()
 
                     #Save the ERD, no borders
                     saveLocation = dir_AnimationFrames + 'erd_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
@@ -318,9 +417,9 @@ class Result():
                     #=====================
                 
                 #Combine images into animation
-                dataFileNames = natsort.natsorted(glob.glob(dir_AnimationFrames + 'stretched_2x2_*.png'))
+                dataFileNames = natsort.natsorted(glob.glob(dir_AnimationFrames + 'stretched_*.png'))
                 height, width, layers = cv2.imread(dataFileNames[0]).shape
-                animation = cv2.VideoWriter(dir_AnimationVideos + 'stretched_2x2_' + self.sample.name + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
+                animation = cv2.VideoWriter(dir_AnimationVideos + 'stretched_' + self.sample.name + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
                 for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
                 animation.release()
                 animation = None
@@ -331,16 +430,6 @@ class Result():
                 ax=fig.add_subplot(1,1,1)
                 plt.axis('off')
                 plt.imshow(self.avgGroundTruthImage, cmap='hot', aspect='auto', vmin=0, vmax=self.maximumValue)
-                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                plt.savefig(saveLocation, bbox_inches=extent)
-                plt.close()
-
-                #Save the averaged thresheld ground truth, no borders
-                saveLocation = dir_AnimationFrames + 'final_thresh_groundTruth_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
-                fig=plt.figure()
-                ax=fig.add_subplot(1,1,1)
-                plt.axis('off')
-                plt.imshow(self.thresheldGroundTruth, cmap='hot', aspect='auto', vmin=0, vmax=self.maximumValue)
                 extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                 plt.savefig(saveLocation, bbox_inches=extent)
                 plt.close()
@@ -365,18 +454,8 @@ class Result():
                 plt.savefig(saveLocation, bbox_inches=extent)
                 plt.close()
                 
-                #Save the averaged threshold mask, no borders
-                saveLocation = dir_AnimationFrames + 'final_thresh_mask_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
-                fig=plt.figure()
-                ax=fig.add_subplot(1,1,1)
-                plt.axis('off')
-                plt.imshow(self.threshMask, cmap='gray', aspect='auto')
-                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                plt.savefig(saveLocation, bbox_inches=extent)
-                plt.close()
-                
             else: #Not a simulation
-                sys.exit('ERROR! - Non simulation plots not yet fixed for color issue and modified selection')
+                print('Warning! - Non simulation plots not yet fixed for color issue and modified selection')
 
 #Each sample needs a mask object
 class MaskObject():
@@ -502,7 +581,8 @@ def iou(groundTruth, prediction):
     return np.sum(np.logical_and(groundTruth, prediction)) / np.sum(np.logical_or(groundTruth, prediction))
 
 @ray.remote
-def performRecon_parhelper(image, maskObject): return performRecon(image, maskObject)
+def performRecon_parhelper(image, maskObject):
+    return performRecon(image, maskObject)
 
 #Generate/apply a gaussian kernel to a window of an image centered at an idx, summing result; window size according to sigma strength
 def gaussianGenerator(inputImage, idx, sigma, maskObject):
@@ -638,19 +718,14 @@ def computeERD(iterNum, measuredAvgImage, reconImage, maskObject, model):
     
 def runSLADS(samples, model, scanMethod, cValue, percToScan, stopPerc, sampleNum, simulationFlag, trainPlotFlag, animationFlag, tqdmHide, oracleFlag, bestCFlag):
 
-    if simulationFlag: #Here sample.images contains the full ground-truth images
-        sample = samples[sampleNum]
-        avgGroundTruthImage = np.average(sample.images, axis=0, weights=sample.mzWeights)
-        avgGroundTruthImage = MinMaxScaler().fit_transform(avgGroundTruthImage.reshape(-1, 1)).reshape(avgGroundTruthImage.shape)
-    else: #Here sample.images contains only the initially measured ground-truth images
+    if simulationFlag: #Here sample.mzImages contains the full ground-truth
+        sample = samples[sampleNum]        
+    else: #Here sample.mzImages contains only the initially measured images
         sample = samples
-        sample.measuredImages = sample.images
-        avgGroundTruthImage = []
-
-    maskObject = sample.maskObject
-
+        sample.measuredmzImages = sample.mzImages
+        
     #Reinitialize the mask to starting state
-    maskObject.reset(simulationFlag)
+    sample.maskObject.reset(simulationFlag)
 
     #Indicate the stopping condition has not yet been met
     completedRunFlag = False
@@ -659,37 +734,30 @@ def runSLADS(samples, model, scanMethod, cValue, percToScan, stopPerc, sampleNum
     iterNum = 1
 
     #Perform the initial measurements
-    if simulationFlag: sample, maskObject = performMeasurements(sample, maskObject, maskObject.initialMeasuredIdxs, simulationFlag)
+    if simulationFlag: sample.performMeasurements(sample.maskObject.initialMeasuredIdxs, simulationFlag)
 
-    #Determine percentage pixels measured initially
-    percMeasured = (np.sum(maskObject.mask)/maskObject.area)*100
-
-    #Perform weighted averaging of the multiple channels
-    sample.avgImage = np.average(np.asarray(sample.measuredImages), axis=0, weights=sample.mzWeights)
-    sample.avgImage = MinMaxScaler().fit_transform(sample.avgImage.reshape(-1, 1)).reshape(sample.avgImage.shape)
-    
     #Calculate the reconstruction image
-    reconImage = performRecon(sample.avgImage, maskObject)
+    sample.reconImage = performRecon(sample.avgMeasuredImage, sample.maskObject)
     
     #Determine ERD or use the RD as the ERD if the oracleFlag or bestCFlag is enabled
     if oracleFlag or bestCFlag:
-        ERDValuesNP = calcRD(maskObject, reconImage, cValue, avgGroundTruthImage)
+        ERDValuesNP = calcRD(sample.maskObject, sample.reconImage, cValue, sample.avgGroundTruthImage)
     else:
-        ERDValuesNP = computeERD(iterNum, sample.avgImage, reconImage, maskObject, model)
+        ERDValuesNP = computeERD(iterNum, sample.avgMeasuredImage, sample.reconImage, sample.maskObject, model)
 
     #Initialize and perform first update for a result object
-    result = Result(sample, maskObject, avgGroundTruthImage, bestCFlag, oracleFlag, simulationFlag, animationFlag)
-    result.update(percMeasured, sample, maskObject, reconImage, ERDValuesNP, iterNum)
+    result = Result(sample, sample.maskObject, sample.avgGroundTruthImage, bestCFlag, oracleFlag, simulationFlag, animationFlag)
+    result.update(sample.percMeasured, sample, sample.maskObject, sample.reconImage, ERDValuesNP, iterNum)
 
     #Check stopping criteria, just in case of a bad input
-    if (scanMethod == 'pointwise' or not lineVisitAll) and (round(percMeasured) >= stopPerc): completedRunFlag = True
-    if scanMethod == 'linewise' and len(maskObject.linesToScan) == 0: completedRunFlag = True
+    if (scanMethod == 'pointwise' or not lineVisitAll) and (round(sample.percMeasured) >= stopPerc): completedRunFlag = True
+    if scanMethod == 'linewise' and len(sample.maskObject.linesToScan) == 0: completedRunFlag = True
 
     #Until the stopping criteria has been met
     with tqdm(total = float(100), desc = '% Sampled', leave = False, ascii=True, disable=tqdmHide) as pbar:
 
         #Initialize progress bar state according to % measured
-        pbar.n = round(percMeasured,2)
+        pbar.n = round(sample.percMeasured,2)
         pbar.refresh()
 
         #Until the program has completed
@@ -699,32 +767,29 @@ def runSLADS(samples, model, scanMethod, cValue, percToScan, stopPerc, sampleNum
             iterNum += 1
             
             #Find next measurement locations
-            maskObject, newIdxs = findNewMeasurementIdxs(maskObject, sample, ERDValuesNP, percToScan, scanMethod)
+            sample.maskObject, newIdxs = findNewMeasurementIdxs(sample.maskObject, sample, ERDValuesNP, percToScan, scanMethod)
             
             #Perform measurements
-            sample, maskObject = performMeasurements(sample, maskObject, newIdxs, simulationFlag)
-            
-            #Update the percentage of pixels that have been measured
-            percMeasured = (np.sum(maskObject.mask)/maskObject.area)*100
+            sample.performMeasurements(newIdxs, simulationFlag)
             
             #Check stopping conditions
-            if (scanMethod == 'pointwise' or not lineVisitAll) and (round(percMeasured) >= stopPerc): completedRunFlag = True
-            if scanMethod == 'linewise' and len(maskObject.linesToScan) == 0: completedRunFlag = True
+            if (scanMethod == 'pointwise' or not lineVisitAll) and (round(sample.percMeasured) >= stopPerc): completedRunFlag = True
+            if scanMethod == 'linewise' and len(sample.maskObject.linesToScan) == 0: completedRunFlag = True
 
             #Calculate the reconstruction
-            reconImage = performRecon(sample.avgImage, maskObject)
+            sample.reconImage = performRecon(sample.avgMeasuredImage, sample.maskObject)
             
             #Determine ERD or use the RD as the ERD if the oracleFlag or bestCFlag is enabled
             if oracleFlag or bestCFlag:
-                ERDValuesNP = calcRD(maskObject, reconImage, cValue, avgGroundTruthImage)
+                ERDValuesNP = calcRD(sample.maskObject, sample.reconImage, cValue, sample.avgGroundTruthImage)
             else:
-                ERDValuesNP = computeERD(iterNum, sample.avgImage, reconImage, maskObject, model)
+                ERDValuesNP = computeERD(iterNum, sample.avgMeasuredImage, sample.reconImage, sample.maskObject, model)
 
             #Update the result
-            result.update(percMeasured, sample, maskObject, reconImage, ERDValuesNP, iterNum)
+            result.update(sample.percMeasured, sample, sample.maskObject, sample.reconImage, ERDValuesNP, iterNum)
 
             #Update the progress bar
-            pbar.n = round(percMeasured,2)
+            pbar.n = round(sample.percMeasured,2)
             pbar.refresh()
 
     return result
@@ -850,7 +915,7 @@ def performRecon(inputImage, maskObject):
     return reconImage
 
 
-#Perform the reconstruction with 0-padding
+#Perform the reconstruction with 0-padding; removes stretching in initial measurements
 #def performRecon(inputImage, maskObject):
 #
 #    #Pad input image with a 0-border (known 0 values around the image)
@@ -893,54 +958,10 @@ def percResults(results, perc_testingResults, precision):
     
     return percents, averageResults
 
-def performMeasurements(sample, maskObject, newIdxs, simulationFlag):
-
-    #Update the maskObject according to the newIdxs
-    maskObject.update(newIdxs)
-
-    #If this is not a simulation then inform equipment what points to scan, wait, read in new data, update images in sample
-    if not simulationFlag:
-        with open('./INPUT/IMP/UNLOCK', 'w') as filehandle: filehandle.writelines(str(tuple(newIdxs[0])) + ', ' + str(tuple(newIdxs[len(newIdxs)-1])))
-        equipWait()
-        images, massRanges = readScanData()
-        sample.images = images
-        sample.measuredImages = images
-    else:
-        #Obtain masked values from the stored image information
-        for imageNum in range(0,len(sample.measuredImages)):
-            temp = np.asarray(sample.images[imageNum]).copy()
-            temp[maskObject.mask == 0] = 0
-            sample.measuredImages[imageNum] = temp.copy()
-
-    #Perform weighted averaging of the multiple channels at original dimensionality
-    sample.avgImage = np.average(np.asarray(sample.measuredImages), axis=0, weights=sample.mzWeights)
-    sample.avgImage = MinMaxScaler().fit_transform(sample.avgImage.reshape(-1, 1)).reshape(sample.avgImage.shape)
-
-    return sample, maskObject
-
-
-def readScanData(folderLocation):
-    images = []
-    massRanges = []
-    #Import each of the images according to their mz range order
-    for imageFileName in natsort.natsorted(glob.glob(folderLocation+ '*.csv'), reverse=False):
-        originalImage = np.nan_to_num(np.loadtxt(imageFileName, delimiter=','))
-        images.append(originalImage)
-        massRanges.append([os.path.basename(imageFileName)[2:10], os.path.basename(imageFileName)[11:19]])
-    imageHeight, imageWidth = images[0].shape
-
-    return images, massRanges, imageHeight, imageWidth
-
 def sectionTitle(title):
     print('\n' + ('#' * int(consoleColumns)))
     print(title)
     print(('#' * int(consoleColumns)) + '\n')
-
-#Watch iterator for completion of workers in parallization pool
-def parIterator(idens):
-    while idens:
-        done, idens = ray.wait(idens)
-        yield ray.get(done[0])
 
 #Convert bytes into human readable format
 def sizeFunc(num, suffix='B'):

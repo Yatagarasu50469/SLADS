@@ -23,11 +23,11 @@ def performImplementation(model, optimalC):
     #Wait for equipment to initialize scan
     equipWait()
     
-    #Read in the image data for size information
-    images, massRanges, imageHeight, imageWidth = readScanData('./INPUT/IMP/')
+    sample = Sample('./INPUT/IMP/')
+    sample.readScanData(lineRevistMethod)
     
     #Create a mask object
-    maskObject = MaskObject(imageWidth, imageHeight, [], 0, scanMethod)
+    sample.maskObject = MaskObject(sample.numColumns, sample.numLines, initialPercToScan, scanMethod)
     
     #For each of the initial sets that must be obtained
     for setNum in range(0, len(maskObject.initialSets)):
@@ -39,16 +39,10 @@ def performImplementation(model, optimalC):
         equipWait()
 
     #Update internal sample data with the acquired information
-    images, massRanges, imageHeight, imageWidth = readScanData('./INPUT/IMP/')
+    sample.readScanData(lineRevistMethod)
 
-    #Weight images equally
-    mzWeights = np.ones(len(images))/len(images)
-
-    #Define information as a new sample object
-    impSample = Sample(impSampleName, images, massRanges, maskObject, mzWeights, None, dir_ImpResults)
-    
     #Run SLADS
-    result = runSLADS(impSample, bestModel, scanMethod, optimalC, percToScan, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
+    result = runSLADS(sample, bestModel, scanMethod, optimalC, percToScan, stopPerc, 0, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
     
     #Call completion/printout function
     result.complete(None)

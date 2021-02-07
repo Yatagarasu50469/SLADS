@@ -13,32 +13,32 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
     for testingSampleFolder in sortedTestingSampleFolders:
         dataSampleName = os.path.basename(testingSampleFolder)
         
-        #Import each of the images according to their mz range order
-        images, massRanges, imageHeight, imageWidth = readScanData(testingSampleFolder + '/')
-        
+        #Read all available scan data into a sample object
+        sample = Sample(testingSampleFolder)
+        sample.readScanData(lineRevistMethod)
+
         #Create a mask object
-        maskObject = MaskObject(imageWidth, imageHeight, initialPercToScan, scanMethod)
-        
-        #Weight images equally
-        mzWeights = np.ones(len(images))/len(images)
+        sample.maskObject = MaskObject(sample.numColumns, sample.numLines, initialPercToScan, scanMethod)
+
+        #Perform averaging of the multiple channels and subsequent normalization
+        sample.avgGroundTruthImage = np.average(np.asarray(sample.mzImages), axis=0, weights=sample.mzWeights)
+        sample.avgGroundTruthImage = MinMaxScaler().fit_transform(sample.avgGroundTruthImage.reshape(-1, 1)).reshape(sample.avgGroundTruthImage.shape)
+
+        #Indicate where resulting data should be stored
+        sample.resultsPath = dir_TestingResults
 
         #Define information as a new Sample object
-        testingSamples.append(Sample(dataSampleName, images, massRanges, maskObject, mzWeights, None, dir_TestingResults))
+        testingSamples.append(copy.deepcopy(sample))
 
     #Create holding arrays for all of the results
     MSE_testingResults = []
     SSIM_testingResults = []
     PSNR_testingResults = []
     TD_testingResults = []
-    iou_testingResults = []
-    threshMSE_testingResults = []
-    threshSSIM_testingResults = []
-    threshPSNR_testingResults = []
-    threshTD_testingResults = []
     ERDPSNR_testingResults = []
     perc_testingResults = []
     time_testingResults = []
-
+    
     #If an animation will be produced
     if animationGen:
         dir_AnimationVideos = dir_Animations + 'Videos/'
@@ -54,11 +54,6 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
         SSIM_testingResults.append(result.SSIMList)
         PSNR_testingResults.append(result.PSNRList)
         TD_testingResults.append(result.TDList)
-        iou_testingResults.append(result.iouList)
-        threshMSE_testingResults.append(result.threshMSEList)
-        threshSSIM_testingResults.append(result.threshSSIMList)
-        threshPSNR_testingResults.append(result.threshPSNRList)        
-        threshTD_testingResults.append(result.threshTDList)
         ERDPSNR_testingResults.append(result.ERDPSNRList)
         perc_testingResults.append(result.percMeasuredList)
     
@@ -67,12 +62,7 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
     percents, testingSSIM_mean = percResults(SSIM_testingResults, perc_testingResults, precision)
     percents, testingPSNR_mean = percResults(PSNR_testingResults, perc_testingResults, precision)
     percents, testingTD_mean = percResults(TD_testingResults, perc_testingResults, precision)
-    percents, testingIou_mean = percResults(iou_testingResults, perc_testingResults, precision)
-    percents, threshTestingMSE_mean = percResults(threshMSE_testingResults, perc_testingResults, precision)
-    percents, threshTestingSSIM_mean = percResults(threshSSIM_testingResults, perc_testingResults, precision)
-    percents, threshTestingPSNR_mean = percResults(threshPSNR_testingResults, perc_testingResults, precision)
     percents, ERDPSNR_mean = percResults(ERDPSNR_testingResults, perc_testingResults, precision)
-    percents, threshTestingTD_mean = percResults(threshTD_testingResults, perc_testingResults, precision)
 
     #Save average results per percentage data
     np.savetxt(dir_TestingResults+'testingAverageMSE_Percentage.csv', np.transpose([percents, testingMSE_mean]), delimiter=',')
@@ -80,13 +70,7 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
     np.savetxt(dir_TestingResults+'testingAveragePSNR_Percentage.csv', np.transpose([percents, testingPSNR_mean]), delimiter=',')
     np.savetxt(dir_TestingResults+'testingAverageTD_Percentage.csv', np.transpose([percents, testingTD_mean]), delimiter=',')
     np.savetxt(dir_TestingResults+'testingAverageERDPSNR_Percentage.csv', np.transpose([percents, ERDPSNR_mean]), delimiter=',')
-    np.savetxt(dir_TestingResults+'testingAverageIou_Percentage.csv', np.transpose([percents, testingIou_mean]), delimiter=',')
-    
-    np.savetxt(dir_TestingResults+'threshTestingAverageMSE_Percentage.csv', np.transpose([percents, threshTestingMSE_mean]), delimiter=',')
-    np.savetxt(dir_TestingResults+'threshTestingAverageSSIM_Percentage.csv', np.transpose([percents, threshTestingSSIM_mean]), delimiter=',')
-    np.savetxt(dir_TestingResults+'threshTestingAveragePSNR_Percentage.csv', np.transpose([percents, threshTestingPSNR_mean]), delimiter=',')
-    np.savetxt(dir_TestingResults+'threshTestingAverageTD_Percentage.csv', np.transpose([percents, threshTestingTD_mean]), delimiter=',')
-    
+
     #Save average plots per percentage data in plot
     font = {'size' : 18}
     plt.rc('font', **font)
@@ -132,56 +116,6 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
     plt.rc('font', **font)
     f = plt.figure(figsize=(20,8))
     ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(percents, testingIou_mean,color='black') 
-    ax1.set_xlabel('% Pixels Measured')
-    ax1.set_ylabel('Average IOU')
-    plt.savefig(dir_TestingResults + 'testingAverageIou_Percentage' + '.png')
-    plt.close()
-
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(percents, threshTestingMSE_mean,color='black') 
-    ax1.set_xlabel('% Pixels Measured')
-    ax1.set_ylabel('Average MSE')
-    plt.savefig(dir_TestingResults + 'threshTestingAverageMSE_Percentage' + '.png')
-    plt.close()
-
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(percents, threshTestingSSIM_mean,color='black') 
-    ax1.set_xlabel('% Pixels Measured')
-    ax1.set_ylabel('Average SSIM')
-    plt.savefig(dir_TestingResults + 'threshTestingAverageSSIM_Percentage' + '.png')
-    plt.close()
-
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)
-    ax1.plot(percents, threshTestingPSNR_mean,color='black') 
-    ax1.set_xlabel('% Pixels Measured')
-    ax1.set_ylabel('Average PSNR')
-    plt.savefig(dir_TestingResults + 'threshTestingAveragePSNR_Percentage' + '.png')
-    plt.close()
-    
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(percents, threshTestingTD_mean,color='black') 
-    ax1.set_xlabel('% Pixels Measured')
-    ax1.set_ylabel('Average Total Distortion')
-    plt.savefig(dir_TestingResults + 'threshTestingAverageTD_Percentage' + '.png')
-    plt.close()
-
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)    
     ax1.plot(percents, ERDPSNR_mean,color='black') 
     ax1.set_xlabel('% Pixels Measured')
     ax1.set_ylabel('Average ERD PSNR')
@@ -193,11 +127,6 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
     lastMSEResult = []
     lastPSNRResult = []
     lastTDResult = []
-    lastIouResult = []
-    lastThreshSSIMResult = []
-    lastThreshMSEResult = []
-    lastThreshPSNRResult = []
-    lastThreshTDResult = []
     lastERDPSNRResult = []
     lastTimeResult = []
     #percLinesScanned = []
@@ -208,14 +137,7 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
         lastMSEResult.append(MSE_testingResults[i][len(MSE_testingResults[i])-1])
         lastPSNRResult.append(PSNR_testingResults[i][len(PSNR_testingResults[i])-1])
         lastTDResult.append(TD_testingResults[i][len(TD_testingResults[i])-1])
-        lastIouResult.append(iou_testingResults[i][len(iou_testingResults[i])-1])
         lastERDPSNRResult.append(ERDPSNR_testingResults[i][len(ERDPSNR_testingResults[i])-1])
-        
-        lastThreshSSIMResult.append(threshSSIM_testingResults[i][len(threshSSIM_testingResults[i])-1])
-        lastThreshMSEResult.append(threshMSE_testingResults[i][len(threshMSE_testingResults[i])-1])
-        lastThreshPSNRResult.append(threshPSNR_testingResults[i][len(threshPSNR_testingResults[i])-1])
-        lastThreshTDResult.append(threshTD_testingResults[i][len(threshTD_testingResults[i])-1])
-
         lastTimeResult.append(time_testingResults[i]/lastPercMeasured)
         #percLinesScanned.append((len(SSIM_testingResults[i])/len(maskObject.linesToScan))*100)
         percPixelsScanned.append(lastPercMeasured)
@@ -228,14 +150,7 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
     dataPrintout.append(['Average SSIM:', np.mean(lastSSIMResult), '+/-', np.std(lastSSIMResult)])
     dataPrintout.append(['Average PSNR:', np.mean(lastPSNRResult), '+/-', np.std(lastPSNRResult)])
     dataPrintout.append(['Average TD:', np.mean(lastTDResult), '+/-', np.std(lastTDResult)])
-    dataPrintout.append(['Average IOU:', np.mean(lastIouResult), '+/-', np.std(lastIouResult)])
     dataPrintout.append(['Average ERD PSNR:', np.mean(lastERDPSNRResult), '+/-', np.std(lastERDPSNRResult)])
-    
-    dataPrintout.append(['Average Thresh MSE:', np.mean(lastThreshMSEResult), '+/-', np.std(lastThreshMSEResult)])
-    dataPrintout.append(['Average Thresh SSIM:', np.mean(lastThreshSSIMResult), '+/-', np.std(lastThreshSSIMResult)])
-    dataPrintout.append(['Average Thresh PSNR:', np.mean(lastThreshPSNRResult), '+/-', np.std(lastThreshPSNRResult)])
-    dataPrintout.append(['Average Thresh TD:', np.mean(lastThreshTDResult), '+/-', np.std(lastThreshTDResult)])
-    
     dataPrintout.append(['Average Time', np.mean(lastTimeResult), '+/-', np.std(lastTimeResult)])
     #dataPrintout.append(['Average % Lines Scanned:', np.mean(percLinesScanned),'+/-', np.std(percLinesScanned)])
     dataPrintout.append(['Average % Pixels Scanned:', np.mean(percPixelsScanned),'+/-',np.std(percPixelsScanned)])
