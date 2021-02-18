@@ -4,7 +4,7 @@
 
 #Perform summation and alignment over an mz range for a given line; mzFile cannot be pickled and passed into function
 @ray.remote
-def mzrange_parhelper(mzRange, scanFileName, mzMethod, newTimes, origTimes):
+def mzrange_parhelper(mzRange, scanFileName, mzMethod):
     data = mzFile(scanFileName)
     lineNum = int(scanFileName.split('line')[1].split('.')[0])-1
     
@@ -15,11 +15,14 @@ def mzrange_parhelper(mzRange, scanFileName, mzMethod, newTimes, origTimes):
     else:
         sys.exit('Error! - mzMethod: ' + mzMethod + 'for: ' + scanFileName + 'has not been implemented')
  
-    return lineNum, np.interp(newTimes, origTimes[lineNum], lineData)
+    return lineNum, lineData
 
 #All information pertaining to a sample
 class Sample:
-    def __init__(self, sampleFolder):
+    def __init__(self, sampleFolder, ignoreMissingLines=False):
+    
+        #Should missing lines be ignored (to only be used in training and testing)
+        self.ignoreMissingLines = ignoreMissingLines
     
         #Location of MSI data and sample name
         self.sampleFolder = sampleFolder + os.path.sep
@@ -27,6 +30,7 @@ class Sample:
     
         #Which files have already been read
         self.readScanFiles = []
+        self.readLines = []
 
         #Read in data from sampleInfo.txt
         sampleInfo = open(self.sampleFolder+'sampleInfo.txt').readlines()
@@ -37,7 +41,7 @@ class Sample:
         self.mzMethod = sampleInfo[4].rstrip()
         self.mzSpec = sampleInfo[5].rstrip()
         self.normMethod = sampleInfo[6].rstrip()
-        if self.normMethod == 'standard' or self.mzSpec == 'value': self.mzTolerance = float(sampleInfo[7].rstrip())*1e-6
+        if self.normMethod == 'standard' or self.mzSpec == 'value': self.mzTolerance = (float(sampleInfo[7].rstrip())*1e-03)/2
         
         #Read in all m/z locations/ranges (.csv)
         if self.mzSpec == 'value':
@@ -45,7 +49,7 @@ class Sample:
             self.mzRanges = [[mzLocation-self.mzTolerance, mzLocation+self.mzTolerance] for mzLocation in mzLocations]
         elif self.mzSpec == 'range':
             self.mzRanges = np.loadtxt(self.sampleFolder+'mz.csv', delimiter=',')
-        
+                
         #Prepare variables to hold sample data
         self.mzWeights = np.ones(len(self.mzRanges))/len(self.mzRanges)
         self.numColumns = int(1/self.timeRes)
@@ -59,12 +63,14 @@ class Sample:
         if  self.normMethod == 'standard': 
             mzStandardLocations = np.loadtxt(self.sampleFolder+'mzStandards.csv', delimiter=',')
             if mzStandardLocations.shape != ():
+                print('Warning! - Untested functionality, will sum the formed visualizations of the specified m/z ranges for the normalization')
                 self.mzStandardRanges = [[mzStandardLocation-self.mzTolerance, mzStandardLocation+self.mzTolerance] for mzStandardLocation in mzStandardLocations]
             else:
                 self.mzStandardRanges = [[mzStandardLocations-self.mzTolerance, mzStandardLocations+self.mzTolerance]]
-            self.mzStandardImages = [np.zeros((self.numLines, self.numColumns)) for mzRangeNum in range(0, len(self.mzStandardRanges))]
+            self.mzStandardImages = [copy.deepcopy(self.origTIC) for mzRangeNum in range(0, len(self.mzStandardRanges))]
 
         #Declare variables used in training/testing/implementation
+        self.origNormArray = None
         self.normArray = None
         self.avgMeasuredImage = None
         self.avgGroundTruthImage = []
@@ -97,36 +103,50 @@ class Sample:
             #Establish file pointer and line number (1 indexed) for the specific scan
             data = mzFile(scanFileName)
             lineNum = int(scanFileName.split('line')[1].split('.')[0])-1
+            self.readLines.append(lineNum)
             
             #Obtain the total ion chromatogram over all mz available
             xicData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
             self.origTimes[lineNum] = xicData[:,0]
             self.origTIC[lineNum] = xicData[:,1]
 
-        #Align the rows in the original TIC
-        self.TIC = np.asarray([np.interp(self.newTimes, self.origTimes[lineNum], self.origTIC[lineNum]) for lineNum in range(0, self.numLines)])
-
         #Check and setup for normalization
         if self.normMethod == 'tic':
-            self.normArray = self.TIC
+            self.origNormArray = self.origTIC
         elif self.normMethod == 'standard':
             for mzRangeNum in range(0, len(self.mzStandardRanges)): 
-                results = ray.get([mzrange_parhelper.remote(self.mzStandardRanges[mzRangeNum], scanFileName, self.mzMethod, self.newTimes, self.origTimes) for scanFileName in scanFiles])
+                results = ray.get([mzrange_parhelper.remote(self.mzStandardRanges[mzRangeNum], scanFileName, self.mzMethod) for scanFileName in scanFiles])
                 for result in results: self.mzStandardImages[mzRangeNum][result[0]] = result[1]
-            self.normArray = np.sum(self.mzStandardImages, axis=0)
+                self.origNormArray = np.sum(self.mzStandardImages, axis=0)
         elif self.normMethod == 'none':
-            self.normArray = None
+            self.origNormArray = None
         else:
             sys.exit('Error! - Unknown normalization method: ' + self.normMethod + ' specified for sample: ' + self.name)
 
+        #Align the normalization array for visualization
+        self.normArray = np.asarray([np.interp(self.newTimes, self.origTimes[lineNum], self.origNormArray[lineNum]) for lineNum in range(0, self.numLines)])
+
         #For each mzRange generate a visualization
         for mzRangeNum in range(0, len(self.mzRanges)): 
-            results = ray.get([mzrange_parhelper.remote(self.mzRanges[mzRangeNum], scanFileName, self.mzMethod, self.newTimes, self.origTimes) for scanFileName in scanFiles])
-            for result in results: self.mzImages[mzRangeNum][result[0]] = result[1]
-
-        #Perform normalization
-        if self.normMethod != 'none': self.mzImages = np.asarray([np.nan_to_num(mzImage/self.normArray) for mzImage in self.mzImages])
-
+            results = ray.get([mzrange_parhelper.remote(self.mzRanges[mzRangeNum], scanFileName, self.mzMethod) for scanFileName in scanFiles])
+            for result in results: 
+                #Perform normalization if specified
+                if self.normMethod != 'none': 
+                    self.mzImages[mzRangeNum][result[0]] = np.interp(self.newTimes, self.origTimes[result[0]], np.nan_to_num(result[1]/self.origNormArray[result[0]], nan=0, posinf=0, neginf=0))
+                else:
+                    self.mzImages[mzRangeNum][result[0]] = np.interp(self.newTimes, self.origTimes[result[0]], result[1])
+        
+        #If missing lines are to be ignored, then delete them
+        if self.ignoreMissingLines: 
+            missingLines = list(set(np.arange(1, self.numLines).tolist()) - set(self.readLines))
+            self.mzImages = np.delete(self.mzImages, missingLines, axis=1)
+            self.mzStandardImages = np.delete(self.mzStandardImages, missingLines, axis=1)
+            self.origTIC = np.delete(self.origTIC, missingLines, axis=0)
+            self.origTimes = np.delete(self.origTIC, missingLines, axis=0)
+            self.origNormArray = np.delete(self.origNormArray, missingLines, axis=0)
+            self.normArray = np.delete(self.normArray, missingLines, axis=0)
+            self.numLines -= len(missingLines)
+        
     #Scan new locations in the sample
     def performMeasurements(self, newIdxs, simulationFlag):
 
@@ -166,7 +186,7 @@ class Result():
         self.reconImages = []
         self.RDImages = []
         self.mzRecons = []
-        self.maskObjects = []
+        self.samples = []
         self.ERDValueNPs = []
         
         self.MSEList = []
@@ -177,15 +197,12 @@ class Result():
         
         self.percMeasuredList = []
 
-        self.maximumValue = np.max(avgGroundTruthImage)
-
     def update(self, percMeasured, sample, maskObject, reconImage, ERDValuesNP, iterNum):
 
         #Save the model development
-        self.maskObjects.append(copy.deepcopy(maskObject))
         self.ERDValueNPs.append(copy.deepcopy(ERDValuesNP))
         self.avgImages.append(copy.deepcopy(sample.avgMeasuredImage))
-        self.sample = copy.deepcopy(sample)
+        self.samples.append(copy.deepcopy(sample))
         self.percMeasuredList.append(copy.deepcopy(percMeasured))
         self.reconImages.append(copy.deepcopy(reconImage))
     
@@ -197,29 +214,32 @@ class Result():
                 
                 #Measure and save statistics
                 difference = np.sum(computeDifference(self.avgGroundTruthImage, self.reconImages[index]))
-                TD = difference/self.maskObjects[index].area
+                TD = difference/self.samples[index].maskObject.area
                 MSE = mean_squared_error(self.avgGroundTruthImage, self.reconImages[index])
-                SSIM = structural_similarity(self.avgGroundTruthImage, self.reconImages[index], data_range=self.reconImages[index].max() - self.reconImages[index].min())
-                PSNR = compare_psnr(self.avgGroundTruthImage, self.reconImages[index], data_range=self.reconImages[index].max() - self.reconImages[index].min())
+                SSIM = structural_similarity(self.avgGroundTruthImage, self.reconImages[index], data_range=1)
+                PSNR = compare_psnr(self.avgGroundTruthImage, self.reconImages[index], data_range=1)
 
                 self.TDList.append(TD)
                 self.MSEList.append(MSE)
                 self.SSIMList.append(SSIM)
                 self.PSNRList.append(PSNR)
                 
-            #If determining the best c, return the area under the TD curve
+            #If determining the best c, return the area under the PSNR curve
             if self.bestCFlag: return self.PSNRList, self.percMeasuredList
 
-            #Determine maximum value for color bar visualization
-            self.maximumValue = np.max(self.reconImages)
-
-            #Calculate the actual RD Image and relative error of the ERD for each of the masks; bestCFlag data must be returned before this subroutine
-            for index in tqdm(range(0, len(self.maskObjects)), desc='RD Calc', leave = False, ascii=True):
-                RDImage = calcRD(self.maskObjects[index], self.reconImages[index], optimalC, self.avgGroundTruthImage)
+            #Calculate the actual RD Image; bestCFlag data should be returned before this subroutine
+            #currMaxRD = 0
+            for index in tqdm(range(0, len(self.samples)), desc='RD Calc', leave = False, ascii=True):
+                RDImage = computeRD(self.samples[index], optimalC)
                 self.RDImages.append(RDImage)
-                ERDPSNR = compare_psnr(RDImage, self.ERDValueNPs[index], data_range=self.ERDValueNPs[index].max() - self.ERDValueNPs[index].min())
-                self.ERDPSNRList.append(ERDPSNR)
-                    
+                self.ERDPSNRList.append(compare_psnr(RDImage, self.ERDValueNPs[index], data_range=1))
+                #if np.max(RDImage) > currMaxRD: currMaxRD = np.max(RDImage)
+            
+            #Normalize RD Images across sampling series and find ERD PSNR difference
+            #for index in range(0, len(self.samples)): 
+            #    self.RDImages[index] = self.RDImages[index]/currMaxRD
+            #    self.ERDPSNRList.append(compare_psnr(self.RDImages[index], self.ERDValueNPs[index], data_range=1))
+            
         #If an animation will be produced and the run has completed
         if self.animationFlag:
 
@@ -245,7 +265,7 @@ class Result():
                 percSampled = "{:.2f}".format(self.percMeasuredList[-1])
                 
                 #Perform reconstructions and statistics extraction for all images
-                results = ray.get([performRecon_parhelper.remote(self.sample.measuredmzImages[mzImageNum], self.maskObjects[-1]) for mzImageNum in range(0,len(self.sample.measuredmzImages))])
+                results = ray.get([performRecon_parhelper.remote(self.sample.measuredmzImages[mzImageNum], self.samples[-1].maskObject) for mzImageNum in range(0,len(self.sample.measuredmzImages))])
                 self.mzRecons = [result for result in results]
 
                 for massNum in tqdm(range(0, len(self.sample.mzRanges)), desc='mz Images', leave = False, ascii=True):
@@ -259,17 +279,11 @@ class Result():
                     #Retreive ground truth for the specific mz image
                     mzImage = self.sample.mzImages[massNum].astype("float")
                     
-                    #SSIM relative to the measured
-                    measureSSIM = "{:.2f}".format(structural_similarity(mzImage, subMeasuredImage, data_range=subMeasuredImage.max() - subMeasuredImage.min()))
+                    #MSE relative to the measured
+                    measureMSE = "{:.2f}".format(mean_squared_error(mzImage, subMeasuredImage))
                     
-                    #SSIM relative to the reconstruction
-                    reconSSIM = "{:.2f}".format(structural_similarity(mzImage, subReconImage, data_range=subReconImage.max() - subReconImage.min()))
-                    
-                    #PSNR relative to the measured
-                    measurePSNR = "{:.2f}".format(compare_psnr(mzImage, subMeasuredImage, data_range=subMeasuredImage.max() - subMeasuredImage.min()))
-                    
-                    #PSNR relative to the reconstruction
-                    reconPSNR ="{:.2f}".format(compare_psnr(mzImage, subReconImage, data_range=subReconImage.max() - subReconImage.min()))
+                    #MSE relative to the reconstruction
+                    reconMSE = "{:.2f}".format(mean_squared_error(mzImage, subReconImage))
 
                     #Mass range string
                     massRange = str(self.sample.mzRanges[massNum][0]) + '-' + str(self.sample.mzRanges[massNum][1])
@@ -279,60 +293,38 @@ class Result():
                     #Measured mz image
                     font = {'size' : 18}
                     plt.rc('font', **font)
-                    f = plt.figure(figsize=(15,5))
+                    f = plt.figure(figsize=(25,10))
                     f.subplots_adjust(top = 0.80)
                     f.subplots_adjust(wspace=0.15, hspace=0.2)
-                    plt.suptitle('Percent Sampled: ' + percSampled + '  Measurement mz: ' + massRange + '  SSIM: ' + measureSSIM + '  PSNR: ' + measurePSNR, fontsize=20, fontweight='bold', y = 0.95)
+                    plt.suptitle('Percent Sampled: ' + percSampled + '  Measurement mz: ' + massRange + '\nMeasured MSE: ' + measureMSE + ' Reconstruction MSE : ' + reconMSE, fontsize=20, fontweight='bold', y = 0.95)
 
-                    sub = f.add_subplot(1,3,1)
-                    sub.imshow(self.maskObjects[-1].mask, cmap='gray', aspect='auto')
+                    sub = f.add_subplot(1,4,1)
+                    sub.imshow(self.samples[-1].maskObject.mask, cmap='gray', aspect='auto')
                     sub.set_title('Sampled Mask')
 
-                    sub = f.add_subplot(1,3,2)
+                    sub = f.add_subplot(1,4,2)
                     sub.imshow(mzImage, cmap='hot', aspect='auto', vmin=0, vmax=mzMaxValue)
                     sub.set_title('Ground-Truth')
 
-                    sub = f.add_subplot(1,3,3)
+                    sub = f.add_subplot(1,4,3)
                     sub.imshow(subMeasuredImage, cmap='hot', aspect='auto', vmin=0, vmax=mzMaxValue)
                     sub.set_title('Measured')
 
-                    saveLocation = dir_mzSampleResults + 'measured_' + massRange +'.png'
-
-                    plt.savefig(saveLocation, bbox_inches='tight')
-                    plt.close()
-                    
-                    #Reconstructed mz image
-                    font = {'size' : 18}
-                    plt.rc('font', **font)
-                    f = plt.figure(figsize=(15,5))
-                    f.subplots_adjust(top = 0.80)
-                    f.subplots_adjust(wspace=0.15, hspace=0.2)
-                    plt.suptitle('Percent Sampled: ' + percSampled + '  Measurement mz: ' + massRange + '  SSIM: ' + reconSSIM + '  PSNR: ' + reconPSNR, fontsize=20, fontweight='bold', y = 0.95)
-                    
-                    sub = f.add_subplot(1,3,1)
-                    sub.imshow(self.maskObjects[-1].mask, cmap='gray', aspect='auto')
-                    sub.set_title('Sampled Mask')
-                    
-                    sub = f.add_subplot(1,3,2)
-                    sub.imshow(mzImage, cmap='hot', aspect='auto', vmin=0, vmax=mzMaxValue)
-                    sub.set_title('Ground-Truth')
-                    
-                    sub = f.add_subplot(1,3,3)
+                    sub = f.add_subplot(1,4,4)
                     sub.imshow(subReconImage, cmap='hot', aspect='auto', vmin=0, vmax=mzMaxValue)
                     sub.set_title('Reconstruction')
-                    
-                    saveLocation = dir_mzSampleResults + 'recon_' + massRange +'.png'
-                    
+
+                    saveLocation = dir_mzSampleResults + massRange +'.png'
+
                     plt.savefig(saveLocation, bbox_inches='tight')
                     plt.close()
 
-
                 #Generate each of the frames
-                for i in tqdm(range(0, len(self.maskObjects)), desc='Result Images', leave = False, ascii=True):
+                for i in tqdm(range(0, len(self.samples)), desc='Result Images', leave = False, ascii=True):
                     
-                    #Image printout
-                    #=====================
-                    saveLocation = dir_AnimationFrames + 'stretched_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                    minERDRDValue, maxERDRDValue = np.min([self.ERDValueNPs[i], self.RDImages[i]]), np.max([self.ERDValueNPs[i], self.RDImages[i]])
+                    
+                    saveLocation = dir_AnimationFrames + 'progression_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
 
                     f = plt.figure(figsize=(35,15))
                     f.subplots_adjust(top = 0.85)
@@ -340,32 +332,32 @@ class Result():
                     plt.suptitle("Percent Sampled: %.2f,  Iteration: %.0f\nRecon PSNR: %.2f, ERD PSNR: %.2f" % (self.percMeasuredList[i], i+1, self.PSNRList[i], self.ERDPSNRList[i]), fontsize=20, fontweight='bold', y = 0.95)
 
                     ax1 = plt.subplot2grid(shape=(2,3), loc=(0,0))
-                    im = ax1.imshow(self.avgGroundTruthImage, cmap='hot', aspect='auto', vmin=0, vmax=self.maximumValue)
+                    im = ax1.imshow(self.avgGroundTruthImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
                     ax1.set_title('Ground-Truth')
                     cbar = f.colorbar(im, ax=ax1, orientation='vertical', pad=0.01)
 
                     ax2 = plt.subplot2grid((2,3), (0,1))
-                    im = ax2.imshow(self.reconImages[i], cmap='hot', aspect='auto', vmin=0, vmax=self.maximumValue)
+                    im = ax2.imshow(self.reconImages[i], cmap='hot', aspect='auto', vmin=0, vmax=1)
                     ax2.set_title('Reconstruction')
                     cbar = f.colorbar(im, ax=ax2, orientation='vertical', pad=0.01)
 
                     ax3 = plt.subplot2grid((2,3), (0,2))
-                    im = ax3.imshow(abs(self.avgGroundTruthImage-self.reconImages[i]), cmap='hot', aspect='auto', vmin=0, vmax=self.maximumValue)
+                    im = ax3.imshow(abs(self.avgGroundTruthImage-self.reconImages[i]), cmap='hot', aspect='auto', vmin=0, vmax=1)
                     ax3.set_title('Absolute Difference')
                     cbar = f.colorbar(im, ax=ax3, orientation='vertical', pad=0.01)
 
                     ax4 = plt.subplot2grid((2,3), (1,0))
-                    im = ax4.imshow(self.maskObjects[i].mask, cmap='gray', aspect='auto')
+                    im = ax4.imshow(self.samples[i].maskObject.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
                     ax4.set_title('Measurement Mask')
                     cbar = f.colorbar(im, ax=ax4, orientation='vertical', pad=0.01)
-
+                    
                     ax5 = plt.subplot2grid((2,3), (1,1))
-                    im = ax5.imshow(self.ERDValueNPs[i], cmap='viridis', vmin=np.min(self.ERDValueNPs), vmax=np.max(self.ERDValueNPs), aspect='auto')
+                    im = ax5.imshow(self.ERDValueNPs[i], cmap='viridis', vmin=minERDRDValue, vmax=maxERDRDValue, aspect='auto')
                     ax5.set_title('ERD')
                     cbar = f.colorbar(im, ax=ax5, orientation='vertical', pad=0.01)
 
                     ax6 = plt.subplot2grid((2,3), (1,2))
-                    im = ax6.imshow(self.RDImages[i], cmap='viridis', vmin=np.min(self.RDImages), vmax=np.max(self.RDImages), aspect='auto')
+                    im = ax6.imshow(self.RDImages[i], cmap='viridis', vmin=minERDRDValue, vmax=maxERDRDValue, aspect='auto')
                     ax6.set_title('RD')
                     cbar = f.colorbar(im, ax=ax6, orientation='vertical', pad=0.01)
 
@@ -380,7 +372,7 @@ class Result():
                     fig=plt.figure()
                     ax=fig.add_subplot(1,1,1)
                     plt.axis('off')
-                    plt.imshow(self.reconImages[i], cmap='hot', aspect='auto', vmin=0, vmax=self.maximumValue)
+                    plt.imshow(self.reconImages[i], cmap='hot', aspect='auto', vmin=0, vmax=1)
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                     plt.savefig(saveLocation, bbox_inches=extent)
                     plt.close()
@@ -390,7 +382,7 @@ class Result():
                     fig=plt.figure()
                     ax=fig.add_subplot(1,1,1)
                     plt.axis('off')
-                    plt.imshow(self.ERDValueNPs[i], aspect='auto', vmin=0, vmax=np.max(self.ERDValueNPs))
+                    plt.imshow(self.ERDValueNPs[i], aspect='auto', vmin=minERDRDValue, vmax=maxERDRDValue)
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                     plt.savefig(saveLocation, bbox_inches=extent)
                     plt.close()
@@ -400,7 +392,7 @@ class Result():
                     fig=plt.figure()
                     ax=fig.add_subplot(1,1,1)
                     plt.axis('off')
-                    plt.imshow(self.RDImages[i], aspect='auto', vmin=0, vmax=np.max(self.RDImages))
+                    plt.imshow(self.RDImages[i], aspect='auto', vmin=minERDRDValue, vmax=maxERDRDValue)
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                     plt.savefig(saveLocation, bbox_inches=extent)
                     plt.close()
@@ -410,26 +402,26 @@ class Result():
                     fig=plt.figure()
                     ax=fig.add_subplot(1,1,1)
                     plt.axis('off')
-                    plt.imshow(self.maskObjects[i].mask, cmap='gray', aspect='auto')
+                    plt.imshow(self.samples[i].maskObject.mask, cmap='gray', aspect='auto')
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                     plt.savefig(saveLocation, bbox_inches=extent)
                     plt.close()
                     #=====================
                 
                 #Combine images into animation
-                dataFileNames = natsort.natsorted(glob.glob(dir_AnimationFrames + 'stretched_*.png'))
+                dataFileNames = natsort.natsorted(glob.glob(dir_AnimationFrames + 'progression_*.png'))
                 height, width, layers = cv2.imread(dataFileNames[0]).shape
-                animation = cv2.VideoWriter(dir_AnimationVideos + 'stretched_' + self.sample.name + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
+                animation = cv2.VideoWriter(dir_AnimationVideos + 'progression_' + self.sample.name + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
                 for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
                 animation.release()
                 animation = None
-                
+                                
                 #Save the averaged ground truth, no borders
                 saveLocation = dir_AnimationFrames + 'final_groundTruth_' + self.sample.name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
                 fig=plt.figure()
                 ax=fig.add_subplot(1,1,1)
                 plt.axis('off')
-                plt.imshow(self.avgGroundTruthImage, cmap='hot', aspect='auto', vmin=0, vmax=self.maximumValue)
+                plt.imshow(self.avgGroundTruthImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
                 extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                 plt.savefig(saveLocation, bbox_inches=extent)
                 plt.close()
@@ -439,7 +431,7 @@ class Result():
                 fig=plt.figure()
                 ax=fig.add_subplot(1,1,1)
                 plt.axis('off')
-                plt.imshow(self.reconImages[-1], cmap='hot', aspect='auto', vmin=0, vmax=self.maximumValue)
+                plt.imshow(self.reconImages[-1], cmap='hot', aspect='auto', vmin=0, vmax=1)
                 extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                 plt.savefig(saveLocation, bbox_inches=extent)
                 plt.close()
@@ -449,7 +441,7 @@ class Result():
                 fig=plt.figure()
                 ax=fig.add_subplot(1,1,1)
                 plt.axis('off')
-                plt.imshow(self.maskObjects[-1].mask, cmap='gray', aspect='auto')
+                plt.imshow(self.samples[-1].maskObject.mask, cmap='gray', aspect='auto')
                 extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                 plt.savefig(saveLocation, bbox_inches=extent)
                 plt.close()
@@ -610,36 +602,39 @@ def gaussianGenerator(inputImage, idx, sigma, maskObject):
 def gaussian_parhelper(idxs, inputImage, sigmaValues, maskObject, indexes):
     return [gaussianGenerator(inputImage, idxs[index], sigmaValues[index], maskObject) for index in indexes]
 
-def calcRD(maskObject, reconImage, cValue, avgGroundTruthImage):
-    
+def computeRD(sample, cValue):
+
     #Find neighbor information
-    neighborIndices, neighborWeights, neighborDistances = findNeighbors(maskObject)
+    neighborIndices, neighborWeights, neighborDistances = findNeighbors(sample.maskObject)
     
     #Calculate the sigma value for chosen c value, store directly into shared memory
     sigmaValues_id = ray.put(neighborDistances[:,0]/cValue)
     
     #Compute the difference between the original and reconstructed images, store directly into shared memory
-    RDPP_id = ray.put(computeDifference(avgGroundTruthImage, reconImage))
+    RDPP_id = ray.put(computeDifference(sample.avgGroundTruthImage, sample.reconImage))
     
-    #Split computation sets to be run on multiple threads
-    indexes = np.asarray(list(range(0, np.sum(maskObject.mask==0))))
+    #Split computation sets to be run on multiple `
+    indexes = np.asarray(list(range(0, np.sum(sample.maskObject.mask==0))))
     blockSize = int(np.ceil(len(indexes) / float(multiprocessing.cpu_count())))
     indexSets = np.split(indexes, np.arange(blockSize, len(indexes), blockSize))
     
     #Store indexes into shared memory
-    unMeasuredIdxs_id = ray.put(maskObject.unMeasuredIdxs)
+    unMeasuredIdxs_id = ray.put(sample.maskObject.unMeasuredIdxs)
     
     #Store aspect ratio into shared memory
-    maskObject_id = ray.put(maskObject)
+    maskObject_id = ray.put(sample.maskObject)
     
     #Perform computation of RD values for each unmeasured point
     results = ray.get([gaussian_parhelper.remote(unMeasuredIdxs_id, RDPP_id, sigmaValues_id, maskObject_id, indexes) for indexes in indexSets])
     RDValues = [result for resultSet in results for result in resultSet]
     
     #Reassemble the values into a single image
-    RDImage = np.zeros((avgGroundTruthImage.shape))
-    RDImage[np.where(maskObject.mask==0)] = RDValues
+    RDImage = np.zeros((sample.avgGroundTruthImage.shape))
+    RDImage[np.where(sample.maskObject.mask==0)] = RDValues
     
+    #Normalize
+    RDImage = MinMaxScaler().fit_transform(RDImage.reshape(-1, 1)).reshape(RDImage.shape)
+
     return RDImage
 
 def computePolyFeatures(maskObject, reconImage):
@@ -679,17 +674,17 @@ def computePolyFeatures(maskObject, reconImage):
     
     return polyFeatures
 
-def computeERD(iterNum, measuredAvgImage, reconImage, maskObject, model):
+def computeERD(iterNum, sample, model):
     
     if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net':
         
         #Compute ERD values
-        polyFeatures = computePolyFeatures(maskObject, reconImage)
+        polyFeatures = computePolyFeatures(sample.maskObject, sample.reconImage)
         ERDValues = model.predict(polyFeatures)
         
         #Rearrange ERD values into array; those that have already been measured have 0 ERD
-        ERD = np.zeros([maskObject.imageHeight, maskObject.imageWidth])
-        ERD[maskObject.unMeasuredIdxs[:, 0], maskObject.unMeasuredIdxs[:, 1]] = ERDValues
+        ERD = np.zeros([sample.maskObject.imageHeight, sample.maskObject.imageWidth])
+        ERD[sample.maskObject.unMeasuredIdxs[:, 0], sample.maskObject.unMeasuredIdxs[:, 1]] = ERDValues
         
         #Remove values that are less than those already scanned (0 ERD)
         ERD[np.where((ERD < 0))] = 0
@@ -697,21 +692,21 @@ def computeERD(iterNum, measuredAvgImage, reconImage, maskObject, model):
     elif erdModel == 'DLADS':
         
         #Form measured image
-        measuredImage = np.zeros((maskObject.mask.shape))
-        measuredImage[np.where(maskObject.mask)] = measuredAvgImage[np.where(maskObject.mask)]
+        measuredImage = np.zeros((sample.maskObject.mask.shape))
+        measuredImage[np.where(sample.maskObject.mask)] = sample.avgMeasuredImage[np.where(sample.maskObject.mask)]
 
         #Compute feature image for network input
-        featureImage = featureExtractor(maskObject, measuredImage, reconImage)
+        featureImage = featureExtractor(sample.maskObject, measuredImage, sample.reconImage)
 
         #Send input through trained model
-        inputTensor, originalShape = makeTensor(featureImage, False)
-        ERD = model.predict(inputTensor, steps=1)[0,:,:,0]
+        inputImage, originalShape = makeCompatible(featureImage)
+        ERD = model.predict(inputImage, steps=1)[0,:,:,0]
         
         #Revert to the original shape
         ERD = resize(ERD, (originalShape), order=0)
 
         #Ensure points already measured and those with values less than those have a 0 ERD
-        ERD[maskObject.measuredIdxs[:, 0], maskObject.measuredIdxs[:, 1]] = 0
+        ERD[sample.maskObject.measuredIdxs[:, 0], sample.maskObject.measuredIdxs[:, 1]] = 0
         ERD[np.where((ERD < 0))] = 0
     
     return ERD
@@ -741,9 +736,9 @@ def runSLADS(samples, model, scanMethod, cValue, percToScan, stopPerc, sampleNum
     
     #Determine ERD or use the RD as the ERD if the oracleFlag or bestCFlag is enabled
     if oracleFlag or bestCFlag:
-        ERDValuesNP = calcRD(sample.maskObject, sample.reconImage, cValue, sample.avgGroundTruthImage)
+        ERDValuesNP = computeRD(sample, cValue)
     else:
-        ERDValuesNP = computeERD(iterNum, sample.avgMeasuredImage, sample.reconImage, sample.maskObject, model)
+        ERDValuesNP = computeERD(iterNum, sample, model)
 
     #Initialize and perform first update for a result object
     result = Result(sample, sample.maskObject, sample.avgGroundTruthImage, bestCFlag, oracleFlag, simulationFlag, animationFlag)
@@ -767,7 +762,7 @@ def runSLADS(samples, model, scanMethod, cValue, percToScan, stopPerc, sampleNum
             iterNum += 1
             
             #Find next measurement locations
-            sample.maskObject, newIdxs = findNewMeasurementIdxs(sample.maskObject, sample, ERDValuesNP, percToScan, scanMethod)
+            newIdxs = findNewMeasurementIdxs(sample, ERDValuesNP, percToScan, scanMethod)
             
             #Perform measurements
             sample.performMeasurements(newIdxs, simulationFlag)
@@ -781,9 +776,9 @@ def runSLADS(samples, model, scanMethod, cValue, percToScan, stopPerc, sampleNum
             
             #Determine ERD or use the RD as the ERD if the oracleFlag or bestCFlag is enabled
             if oracleFlag or bestCFlag:
-                ERDValuesNP = calcRD(sample.maskObject, sample.reconImage, cValue, sample.avgGroundTruthImage)
+                ERDValuesNP = computeRD(sample, cValue)
             else:
-                ERDValuesNP = computeERD(iterNum, sample.avgMeasuredImage, sample.reconImage, sample.maskObject, model)
+                ERDValuesNP = computeERD(iterNum, sample, model)
 
             #Update the result
             result.update(sample.percMeasured, sample, sample.maskObject, sample.reconImage, ERDValuesNP, iterNum)
@@ -794,31 +789,31 @@ def runSLADS(samples, model, scanMethod, cValue, percToScan, stopPerc, sampleNum
 
     return result
 
-def findNewMeasurementIdxs(maskObject, sample, ERDValuesNP, percToScan, scanMethod):
+def findNewMeasurementIdxs(sample, ERDValuesNP, percToScan, scanMethod):
 
     #Make sure ERDValuesNP is in np array
     ERDValuesNP = np.asarray(ERDValuesNP)
     
     if scanMethod == 'random':
-        newIdxs = np.asarray(random.sample(maskObject.unMeasuredIdxs.tolist(), int((percToScan/100)*maskObject.area)))
+        newIdxs = np.asarray(random.sample(sample.maskObject.unMeasuredIdxs.tolist(), int((percToScan/100)*sample.maskObject.area)))
     elif scanMethod == 'pointwise':
         
         #Obtain a list of all ERD values for unmeasured locations
-        ERDValueList = [ERDValuesNP[tuple(pt)] for pt in maskObject.unMeasuredIdxs]
+        ERDValueList = [ERDValuesNP[tuple(pt)] for pt in sample.maskObject.unMeasuredIdxs]
         
         #Sort the values in reverse order and choose the top 1% of values
-        newIdxs = maskObject.unMeasuredIdxs[np.argsort(ERDValueList)][::-1][:int((percToScan/100)*maskObject.area)]
+        newIdxs = sample.maskObject.unMeasuredIdxs[np.argsort(ERDValueList)][::-1][:int((percToScan/100)*sample.maskObject.area)]
 
     elif scanMethod == 'linewise':
         #==========================================
         #OPTIMAL LINE DETERMINATION
         #==========================================
         
-        lineERDSums = [np.nansum(ERDValuesNP[tuple([x[0] for x in line]), tuple([y[1] for y in line])]) for line in maskObject.linesToScan]
+        lineERDSums = [np.nansum(ERDValuesNP[tuple([x[0] for x in line]), tuple([y[1] for y in line])]) for line in sample.maskObject.linesToScan]
         
         #Choose the line with maximum ERD and extract the actual indices
         lineToScanIdx = np.nanargmax(lineERDSums)
-        lineToScanIdxs = maskObject.linesToScan[lineToScanIdx]
+        lineToScanIdxs = sample.maskObject.linesToScan[lineToScanIdx]
         
         #Set the default new Idxs to be all of the indexes identified
         newIdxs = lineToScanIdxs.copy()
@@ -861,13 +856,13 @@ def findNewMeasurementIdxs(maskObject, sample, ERDValuesNP, percToScan, scanMeth
         #==========================================
         #Remove the selected points from further consideration, allows revisting lines
         if lineRevistMethod:
-            maskObject.delPoints(newIdxs)
+            sample.maskObject.delPoints(newIdxs)
         else:
             #Remove the line selected from further consideration, does not allow revisiting
-            maskObject.delLine(lineToScanIdx)
+            sample.maskObject.delLine(lineToScanIdx)
         #==========================================
 
-    return maskObject, newIdxs
+    return newIdxs
 
 def findNeighbors(maskObject):
 
@@ -970,29 +965,43 @@ def sizeFunc(num, suffix='B'):
         num /= 1024.0
     return "%.1f %s%s" % (num, 'Yi', suffix)
 
-def identityBlock(inputData, numFilters):
-    conv_1 = Conv2D(numFilters, (1,1), padding='same', kernel_initializer='he_normal')(inputData)
-    conv_1 = LayerNormalization()(conv_1)
-    conv_1 = ReLU()(conv_1)
-    conv_1 = Conv2D(numFilters, (3,3), padding='same', kernel_initializer='he_normal')(conv_1)
-    conv_1 = LayerNormalization()(conv_1)
-    conv_1 = ReLU()(conv_1)
-    conv_1 = Conv2D(numFilters, (1,1), padding='same', kernel_initializer='he_normal')(conv_1)
-    conv_1 = LayerNormalization()(conv_1)
-    conv_1 = concatenate([inputData, conv_1], axis=3)
-    conv_1 = ReLU()(conv_1)
+def addClip(model, numFilters, numChannels):
+    inputs = Input(shape=(None,None,numChannels))
+    modelResult = model(inputs, training=False)
+    output = tf.clip_by_value(modelResult, 0, 1)
 
-    return conv_1
+    return tf.keras.Model(inputs=inputs, outputs=output)
 
 #CNN
 def cnn(numFilters, numChannels):
     inputs = Input(shape=(None,None,numChannels))
-    conv_1 = identityBlock(inputs, numFilters)
-    conv_2 = identityBlock(conv_1, numFilters)
-    conv_3 = identityBlock(conv_2, numFilters)
-    conv_4 = identityBlock(conv_3, numFilters)
     
-    output = Conv2D(1, (1,1), activation='linear', padding='same', kernel_initializer='he_normal')(conv_4)
+    conv = Conv2D(numFilters, (3,3), padding='same', kernel_initializer='he_normal')(inputs)
+    conv = LayerNormalization()(conv)
+    conv = LeakyReLU()(conv)
+    
+    conv = Conv2D(numFilters, (3,3), padding='same', kernel_initializer='he_normal')(conv)
+    conv = LayerNormalization()(conv)
+    conv = LeakyReLU()(conv)
+    
+    conv = Conv2D(numFilters, (1,1), padding='same', kernel_initializer='he_normal')(conv)
+    conv = LayerNormalization()(conv)
+    conv = LeakyReLU()(conv)
+    
+    output = Conv2D(1, (1,1), activation='linear', padding='same', kernel_initializer='he_normal')(conv)
+    output = tfp.math.clip_by_value_preserve_gradient(output, 0, 1)
+
+    return tf.keras.Model(inputs=inputs, outputs=output)
+
+def mlp(numFilters, numChannels):
+    inputs = Input(shape=(None,None,numChannels))
+    dense_1 = Dense(numFilters, activation='relu', kernel_initializer='he_normal')(inputs)
+    dense_2 = Dense(numFilters, activation='relu', kernel_initializer='he_normal')(dense_1)
+    dense_3 = Dense(numFilters, activation='relu', kernel_initializer='he_normal')(dense_2)
+    dense_4 = Dense(numFilters, activation='relu', kernel_initializer='he_normal')(dense_3)
+    dense_5 = Dense(numFilters, activation='relu', kernel_initializer='he_normal')(dense_4)
+    output = Dense(1, activation='linear', kernel_initializer='he_normal')(dense_5)
+    output = tfp.math.clip_by_value_preserve_gradient(output, 0, 1)
 
     return tf.keras.Model(inputs=inputs, outputs=output)
 
@@ -1001,88 +1010,33 @@ def unet(numFilters, numChannels):
     
     inputs = Input(shape=(None,None,numChannels))
 
-    conv_1 = identityBlock(inputs, numFilters)
+    conv_1 = Conv2D(numFilters, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
     down_1 = Conv2D(numFilters, (1,1), strides=(2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv_1)
 
-    conv_2 = identityBlock(down_1, numFilters*2)
+    conv_2 = Conv2D(numFilters*2, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(down_1)
     down_2 = Conv2D(numFilters*2, (1,1), strides=(2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv_2)
 
-    conv_3 = identityBlock(down_2, numFilters*4)
+    conv_3 = Conv2D(numFilters*4, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(down_2)
     down_3 = Conv2D(numFilters*4, (1,1), strides=(2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv_3)
     
-    conv_4 = identityBlock(down_3, numFilters*8)
+    conv_4 = Conv2D(numFilters*8, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(down_3)
 
     upScale_5 = Conv2D(numFilters*4, (1,1), activation='relu', padding='same', kernel_initializer='he_normal')(UpSampling2D(interpolation='nearest')(conv_4))
     skip_5 = concatenate([upScale_5, conv_3], axis=3)
-    conv_5 = identityBlock(skip_5, numFilters*4)
+    conv_5 = Conv2D(numFilters*4, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(skip_5)
     
     upScale_6 = Conv2D(numFilters*2, (1,1), activation='relu', padding='same', kernel_initializer='he_normal')(UpSampling2D(interpolation='nearest')(conv_5))
     skip_6 = concatenate([upScale_6, conv_2], axis=3)
-    conv_6 = identityBlock(skip_6, numFilters*2)
+    conv_6 = Conv2D(numFilters*2, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(skip_6)
     
     upScale_7 = Conv2D(numFilters, (1,1), activation='relu', padding='same', kernel_initializer='he_normal')(UpSampling2D(interpolation='nearest')(conv_6))
     skip_7 = concatenate([upScale_7, conv_1], axis=3)
-    conv_7 = identityBlock(skip_7, numFilters*2)
+    conv_7 = Conv2D(numFilters, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(skip_7)
     
-    output = Conv2D(1, (1,1), activation='linear', padding='same', kernel_initializer='he_normal')(conv_7)
+    conv_8 = Conv2D(numFilters, (1,1), activation='relu', padding='same', kernel_initializer='he_normal')(conv_7)
+    output = Conv2D(1, (1,1), activation='linear', padding='same', kernel_initializer='he_normal')(conv_8)
+    output = tfp.math.clip_by_value_preserve_gradient(output, 0, 1)
     
-    return tf.keras.Model(inputs=inputs, outputs=output)
-
-#RBDN
-def rbdn(numFilters, numChannels):
-    
-    #Branch 0 start
-    inputs = Input(shape=(None,None,numChannels))
-    
-    conv_0 = Conv2D(numFilters, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
-    conv_0 = Conv2D(numFilters, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(conv_0)
-    ln = LayerNormalization()(conv_0)
-    maxPool_0 = MaxPooling2D(pool_size=(2,2))(ln)
-    
-    #Branch 1 start
-    conv_10 = Conv2D(numFilters*2, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(maxPool_0)
-    conv_10 = Conv2D(numFilters*2, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(conv_10)
-    ln = LayerNormalization()(conv_10)
-    maxPool_1 = MaxPooling2D(pool_size=(2,2))(ln)
-    
-    #Branch 2 start
-    conv_20 = Conv2D(numFilters*4, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(maxPool_1)
-    conv_20 = Conv2D(numFilters*4, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(conv_20)
-    ln = LayerNormalization()(conv_20)
-    maxPool_2 = MaxPooling2D(pool_size=(2,2))(ln)    
-    
-    #Branch 3 start
-    conv_30 = Conv2D(numFilters*8, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(maxPool_2)
-    conv_30 = Conv2D(numFilters*8, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(conv_30)
-    ln = LayerNormalization()(conv_30)
-    maxPool_3 = MaxPooling2D(pool_size=(2,2))(ln)
-    
-    #Branch 3 finish
-    conv_31 = Conv2D(numFilters*8, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(maxPool_3)
-    conv_31 = Conv2D(numFilters*8, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(conv_31)
-    upscale_3 = Conv2D(numFilters*8, (1,1), activation='relu', padding='same', kernel_initializer='he_normal')(UpSampling2D(interpolation='nearest')(conv_31))
-    ln = LayerNormalization()(upscale_3)
-    
-    #Branch 2 finish
-    conc_2 = concatenate([ln, maxPool_2], axis=3)
-    conv_21 = Conv2D(numFilters*4, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(conc_2)
-    conv_21 = Conv2D(numFilters*4, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(conv_21)
-    upscale_2 = Conv2D(numFilters*4, (1,1), activation='relu', padding='same', kernel_initializer='he_normal')(UpSampling2D(interpolation='nearest')(conv_21))
-    ln = LayerNormalization()(upscale_2)
-    
-    #Branch 1 finish
-    conc_1 = concatenate([ln, maxPool_1], axis=3)
-    conv_11 = Conv2D(numFilters*2, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(conc_1)
-    conv_11 = Conv2D(numFilters*2, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(conv_11)
-    upscale_1 = Conv2D(numFilters*2, (1,1), activation='relu', padding='same', kernel_initializer='he_normal')(UpSampling2D(interpolation='nearest')(conv_11))
-    ln = LayerNormalization()(upscale_1)
-    
-    #Branch 0 finish
-    conc_0 = concatenate([ln, maxPool_0], axis=3)
-    conv_01 = Conv2D(numFilters, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(conc_0)
-    upscale_0 = Conv2D(numFilters, (1,1), activation='relu', padding='same', kernel_initializer='he_normal')(UpSampling2D(interpolation='nearest')(conv_01))
-    output = Conv2D(1, (1,1), activation='linear', padding='same', kernel_initializer='he_normal')(upscale_0)
-
     return tf.keras.Model(inputs=inputs, outputs=output)
 
 #Extract features of interest from a reconstruction for propogation through network
@@ -1104,7 +1058,8 @@ def featureExtractor(maskObject, measuredImage, reconImage):
 
     return featureImage
 
-def makeTensor(image, outputDataFlag):
+#Convert image into TF model compatible shapes/tensors
+def makeCompatible(image):
     
     #Save the original image dimensions
     originalShape = image.shape[:2]
@@ -1118,12 +1073,11 @@ def makeTensor(image, outputDataFlag):
     except:
         image = image.reshape((1,image.shape[0],image.shape[1],1))
 
-    #Convert for network input
-    resultTensor = tf.convert_to_tensor(image)
-
-    return resultTensor, originalShape
+    return image, originalShape
 
 def computeDifference(array1, array2):
     return abs(array1-array2)
 
-
+#Metric for model; compute PSNR between two tensors
+def PSNR(imageTrue, imagePred): 
+    return tf.reduce_mean(tf.image.psnr(imageTrue, imagePred, max_val=1.0))

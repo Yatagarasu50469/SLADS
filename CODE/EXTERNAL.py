@@ -50,6 +50,7 @@ from scipy import signal
 from scipy.io import loadmat
 from scipy.io import savemat
 from scipy.signal import find_peaks
+from scipy.special import softmax
 from sklearn import linear_model
 from sklearn import svm
 from sklearn.kernel_approximation import RBFSampler
@@ -74,9 +75,6 @@ from tqdm.auto import tqdm
 #Make tensorflow only report errors (3), warnings (2), information (1), all (0)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-#Disable tensorflow's autotune function as network uses a custom training loop
-os.environ['TF_CUDNN_USE_AUTOTUNE'] = '0'
-
 import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
 warnings.filterwarnings("ignore")
@@ -86,6 +84,8 @@ from tensorflow import keras
 from tensorflow.keras import backend as K
 from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import *
+import tensorflow_probability as tfp
+
 #==================================================================
 
 #==================================================================

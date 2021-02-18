@@ -114,14 +114,14 @@ featDistCutoff = 0.25
 #DLADS MODEL PARAMETERS (disregard if using SLADS-LS or SLADS-Net)
 #==================================================================
 
-#Which model should be used for training: cnn, unet, or rbdn
+#Which model should be used for training: cnn, or unet
 modelDef = 'cnn'
 
-#How many filters should be used (doubles by layer in unet/rbdn, constant in cnn)
+#How many filters should be used (doubles by layer in unet, constant in cnn)
 numStartFilters = 64
 
 #What should the learning rate of the model's optimizer be
-learningRate = 1e-3
+learningRate = 1e-4
 
 #What should the batch size for pushing data through the network be
 batchSize = 1

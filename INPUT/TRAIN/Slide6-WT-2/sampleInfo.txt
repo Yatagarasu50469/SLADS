@@ -4,5 +4,5 @@
 5.300115
 xic
 range
-tic
+standard
 20

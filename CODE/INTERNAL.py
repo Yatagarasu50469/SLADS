@@ -17,13 +17,14 @@ elif consoleRunning and systemOS == 'Windows':
 else:
     consoleRows, consoleColumns = 40, 40
 
-#Specify non-interactive backend for plotting images if in console
+#Specify non-interactive backend for plotting images
 if consoleRunning: matplotlib.use('Agg')
+    
 
 #INTERNAL OBJECT SETUP
 #==================================================================
 
-#If consistentcy in the random generator is desired for comparisons
+#If consistency in the random generator is desired for comparisons
 if consistentSeed: np.random.seed(0)
 
 #Set the multiple for which the input data must be for network compatability
@@ -31,8 +32,8 @@ if modelDef == 'cnn':
     numConvolutionLayers = 1
 elif modelDef == 'unet':
     numConvolutionLayers = 3
-elif modelDef == 'rbdn':
-    numConvolutionLayers = 3
+elif modelDef == 'mlp':
+    numConvolutionLayers = 1
 
 depthFactor=2**numConvolutionLayers
 

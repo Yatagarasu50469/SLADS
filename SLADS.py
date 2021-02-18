@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    6 February 2021
+#DATE MODIFIED:	    17 February 2021
 #
-#VERSION NUM:	    0.8.0
+#VERSION NUM:	    0.8.1
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -48,7 +48,8 @@
 #               0.7.4   CPU compatibility patch, removal of NaN values
 #               0.7.5   c value selection performed before training database generation
 #               0.8.0   Raw MSI file integration (Thermo .raw, Agilent .d), only Windows compatible
-#               ~0.8.1  Multichannel integration
+#               0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
+#               ~0.8.2  Multichannel integration
 #               ~0.9    Multimodal integration
 #               ~1.0    Initial release
 #====================================================================
@@ -57,7 +58,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum='0.8.0'
+versionNum='0.8.1'
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
@@ -138,7 +139,7 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
         if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net':
             model = np.load(dir_TrainingResults+'model_cValue_'+str(optimalC)+'.npy', allow_pickle=True).item()
         elif erdModel == 'DLADS':
-            model = tf.keras.models.load_model(dir_TrainingResults+'model_cValue_'+str(optimalC))
+            model = tf.keras.models.load_model(dir_TrainingResults+'model_cValue_'+str(optimalC), custom_objects={'PSNR':PSNR})
 
     #If a model needs to be tested
     if testingModel:

@@ -14,7 +14,7 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
         dataSampleName = os.path.basename(testingSampleFolder)
         
         #Read all available scan data into a sample object
-        sample = Sample(testingSampleFolder)
+        sample = Sample(testingSampleFolder, ignoreMissingLines=True)
         sample.readScanData(lineRevistMethod)
 
         #Create a mask object
