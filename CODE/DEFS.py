@@ -140,7 +140,7 @@ class Sample:
         if self.ignoreMissingLines: 
             missingLines = list(set(np.arange(1, self.numLines).tolist()) - set(self.readLines))
             self.mzImages = np.delete(self.mzImages, missingLines, axis=1)
-            self.mzStandardImages = np.delete(self.mzStandardImages, missingLines, axis=1)
+            if self.normMethod == 'standard': self.mzStandardImages = np.delete(self.mzStandardImages, missingLines, axis=1)
             self.origTIC = np.delete(self.origTIC, missingLines, axis=0)
             self.origTimes = np.delete(self.origTIC, missingLines, axis=0)
             self.origNormArray = np.delete(self.origNormArray, missingLines, axis=0)
@@ -207,6 +207,247 @@ class Result():
         self.reconImages.append(copy.deepcopy(reconImage))
     
     def complete(self, optimalC): 
+        if self.simulationFlag:
+
+            #Perform statistics extraction for all images
+            for index in range(0, len(self.reconImages)):
+                
+                #Measure and save statistics
+                difference = np.sum(computeDifference(self.avgGroundTruthImage, self.reconImages[index]))
+                TD = difference/self.samples[index].maskObject.area
+                MSE = mean_squared_error(self.avgGroundTruthImage, self.reconImages[index])
+                SSIM = structural_similarity(self.avgGroundTruthImage, self.reconImages[index], data_range=1)
+                PSNR = compare_psnr(self.avgGroundTruthImage, self.reconImages[index], data_range=1)
+
+                self.TDList.append(TD)
+                self.MSEList.append(MSE)
+                self.SSIMList.append(SSIM)
+                self.PSNRList.append(PSNR)
+                
+            #If determining the best c, return the area under the PSNR curve
+            if self.bestCFlag: return self.PSNRList, self.percMeasuredList
+
+            #Calculate the actual RD Image; bestCFlag data should be returned before this subroutine
+            #currMaxRD = 0
+            for index in tqdm(range(0, len(self.samples)), desc='RD Calc', leave = False, ascii=True):
+                RDImage = computeRD(self.samples[index], optimalC)
+                self.RDImages.append(RDImage)
+                self.ERDPSNRList.append(compare_psnr(RDImage, self.ERDValueNPs[index], data_range=1))
+                #if np.max(RDImage) > currMaxRD: currMaxRD = np.max(RDImage)
+            
+            #Normalize RD Images across sampling series and find ERD PSNR difference
+            #for index in range(0, len(self.samples)): 
+            #    self.RDImages[index] = self.RDImages[index]/currMaxRD
+            #    self.ERDPSNRList.append(compare_psnr(self.RDImages[index], self.ERDValueNPs[index], data_range=1))
+            
+        #If an animation will be produced and the run has completed
+        if self.animationFlag:
+
+            #Setup directory addresses
+            dir_mzResults = self.samples[-1].resultsPath + 'mzResults/'
+            dir_mzSampleResults = dir_mzResults + self.samples[-1].name + '/'
+
+            dir_Animations = self.samples[-1].resultsPath+ 'Animations/'
+            dir_AnimationVideos = dir_Animations + 'Videos/'
+            dir_AnimationFrames = dir_Animations + self.samples[-1].name + '/'
+
+            #Clean sub-directories
+            if os.path.exists(dir_AnimationFrames): shutil.rmtree(dir_AnimationFrames)
+            os.makedirs(dir_AnimationFrames)
+
+            if os.path.exists(dir_mzSampleResults): shutil.rmtree(dir_mzSampleResults)
+            os.makedirs(dir_mzSampleResults)
+
+            #If this was a simulation
+            if self.simulationFlag:
+                
+                #Save each of the individual mass range reconstructions
+                percSampled = "{:.2f}".format(self.percMeasuredList[-1])
+                
+                #Perform reconstructions and statistics extraction for all images
+                results = ray.get([performRecon_parhelper.remote(self.samples[-1].measuredmzImages[mzImageNum], self.samples[-1].maskObject) for mzImageNum in range(0,len(self.samples[-1].measuredmzImages))])
+                self.mzRecons = [result for result in results]
+
+                for massNum in tqdm(range(0, len(self.samples[-1].mzRanges)), desc='mz Images', leave = False, ascii=True):
+                    
+                    #mz image with only the actual measurements made
+                    subMeasuredImage = self.samples[-1].measuredmzImages[massNum]
+                    
+                    #Retrieve reconstruction for the specific mz image
+                    subReconImage = self.mzRecons[massNum]
+
+                    #Retrieve ground truth for the specific mz image
+                    mzImage = self.samples[-1].mzImages[massNum]
+                    
+                    #MSE relative to the measured
+                    measureMSE = '{:.2e}'.format(mean_squared_error(mzImage, subMeasuredImage))
+                    
+                    #MSE relative to the reconstruction
+                    reconMSE = '{:.2e}'.format(mean_squared_error(mzImage, subReconImage))
+
+                    #Mass range string
+                    massRange = str(self.samples[-1].mzRanges[massNum][0]) + '-' + str(self.samples[-1].mzRanges[massNum][1])
+
+                    mzMaxValue = np.max([np.max(mzImage), np.max(subReconImage)])
+
+                    #Measured mz image
+                    font = {'size' : 18}
+                    plt.rc('font', **font)
+                    f = plt.figure(figsize=(40,8))
+                    f.subplots_adjust(top = 0.80)
+                    f.subplots_adjust(wspace=0.15, hspace=0.2)
+                    plt.suptitle('Percent Sampled: ' + percSampled + '  Measurement mz: ' + massRange + '\nMeasured MSE: ' + measureMSE + '    Reconstruction MSE : ' + reconMSE, fontsize=20, fontweight='bold', y = 0.95)
+
+                    sub = f.add_subplot(1,4,1)
+                    sub.imshow(self.samples[-1].maskObject.mask, cmap='gray', aspect='auto')
+                    sub.set_title('Sampled Mask')
+
+                    sub = f.add_subplot(1,4,2)
+                    sub.imshow(mzImage, cmap='hot', aspect='auto', vmin=0, vmax=mzMaxValue)
+                    sub.set_title('Ground-Truth')
+
+                    sub = f.add_subplot(1,4,3)
+                    sub.imshow(subMeasuredImage, cmap='hot', aspect='auto', vmin=0, vmax=mzMaxValue)
+                    sub.set_title('Measured')
+
+                    sub = f.add_subplot(1,4,4)
+                    sub.imshow(subReconImage, cmap='hot', aspect='auto', vmin=0, vmax=mzMaxValue)
+                    sub.set_title('Reconstruction')
+
+                    saveLocation = dir_mzSampleResults + massRange +'.png'
+
+                    plt.savefig(saveLocation, bbox_inches='tight')
+                    plt.close()
+
+                #Generate each of the frames
+                for i in tqdm(range(0, len(self.samples)), desc='Result Images', leave = False, ascii=True):
+                    
+                    minERDRDValue, maxERDRDValue = np.min([self.ERDValueNPs[i], self.RDImages[i]]), np.max([self.ERDValueNPs[i], self.RDImages[i]])
+                    
+                    saveLocation = dir_AnimationFrames + 'progression_' + self.samples[-1].name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+
+                    f = plt.figure(figsize=(35,15))
+                    f.subplots_adjust(top = 0.85)
+                    f.subplots_adjust(wspace=0.15, hspace=0.2)
+                    plt.suptitle("Percent Sampled: %.2f,  Iteration: %.0f\nRecon PSNR: %.2f, ERD PSNR: %.2f" % (self.percMeasuredList[i], i+1, self.PSNRList[i], self.ERDPSNRList[i]), fontsize=20, fontweight='bold', y = 0.95)
+
+                    ax1 = plt.subplot2grid(shape=(2,3), loc=(0,0))
+                    im = ax1.imshow(self.avgGroundTruthImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
+                    ax1.set_title('Ground-Truth')
+                    cbar = f.colorbar(im, ax=ax1, orientation='vertical', pad=0.01)
+
+                    ax2 = plt.subplot2grid((2,3), (0,1))
+                    im = ax2.imshow(self.reconImages[i], cmap='hot', aspect='auto', vmin=0, vmax=1)
+                    ax2.set_title('Reconstruction')
+                    cbar = f.colorbar(im, ax=ax2, orientation='vertical', pad=0.01)
+
+                    ax3 = plt.subplot2grid((2,3), (0,2))
+                    im = ax3.imshow(abs(self.avgGroundTruthImage-self.reconImages[i]), cmap='hot', aspect='auto', vmin=0, vmax=1)
+                    ax3.set_title('Absolute Difference')
+                    cbar = f.colorbar(im, ax=ax3, orientation='vertical', pad=0.01)
+
+                    ax4 = plt.subplot2grid((2,3), (1,0))
+                    im = ax4.imshow(self.samples[i].maskObject.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
+                    ax4.set_title('Measurement Mask')
+                    cbar = f.colorbar(im, ax=ax4, orientation='vertical', pad=0.01)
+                    
+                    ax5 = plt.subplot2grid((2,3), (1,1))
+                    im = ax5.imshow(self.ERDValueNPs[i], cmap='viridis', vmin=minERDRDValue, vmax=maxERDRDValue, aspect='auto')
+                    ax5.set_title('ERD')
+                    cbar = f.colorbar(im, ax=ax5, orientation='vertical', pad=0.01)
+
+                    ax6 = plt.subplot2grid((2,3), (1,2))
+                    im = ax6.imshow(self.RDImages[i], cmap='viridis', vmin=minERDRDValue, vmax=maxERDRDValue, aspect='auto')
+                    ax6.set_title('RD')
+                    cbar = f.colorbar(im, ax=ax6, orientation='vertical', pad=0.01)
+
+                    plt.savefig(saveLocation, bbox_inches='tight')
+                    plt.close()
+                    #=====================
+
+                    #No border saves
+                    #=====================
+                    #Save the reconstruction, no borders
+                    saveLocation = dir_AnimationFrames + 'reconstruction_' + self.samples[-1].name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(self.reconImages[i], cmap='hot', aspect='auto', vmin=0, vmax=1)
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(saveLocation, bbox_inches=extent)
+                    plt.close()
+
+                    #Save the ERD, no borders
+                    saveLocation = dir_AnimationFrames + 'erd_' + self.samples[-1].name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(self.ERDValueNPs[i], aspect='auto', vmin=minERDRDValue, vmax=maxERDRDValue)
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(saveLocation, bbox_inches=extent)
+                    plt.close()
+                    
+                    #Save the RD, no borders
+                    saveLocation = dir_AnimationFrames + 'rd_' + self.samples[-1].name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(self.RDImages[i], aspect='auto', vmin=minERDRDValue, vmax=maxERDRDValue)
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(saveLocation, bbox_inches=extent)
+                    plt.close()
+
+                    #Save the mask, no borders
+                    saveLocation = dir_AnimationFrames + 'mask_' + self.samples[-1].name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(self.samples[i].maskObject.mask, cmap='gray', aspect='auto')
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(saveLocation, bbox_inches=extent)
+                    plt.close()
+                    #=====================
+                
+                #Combine images into animation
+                dataFileNames = natsort.natsorted(glob.glob(dir_AnimationFrames + 'progression_*.png'))
+                height, width, layers = cv2.imread(dataFileNames[0]).shape
+                animation = cv2.VideoWriter(dir_AnimationVideos + 'progression_' + self.samples[-1].name + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
+                for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
+                animation.release()
+                animation = None
+                                
+                #Save the averaged ground truth, no borders
+                saveLocation = dir_AnimationFrames + 'final_groundTruth_' + self.samples[-1].name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                fig=plt.figure()
+                ax=fig.add_subplot(1,1,1)
+                plt.axis('off')
+                plt.imshow(self.avgGroundTruthImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
+                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                plt.savefig(saveLocation, bbox_inches=extent)
+                plt.close()
+
+                #Save the averaged final reconstruction, no borders
+                saveLocation = dir_AnimationFrames + 'final_reconstruction_' + self.samples[-1].name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                fig=plt.figure()
+                ax=fig.add_subplot(1,1,1)
+                plt.axis('off')
+                plt.imshow(self.reconImages[-1], cmap='hot', aspect='auto', vmin=0, vmax=1)
+                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                plt.savefig(saveLocation, bbox_inches=extent)
+                plt.close()
+
+                #Save the final mask, no borders
+                saveLocation = dir_AnimationFrames + 'final_mask_' + self.samples[-1].name + '_iter_' + str(i+1) + '_perc_' + str(self.percMeasuredList[i]) + '.png'
+                fig=plt.figure()
+                ax=fig.add_subplot(1,1,1)
+                plt.axis('off')
+                plt.imshow(self.samples[-1].maskObject.mask, cmap='gray', aspect='auto')
+                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                plt.savefig(saveLocation, bbox_inches=extent)
+                plt.close()
+                
+            else: #Not a simulation
+                print('Warning! - Non simulation plots not yet fixed for color issue and modified selection')
         if self.simulationFlag:
 
             #Perform statistics extraction for all images
