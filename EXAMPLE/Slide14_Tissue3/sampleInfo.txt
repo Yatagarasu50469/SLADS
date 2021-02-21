@@ -1,0 +1,8 @@
+76
+.d
+0.001
+2.2385
+xic
+value
+standard
+20
