@@ -244,6 +244,17 @@ If the normalization method is specified as standard, then an additional file: m
 	mz_2
 	...
 
+Each MSI data file (ex. .d, or .raw), must be labeled with the standard convention: 
+
+	sampleName-line#.extension
+
+While the file name can have multiple dashes in the sample name, 'line' must be immediatedly followed by the line number without zero padding. For example:
+
+	Slide-Wnt-3-line1.raw		#Would function correctly
+	Slide-Wnt-3-line0001.raw	#Would not function correctly
+	WorklistData-0001.raw		#Would not function correctly
+	
+
 ###  **RUN**
 After configuration, to run the program perform the following command in the root directory:
 
@@ -286,6 +297,14 @@ In the case that multiple configuration files are provided in the form of: CONFI
 Prior to engaging the physical equipment run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, (Can multiply by Time Resolution, as specified in the sample's sampleInfo.txt to find equivalent times to scan) saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in .csv files for each of the specified mz ranges in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. A sampleInfo.txt and mz.csv must be included in the implementation directory as outlined in the CONFIGURATION section. 
 
 # FAQ
+###  **I read through the README thoroughly, but I'm still getting an error, or am confused...**
+
+Feel free to open an issue on the Github repository; though support cannot be guaranteed at this time. 
+
+###  **Why am I receiving a 'list index out of range' error from the 'readScanData' method**
+
+Most likely this is due to MSI line filenames not matching the convention outlined above.
+
 ###  **SLADS procdues an error: Could not connect to socket /tmp/ray/session_.../sockets/raylet**
 
 Although the error would suggest there is something wrong with the network connectivity (can double check firewall settings that port 6375 is allowed to receive/send traffic), it is actually more likely to be an issue with Ray's ability to connect to its dependent services. At this time there isn't a fix available, though some success can be had simply continuing to re-run the script until it does manage to connect. If using Mac OS X, you might be able to mitigate the issue (albeit with additional text written onscreen) by installing ray at version 0.8.6.
