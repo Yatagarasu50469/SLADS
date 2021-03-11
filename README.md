@@ -16,7 +16,7 @@
 
 
     NAME: 		SLADS
-    VERSION NUM:	0.8.1
+    VERSION NUM:	0.8.2
     LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
@@ -32,13 +32,13 @@
     		NIH Grant 1UG3HL145593-01
     
 	GLOBAL
-	CHANGELOG:	0.1     Multithreading adjustments to pointwise SLADS
-		        0.1.1   Line constraints, concatenation, pruning, and results organization			
-		        0.2     Line bounded constraints addition
-	                0.3	Complete code rewrite, computational improvements
-	                0.4	Class/function segmentation
-	                0.5	Overhead reduction; switch multiprocessing package
-	                0.6	Modifications for Nano-DESI microscope integration
+	CHANGELOG:  0.1.0   Multithreading adjustments to pointwise SLADS
+                    0.1.1   Line constraints, concatenation, pruning, and results organization			
+                    0.2.0   Line bounded constraints addition
+                    0.3.0   Complete code rewrite, computational improvements
+                    0.4.0   Class/function segmentation
+                    0.5.0   Overhead reduction; switch multiprocessing package
+                    0.6.0   Modifications for Nano-DESI microscope integration
                     0.6.1   Model robustness and reduction of memory overhead
                     0.6.2   Model loading and animation production patches
                     0.6.3   Start/End point selection with Canny
@@ -47,17 +47,20 @@
                     0.6.6   SLADS-NET NN, PSNR, asymFinal, and multi-config
                     0.6.7   Clean asymmetric implementation with density features
                     0.6.8   Fixed RD generation, added metrics, and Windows compatible
-                    0.7     CNN/Unet/RBDN with dynamic window size
+                    0.7.0   CNN/Unet/RBDN with dynamic window size
                     0.7.1   c value selection performed before model training
                     0.7.2   Remove custom pkg. dependency, use NN resize, recon+measured input
                     0.7.3   Start/End line patch, SLADS(-Net) options, normalization optimization
                     0.7.4   CPU compatibility patch, removal of NaN values
                     0.7.5   c value selection performed before training database generation
                     0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
+                    0.8.0   RAW MSI file integration (.raw, .d)
                     0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
-                    ~0.8.2  Multichannel integration
-                    ~0.9    Tissue segmentation
-                    ~1.0    Initial release
+                    0.8.2   Multichannel integration, fixed groupwise, square pixels, and altered configuration files
+                    ~0.8.3  GAN
+                    ~0.8.4  Custom adversarial network
+                    ~0.9.0  Multimodal integration
+                    ~1.0.0  Initial release
 
 # PROGRAM FILE STRUCTURE
 **Note:** If testing/training is not to be performed, then contents of 'TEST', 'TRAIN', may be disregarded, but a trained SLADS model must be present in: ./RESULTS/TRAIN/.
@@ -192,6 +195,12 @@ Navigate inside the command prompt to the SLADS base directory then enter the fo
 	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib pillow ray scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tqdm numpy opencv-python pydot graphviz
 	$ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
 
+	$ python
+	$ from multiplierz.mzAPI.management import register Interfaces
+	$ registerInterfaces()
+
+If the final printout indicates actions relating to the MSI file format intended for use, then follow through as neccessary. 
+
 # TRAINING/TESTING PROCEDURE
 ###  **CONFIGURATION**
 
@@ -208,19 +217,32 @@ All critical parameters for SLADS may be altered in a configuration file (Ex. ./
     L4:     Non-operational - Do not change
     L5:     Debug/Deprecated - Will most likely be removed in future
 
-
 Multiple configuration files in the form of CONFIG_*descriptor*.py, can be generated for which SLADS will be run sequentially. RESULTS_*descriptor* folders will correspond with the numbering of the CONFIG files, with the RESULTS folder without a description, containing results from the last run performed. 
 
 Two files must be included in each of the sample folders (specifically within the subdirectories in TRAIN, TEST, and IMP, as the tasks to be performed may dictate). sampleInfo.txt should include the following ordered information:
 
-	Number of lines in the sample (not to be confused with the number of files in the directory!)
-	File extention for the MSI data (Thermo .raw, Agilent .d, etc.)
-	Time resolution (Column spacing for row alignment; < 0.001 is not recommended given computational expense)
-	Maximum line time (Maximum location (time) on any given line in the scan)
-	m/z visualization method (Allowable values include: 'sum', or 'xic', though 'xic' is the recommended setting)
-	m/z specification method (Allowable values include: 'range', or 'value', where 'value' will use the m/z tolerance to determine the final ranges)
-	Normalization method (Allowable values include: 'tic', 'standard', 'none')
-	m/z tolerance (ppm) (only needs to be specified if m/z specification is set to 'value', or if 'standard' is being used for the normalization method)
+	- Number of lines in the sample 
+		Not to be confused with the number of line files present in the directory!
+	- Length (mm) 
+		Instrument field of view, not of just the sample dimensions
+	- Height (mm)
+		Instrument field of view, not of just the sample dimensions
+		Must also account for any missing line files (if applicable) for training/testing!
+	- Scan Rate (um/s)
+		May be specified differently than instrumentation for finer resolution
+		Output pixel positions are based on this parameter
+	- m/z visualization method
+		Allowable values include: 'sum', or 'xic'
+		'xic' is recommended
+	- m/z specification method
+		Allowable values include: 'range', or 'value'
+		'value' will use the m/z tolerance parameter to determine the final ranges
+		Irregardless of value, the mz.csv file (described below) should be included
+	- Normalization method 
+		Allowable values include: 'tic', 'standard', and 'none'
+		If using standard, the mzStandards.csv file (described below) should also be included
+	- m/z tolerance (ppm)
+		Only specify/include if m/z specification is set to 'value', or if using 'standard' normalization
 
 Each piece of information should be on its own line without additional description, as shown in the EXAMPLE sample directory. 
 

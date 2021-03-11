@@ -27,7 +27,7 @@ def performImplementation(model, optimalC):
     sample.readScanData(lineRevistMethod)
     
     #Create a mask object
-    sample.maskObject = MaskObject(sample.numColumns, sample.numLines, initialPercToScan, scanMethod)
+    sample.maskObject = MaskObject(sample.finalDim[0], sample.finalDim[1], initialPercToScan, scanMethod)
     
     #For each of the initial sets that must be obtained
     for setNum in range(0, len(maskObject.initialSets)):

@@ -3,6 +3,12 @@
 #====================================================================
 #==================================================================
 
+#var, max, orig
+RDMethod = 'orig'
+
+#Use averaged reconstruction as input
+averageReconInput = True
+
 ##################################################################
 #PARAMETERS: L0
 #TASKS TO BE PERFORMED

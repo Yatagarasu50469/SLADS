@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    17 February 2021
+#DATE MODIFIED:	    10 March 2021
 #
-#VERSION NUM:	    0.8.1
+#VERSION NUM:	    0.8.2
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -25,13 +25,13 @@
 #               NIH Grant 1UG3HL145593-01
 #
 #GLOBAL
-#CHANGELOG:     0.1     Multithreading adjustments to pointwise SLADS
+#CHANGELOG:     0.1.0   Multithreading adjustments to pointwise SLADS
 #               0.1.1    Line constraints, concatenation, pruning, and results organization
-#               0.2     Line bounded constraints addition
-#               0.3     Complete code rewrite, computational improvements
-#               0.4     Class/function segmentation
-#               0.5     Overhead reduction; switch multiprocessing package
-#               0.6     Modifications for Nano-DESI microscope integration
+#               0.2.0   Line bounded constraints addition
+#               0.3.0   Complete code rewrite, computational improvements
+#               0.4.0   Class/function segmentation
+#               0.5.0   Overhead reduction; switch multiprocessing package
+#               0.6.0   Modifications for Nano-DESI microscope integration
 #               0.6.1   Model robustness and reduction of memory overhead
 #               0.6.2   Model loading and animation production patches
 #               0.6.3   Start/End point selection with Canny
@@ -40,7 +40,7 @@
 #               0.6.6   SLADS-NET NN, PSNR, and multi-config
 #               0.6.7   Clean asymmetric implementation with density features
 #               0.6.8   Fixed RD generation, added metrics, and Windows compatible
-#               0.7     CNN/Unet/RBDN with dynamic window size
+#               0.7.0   CNN/Unet/RBDN with dynamic window size
 #               0.7.1   c value selection performed before model training
 #               0.7.2   Remove custom pkg. dependency, use NN resize, recon+measured input
 #               0.7.3   Start/End line patch, SLADS(-Net) options, normalization optimization
@@ -49,16 +49,18 @@
 #               0.7.5   c value selection performed before training database generation
 #               0.8.0   Raw MSI file integration (Thermo .raw, Agilent .d), only Windows compatible
 #               0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
-#               ~0.8.2  Multichannel integration
-#               ~0.9    Multimodal integration
-#               ~1.0    Initial release
+#               0.8.2   Multichannel integration, fixed groupwise, square pixels, and altered configuration files
+#               ~0.8.3  GAN 
+#               ~0.8.4  Custom adversarial network
+#               ~0.9.0  Multimodal integration
+#               ~1.0.0  Initial release
 #====================================================================
 
 #==================================================================
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum='0.8.1'
+versionNum='0.8.2'
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())

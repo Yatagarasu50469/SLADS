@@ -33,7 +33,7 @@ class EpochEnd(keras.callbacks.Callback):
             currentPSNR = logs.get('PSNR')
         else:
             currentPSNR = logs.get('val_PSNR')
-        if (currentPSNR > self.bestPSNR):
+        if (currentPSNR > self.bestPSNR) and (epoch >= self.minimumEpochs):
             self.patience = 0
             self.bestPSNR = currentPSNR
             self.bestEpoch = epoch
@@ -57,7 +57,11 @@ class EpochEnd(keras.callbacks.Callback):
 
             #If there are no validation tensors, then just save a plot of the training losses
             if self.noValFlag:
-                f = plt.figure(figsize=(35,10))
+                if averageReconInput: 
+                    f = plt.figure(figsize=(35,10))
+                else:
+                    f = plt.figure(figsize=(30,10))
+                    
                 f.subplots_adjust(top = 0.80)
                 f.subplots_adjust(wspace=0.2, hspace=0.2)
                 
@@ -77,7 +81,11 @@ class EpochEnd(keras.callbacks.Callback):
                 ax.set_yscale('log')
                 ax.set_title('Training PSNR: ' + str(round(self.train_psnrList[-1,8])), fontsize=15, fontweight='bold')
             else:
-                f = plt.figure(figsize=(35,25))
+                if averageReconInput: 
+                    f = plt.figure(figsize=(35,25))
+                else:
+                    f = plt.figure(figsize=(30,25))
+                    
                 f.subplots_adjust(top = 0.88)
                 f.subplots_adjust(wspace=0.2, hspace=0.2)
                 
@@ -98,27 +106,40 @@ class EpochEnd(keras.callbacks.Callback):
                 ax.set_title('Training PSNR: ' + str(round(self.train_psnrList[-1],8)) + '     Validation PSNR: ' + str(round(self.val_psnrList[-1],8)), fontsize=15, fontweight='bold')
                 
                 #Show a validation sample result at min and max sampling percentages (variables provided through callback initialization)
-                for imageNum in range(0, len(self.vizInputValImages)):
-                    ERD = resize(self.model.predict(self.vizInputValTensors[imageNum], steps=1)[0,:,:,0], (self.vizValShapes[imageNum]), order=0)
+                for imageNum in range(0, len(self.vizOutputValImages)):
+                    outputTensor = self.model.predict(self.vizInputValTensors[imageNum], steps=1)
+                    ERD = resize(outputTensor[0,:,:,0], (self.vizValShapes[imageNum]), order=0)
                     ERD_PSNR = compare_psnr(self.vizOutputValImages[imageNum], ERD, data_range=1)
                     
-                    ax = plt.subplot2grid((3,4), (imageNum+1,0))
-                    ax.imshow(self.vizInputValImages[imageNum][:,:,0], aspect='auto', cmap='hot', vmin=0, vmax=1)
-                    ax.set_title('Input: Measured Values', fontsize=15, fontweight='bold')
+                    if averageReconInput:
+                        ax = plt.subplot2grid((3,4), (imageNum+1,0))
+                        ax.imshow(self.vizInputValImages[imageNum][:,:,0], aspect='auto', cmap='hot', vmin=0, vmax=1)
+                        ax.set_title('Input: Measured Values', fontsize=15, fontweight='bold')
 
-                    ax = plt.subplot2grid((3,4), (imageNum+1,1))
-                    ax.imshow(self.vizInputValImages[imageNum][:,:,1], aspect='auto', cmap='hot', vmin=0, vmax=1)
-                    ax.set_title('Input: Recon Values', fontsize=15, fontweight='bold')
+                        ax = plt.subplot2grid((3,4), (imageNum+1,1))
+                        ax.imshow(self.vizInputValImages[imageNum][:,:,1], aspect='auto', cmap='hot', vmin=0, vmax=1)
+                        ax.set_title('Input: Recon Values', fontsize=15, fontweight='bold')
 
-                    ax = plt.subplot2grid((3,4), (imageNum+1,2))
-                    im = ax.imshow(self.vizOutputValImages[imageNum], aspect='auto', vmin=0, vmax=1)
-                    ax.set_title('RD', fontsize=15, fontweight='bold')
-                    cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+                        ax = plt.subplot2grid((3,4), (imageNum+1,2))
+                        im = ax.imshow(self.vizOutputValImages[imageNum], aspect='auto', vmin=0, vmax=1)
+                        ax.set_title('RD', fontsize=15, fontweight='bold')
+                        cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
-                    ax = plt.subplot2grid((3,4), (imageNum+1,3))
-                    im = ax.imshow(ERD, aspect='auto', vmin=0, vmax=1)
-                    ax.set_title('ERD PSNR: ' + str(round(ERD_PSNR,4)), fontsize=15, fontweight='bold')
-                    cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+                        ax = plt.subplot2grid((3,4), (imageNum+1,3))
+                        im = ax.imshow(ERD, aspect='auto', vmin=0, vmax=1)
+                        ax.set_title('ERD - PSNR: ' + str(round(ERD_PSNR,4)), fontsize=15, fontweight='bold')
+                        cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+
+                    else:
+                        ax = plt.subplot2grid((3,2), (imageNum+1,0))
+                        im = ax.imshow(self.vizOutputValImages[imageNum], aspect='auto', vmin=0, vmax=1)
+                        ax.set_title('RD', fontsize=15, fontweight='bold')
+                        cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+
+                        ax = plt.subplot2grid((3,2), (imageNum+1,1))
+                        im = ax.imshow(ERD, aspect='auto', vmin=0, vmax=1)
+                        ax.set_title('ERD - PSNR: ' + str(round(ERD_PSNR,4)), fontsize=15, fontweight='bold')
+                        cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
             plt.suptitle('Epoch: '+str(epoch)+'     Patience: '+str(self.patience)+'/'+str(self.maxPatience)+'\nBest PSNR: '+str(round(self.bestPSNR, 4))+' at Epoch: '+str(self.bestEpoch), fontsize=20, fontweight='bold', y = 0.92)
             
@@ -135,14 +156,7 @@ def importInitialData(sortedTrainingSampleFolders):
         #Read all available scan data into a sample object
         sample = Sample(trainingSampleFolder, ignoreMissingLines=True)
         sample.readScanData(lineRevistMethod)
-
-        #Create a mask object; will be used in optimizing c
-        sample.maskObject = MaskObject(sample.numColumns, sample.numLines, initialPercToScan, scanMethod)
-
-        #Perform averaging of the multiple channels and subsequent normalization
-        sample.avgGroundTruthImage = np.average(np.asarray(sample.mzImages), axis=0, weights=sample.mzWeights)
-        sample.avgGroundTruthImage = MinMaxScaler().fit_transform(sample.avgGroundTruthImage.reshape(-1, 1)).reshape(sample.avgGroundTruthImage.shape)
-
+        
         #Save a visual of the averaged ground-truth
         saveLocation = dir_TrainingResultsImages + 'groundTruth_' + sample.name + '.png'
         fig=plt.figure()
@@ -228,48 +242,36 @@ def generateTrainingData(samples, optimalC):
         #For the number of mask iterations specified, create and extract training databases for each of the c values
         for maskNum in tqdm(range(0,numMasks), desc = 'Masks', leave=False, ascii=True):
             
-            #Create a duplicate of the sample, so the original can be used for reference, reseting information as needed from optimizeC
-            newSample = copy.deepcopy(sample)
-            newSample.percMeasured = 0
-            firstIteration = True
-                        
+            #Create a new instance of the sample
+            newSample = Sample(sample.sampleFolder, ignoreMissingLines=True)
+            newIdxs = np.transpose(np.where(sample.initialMask == 1))
+            
             #For each of the measurement percentages, update a training sample, evaluate it, and store the results; prepare to normalize RD image series
-            #dataSeries = []
-            #currMaxRD = 0
             for measurementPerc in tqdm(measurementPercs, desc = '%', leave=False, ascii=True):
 
                 #Until the next measurement percentage has been reached, continue scanning
                 while (round(newSample.percMeasured) < measurementPerc):
 
                     #If this is the first iteration, then create a new mask object and deactivate first iteration flag, otherwise pointwise scan randomly
-                    if firstIteration:
-                        newSample.maskObject, newIdxs = MaskObject(newSample.numColumns, newSample.numLines, measurementPerc, 'pointwise'), []
-                        firstIteration = False
-                    else:
-                        newIdxs = findNewMeasurementIdxs(newSample, newSample.RDImage, measurementPerc-newSample.percMeasured, 'random')
+                    if not firstIteration: newIdxs = findNewMeasurementIdxs(newSample, newSample.RDImage, measurementPerc-newSample.percMeasured, 'random')
+                    else: firstIteration = False
                     
                     #Perform measurements
                     newSample.performMeasurements(newIdxs, True)
 
                     #Update the percentage by what was actually measured
-                    newSample.percMeasured = (np.sum(newSample.maskObject.mask)/newSample.maskObject.area)*100
+                    newSample.percMeasured = (np.sum(newSample.mask)/newSample.area)*100
                     
                     #Compute reconstruction
-                    newSample.reconImage = performRecon(newSample.avgMeasuredImage, newSample.maskObject)
-
+                    newSample.avgReconImage = computeRecon(sample.avgSquareMeasuredImage, sample)
+                    newSample.avgReconImage = resize(newSample.avgReconImage, tuple(sample.finalDim), order=0)
+                    
                     #Calculate the RD Image
                     newSample.RDImage = computeRD(newSample, optimalC)
-
-                    #Append the result into the training database
-                    newSample.polyFeatures = computePolyFeatures(newSample.maskObject, newSample.reconImage)
-                    newSample.RDValues = newSample.RDImage[np.where(newSample.maskObject.mask==0)]
-                    #if np.max(newSample.RDImage) > currMaxRD: currMaxRD = np.max(newSample.RDImage)
-                    #dataSeries.append(copy.deepcopy(newSample))
                     
-            #Normalize RD Images/Values across sampling series
-            #for newSample in dataSeries:
-                #newSample.RDImage = newSample.RDImage/currMaxRD
-                #newSample.RDValues = newSample.RDValues/currMaxRD
+                    #Append the result into the training database
+                    newSample.polyFeatures = computePolyFeatures(newSample, newSample.reconImage)
+                    newSample.RDValues = newSample.RDImage[np.where(newSample.maskObject.mask==0)]
                     trainingDatabase.append(copy.deepcopy(newSample))
                     
                     #Visualize and save data if desired
@@ -294,8 +296,8 @@ def generateTrainingData(samples, optimalC):
                         ax.set_title('Ground-Truth', fontsize=15)
 
                         ax = plt.subplot2grid(shape=(1,5), loc=(0,3))
-                        ax.imshow(newSample.reconImage, cmap='hot', aspect='auto')
-                        ax.set_title('Recon - PSNR: ' + str(round(compare_psnr(newSample.avgGroundTruthImage, newSample.reconImage, data_range=1), 4)), fontsize=15)
+                        ax.imshow(newSample.avgReconImage, cmap='hot', aspect='auto')
+                        ax.set_title('Recon - PSNR: ' + str(round(compare_psnr(newSample.avgGroundTruthImage, newSample.avgReconImage, data_range=1), 4)), fontsize=15)
 
                         ax = plt.subplot2grid(shape=(1,5), loc=(0,4))
                         ax.imshow(newSample.RDImage, aspect='auto')
@@ -327,6 +329,15 @@ def generateTrainingData(samples, optimalC):
                         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                         plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
                         plt.close()
+                        
+                        fig=plt.figure()
+                        ax=fig.add_subplot(1,1,1)
+                        plt.axis('off')
+                        plt.imshow(newSample.avgReconImage, aspect='auto', cmap='hot')
+                        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                        plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                        plt.close()
+                        
             
     #Save the complete databases
     pickle.dump(trainingDatabase, open(dir_TrainingResults + 'trainingDatabase.p', 'wb'))
@@ -371,14 +382,13 @@ def trainModel(trainingDatabase, optimalC):
         inputImages, outputImages, imagesShapes = [], [], []
         for trainingSample in tqdm(trainingDatabase, desc = 'Setup', leave=True, ascii=True):
             
-            #Extract data of interest from the database
-            reconImage = trainingSample.reconImage
+            #Compute feature image for network input
             
-            #Compute features of the reconstruction
-            featureImage = featureExtractor(trainingSample.maskObject, trainingSample.avgMeasuredImage, reconImage)
+            if averageReconInput: 
+                inputImage, originalShape = makeCompatible(featureExtractor(trainingSample.maskObject, trainingSample.avgMeasuredImage, trainingSample.reconImage))
+            else:
+                inputImage, originalShape = makeCompatible(np.stack(trainingSample.measuredmzImages, axis=-1))
             
-            #Extract/create the input/output data
-            inputImage, originalShape = makeCompatible(featureImage)
             outputImage, originalShape = makeCompatible(trainingSample.RDImage)
             
             #Add to lists
@@ -414,14 +424,14 @@ def trainModel(trainingDatabase, optimalC):
         #Transform image sets into tensorflow datasets
         trainData = tf.data.Dataset.from_generator(lambda: iter(zip(trainInputImages, trainOutputImages)), output_types=(tf.float32, tf.float32), output_shapes=([1,None,None,numChannels], [1,None,None,1]))
         if not noValFlag: valData = tf.data.Dataset.from_generator(lambda: iter(zip(valInputImages, valOutputImages)), output_types=(tf.float32, tf.float32), output_shapes=([1,None,None,numChannels], [1,None,None,1]))
-
+        
         #Extract validation input/output images desired for visualization
         vizInputValTensors, vizInputValImages, vizOutputValImages, vizValShapes = [], [], [], []
         if not noValFlag:
             sampleLocations = [0, numMasks+len(measurementPercs)-2]
             for sampleLocation in sampleLocations:
                 vizInputValTensors.append(valInputImages[sampleLocation])
-                vizInputValImages.append(resize(valInputImages[sampleLocation][0,:,:,:], (valShapes[sampleLocation]), order=0))
+                if averageReconInput: vizInputValImages.append(resize(valInputImages[sampleLocation][0,:,:,:], (valShapes[sampleLocation]), order=0))
                 vizValShapes.append(valShapes[sampleLocation])
                 vizOutputValImages.append(resize(valOutputImages[sampleLocation][0,:,:,0], (valShapes[sampleLocation]), order=0))
                 

@@ -14,15 +14,8 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
         dataSampleName = os.path.basename(testingSampleFolder)
         
         #Read all available scan data into a sample object
-        sample = Sample(testingSampleFolder, ignoreMissingLines=True)
+        sample = Sample(testingSampleFolder, initialPercToScan, scanMethod, ignoreMissingLines=True)
         sample.readScanData(lineRevistMethod)
-
-        #Create a mask object
-        sample.maskObject = MaskObject(sample.numColumns, sample.numLines, initialPercToScan, scanMethod)
-
-        #Perform averaging of the multiple channels and subsequent normalization
-        sample.avgGroundTruthImage = np.average(np.asarray(sample.mzImages), axis=0, weights=sample.mzWeights)
-        sample.avgGroundTruthImage = MinMaxScaler().fit_transform(sample.avgGroundTruthImage.reshape(-1, 1)).reshape(sample.avgGroundTruthImage.shape)
 
         #Indicate where resulting data should be stored
         sample.resultsPath = dir_TestingResults
@@ -139,7 +132,7 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
         lastTDResult.append(TD_testingResults[i][len(TD_testingResults[i])-1])
         lastERDPSNRResult.append(ERDPSNR_testingResults[i][len(ERDPSNR_testingResults[i])-1])
         lastTimeResult.append(time_testingResults[i]/lastPercMeasured)
-        #percLinesScanned.append((len(SSIM_testingResults[i])/len(maskObject.linesToScan))*100)
+        #percLinesScanned.append((len(SSIM_testingResults[i])/len(sample.linesToScan))*100)
         percPixelsScanned.append(lastPercMeasured)
 
     time_testingResults = time_testingResults/np.mean(percPixelsScanned)

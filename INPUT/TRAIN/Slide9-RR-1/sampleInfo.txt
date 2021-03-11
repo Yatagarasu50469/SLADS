@@ -1,7 +1,7 @@
 70
-.raw
-0.001
-3.90012
+3.6
+2.275
+15
 xic
 range
 standard

@@ -4,9 +4,12 @@
 
 #Perform summation and alignment over an mz range for a given line; mzFile cannot be pickled and passed into function
 @ray.remote
-def mzrange_parhelper(mzRange, scanFileName, mzMethod):
+def mzrange_parhelper(mzRange, scanFileName, mzMethod, ignoreMissingLines, missingLines):
     data = mzFile(scanFileName)
     lineNum = int(scanFileName.split('line')[1].split('.')[0])-1
+    
+    #If ignoring missing lines, then determine the offset for correct indexing
+    if ignoreMissingLines: lineNum -= np.sum([lineNum > missingLine for missingLine in missingLines])
     
     if mzMethod == 'sum':
         lineData = np.asarray([np.sum(mz_range(data.scan(px, 'profile'), mzRange)) for px in range(data.scan_range()[0], data.scan_range()[1]+1)])
@@ -19,7 +22,7 @@ def mzrange_parhelper(mzRange, scanFileName, mzMethod):
 
 #All information pertaining to a sample
 class Sample:
-    def __init__(self, sampleFolder, ignoreMissingLines=False):
+    def __init__(self, sampleFolder, initialPercToScan, scanMethod, ignoreMissingLines=False):
     
         #Should missing lines be ignored (to only be used in training and testing)
         self.ignoreMissingLines = ignoreMissingLines
@@ -33,15 +36,39 @@ class Sample:
         self.readLines = []
 
         #Read in data from sampleInfo.txt
+        lineIndex = 0
         sampleInfo = open(self.sampleFolder+'sampleInfo.txt').readlines()
-        self.numLines = int(sampleInfo[0].rstrip())
-        self.lineExt = sampleInfo[1].rstrip()
-        self.timeRes = float(sampleInfo[2].rstrip())
-        self.maxTime = float(sampleInfo[3].rstrip())
-        self.mzMethod = sampleInfo[4].rstrip()
-        self.mzSpec = sampleInfo[5].rstrip()
-        self.normMethod = sampleInfo[6].rstrip()
-        if self.normMethod == 'standard' or self.mzSpec == 'value': self.mzTolerance = (float(sampleInfo[7].rstrip())*1e-03)/2
+        
+        #Read the max number of lines that are expected 
+        numLines = int(sampleInfo[lineIndex].rstrip())
+        lineIndex += 1
+        
+        #Read the sample width
+        self.sampleWidth = float(sampleInfo[lineIndex].rstrip())
+        lineIndex += 1
+        
+        #Read the sample height
+        self.sampleHeight = float(sampleInfo[lineIndex].rstrip())
+        lineIndex += 1
+        
+        #Read in mapping method
+        self.scanRate = float(sampleInfo[lineIndex].rstrip())
+        lineIndex += 1
+        
+        #Read how the mz ranges should be visualized; sum or xic
+        self.mzMethod = sampleInfo[lineIndex].rstrip()
+        lineIndex += 1
+        
+        #Read how m/z ranges should be specified; range, or value
+        self.mzSpec = sampleInfo[lineIndex].rstrip()
+        lineIndex += 1
+        
+        #Read the normalization method; tic, standard, or none
+        self.normMethod = sampleInfo[lineIndex].rstrip()
+        lineIndex += 1
+        
+        #If specifying m/z ranges by value, or using a standard normalization, read what the tolerance window should be
+        if self.normMethod == 'standard' or self.mzSpec == 'value': self.mzTolerance = (float(sampleInfo[lineIndex].rstrip())*1e-03)/2
         
         #Read in all m/z locations/ranges (.csv)
         if self.mzSpec == 'value':
@@ -49,39 +76,131 @@ class Sample:
             self.mzRanges = [[mzLocation-self.mzTolerance, mzLocation+self.mzTolerance] for mzLocation in mzLocations]
         elif self.mzSpec == 'range':
             self.mzRanges = np.loadtxt(self.sampleFolder+'mz.csv', delimiter=',')
-                
+        
         #Prepare variables to hold sample data
         self.mzWeights = np.ones(len(self.mzRanges))/len(self.mzRanges)
-        self.numColumns = int(1/self.timeRes)
-        self.mzImages = [np.zeros((self.numLines, self.numColumns)) for mzRangeNum in range(0, len(self.mzRanges))]
-        self.measuredmzImages = copy.deepcopy(self.mzImages)
-        self.newTimes = np.linspace(0, self.maxTime, self.numColumns)
-        self.origTIC = [np.zeros(self.numColumns) for line in range(self.numLines+1)]
-        self.origTimes = copy.deepcopy(self.origTIC) 
 
         #If using a standard, then also read in standards locations (.csv)
-        if  self.normMethod == 'standard': 
+        if self.normMethod == 'standard': 
             mzStandardLocations = np.loadtxt(self.sampleFolder+'mzStandards.csv', delimiter=',')
             if mzStandardLocations.shape != ():
                 print('Warning! - Untested functionality, will sum the formed visualizations of the specified m/z ranges for the normalization')
                 self.mzStandardRanges = [[mzStandardLocation-self.mzTolerance, mzStandardLocation+self.mzTolerance] for mzStandardLocation in mzStandardLocations]
             else:
                 self.mzStandardRanges = [[mzStandardLocations-self.mzTolerance, mzStandardLocations+self.mzTolerance]]
-            self.mzStandardImages = [copy.deepcopy(self.origTIC) for mzRangeNum in range(0, len(self.mzStandardRanges))]
-
-        #Declare variables used in training/testing/implementation
+        
+        #Declare variables used in training/testing/implementation; NOT SURE IF THESE ARE STILL NEEDED
         self.origNormArray = None
         self.normArray = None
         self.avgMeasuredImage = None
         self.avgGroundTruthImage = []
-        self.maskObject = None
         self.resultsPath = ''
         self.measuredLines = []
-        self.reconImage = None
+        self.mzReconImages = None
         self.RDImage = None
         self.RDValues = None
         self.polyFeatures = None
         self.percMeasured = 0
+        
+        #Get the MSI file extension automatically      
+        extensions = list(map(lambda x:x.lower(), np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+'*'), reverse=False)])))
+        if 'd' in extensions: self.lineExt = '.d'
+        elif 'raw' in extensions: self.lineExt = '.raw'
+        else: sys.exit('Error! - Unknown MSI filetype being used for sample: ' + self.name)
+        
+        #Store final dimensions for physical domain, determining the number of columns for row-alignment interpolations
+        self.finalDim = [numLines, int(round((self.sampleWidth*1e3)/self.scanRate))]
+        
+        #If missing lines are to be ignored, then setup to do so (only possible to perform in simulated operation)
+        if self.ignoreMissingLines: 
+            scanFiles = natsort.natsorted(glob.glob(self.sampleFolder+'*'+self.lineExt), reverse=False)
+            self.missingLines = list(set(np.arange(1, self.finalDim[0]).tolist()) - set([int(scanFile.split('line')[1].split('.')[0]) for scanFile in scanFiles]))
+            self.missingLines = [missingLine-1 for missingLine in self.missingLines]
+            self.finalDim[0] -= len(self.missingLines)
+        else: 
+            self.missingLines = []
+        
+        #Setup empty arrays for actual measurements; used in simulations since mzImages contains complete data
+        self.measuredmzImages = np.asarray([np.zeros((self.finalDim[0], self.finalDim[1])) for mzRangeNum in range(0, len(self.mzRanges))])
+
+        #Establish the total sample area; for determination of percMeasured
+        self.area = int(round(self.finalDim[0]*self.finalDim[1]))
+
+        #Setup objects for storing raw MSI data
+        self.newTimes = np.linspace(0, (self.finalDim[1]-1)/60, self.finalDim[1])
+        self.mzImages = [np.zeros((self.finalDim[0], self.finalDim[1])) for mzRangeNum in range(0, len(self.mzRanges))]
+        self.origTIC = [[] for line in range(0, self.finalDim[0])]
+        self.origTimes = copy.deepcopy(self.origTIC) 
+        if self.normMethod == 'standard': self.mzStandardImages = [copy.deepcopy(self.origTIC) for mzRangeNum in range(0, len(self.mzStandardRanges))]
+        
+        #Determine image dimensions that will produce square pixels (consistent vertical/horizontal resolution)
+        if(self.finalDim[1]/self.sampleWidth) > (self.finalDim[0]/self.sampleHeight): 
+            self.squareDim = [int(round((self.finalDim[1]*self.sampleHeight)/self.sampleWidth)), self.finalDim[1]]
+        elif (self.finalDim[1]/self.sampleWidth) < (self.finalDim[0]/self.sampleHeight):
+            self.squareDim = [self.finalDim[0], int(round((self.finalDim[0]*self.sampleWidth)/self.sampleHeight))]
+        else:
+            self.squareDim = self.finalDim
+    
+        #Initial mask variables for first scan and reseting
+        self.initialMask = np.zeros(self.finalDim)
+        
+        #List of what points/lines should be initially measured
+        self.initialSets = []
+        
+        #If scanning with line-bounded constraint
+        if scanMethod == 'linewise':
+        
+            #Create list of arrays containing points to measure on each line
+            self.linesToScan = []
+            for rowNum in np.arange(0, self.finalDim[0], 1): self.linesToScan.append([tuple([rowNum, columnNum]) for columnNum in np.arange(0, self.finalDim[1], 1)])
+        
+            #Fix internal formatting
+            self.linesToScan = np.asarray(self.linesToScan).tolist()
+            
+            #Set initial lines to scan
+            lineIndexes = [int((self.finalDim[1]-1)*0.50)]
+            
+            #Obtain points in the specified lines and add them to the initial scan list
+            for lineIndex in lineIndexes:
+                
+                #If only a percentage should be scanned, then randomly select points, otherwise select all
+                if lineMethod == 'percLine':
+                    newIdxs = [pt for pt in self.linesToScan[lineIndex]]
+                    np.random.suffle(newIdxs)
+                    newIdxs = newIdxs[:int((stopPerc/100)*self.finalDim[1])]
+                else: 
+                    newIdxs = [pt for pt in self.linesToScan[lineIndex]]
+                    
+                #Add the points to the initial mask
+                for pt in [tuple(pt) for pt in newIdxs]: self.initialMask[pt] = 1
+                
+                #Delete the lines/points specified from remaining potentials; in case of overlapping 'line' geometries
+                for lineIndexNum in range(0, len(lineIndexes)): self.delLine(lineIndexes[lineIndex]-lineIndexNum)
+                
+                #Add positions to initial list
+                self.initialSets.append(newIdxs)
+                
+        elif scanMethod == 'pointwise':
+        
+            #Randomly select points to initially scan
+            self.unMeasuredIdxs = np.transpose(np.where(self.initialMask==0))
+            newIdxs = np.asarray(random.sample(self.unMeasuredIdxs.tolist(), int((initialPercToScan/100)*self.area)))
+            
+            #Add the points to the initial mask
+            for pt in [tuple(pt) for pt in newIdxs]: self.initialMask[pt] = 1
+            
+            #Add positions to initial list
+            self.initialSets.append(newIdxs)
+            
+        #Store the initially measured and unmeasured locations and mask for the first iteration
+        self.mask = copy.deepcopy(self.initialMask)
+        self.measuredIdxs = np.transpose(np.where(self.initialMask==1))
+        self.unMeasuredIdxs = np.transpose(np.where(self.initialMask==0))
+        
+        #Now reshape and extract measured and unmeasured locations for the square pixel mask
+        self.squareMask = resize(self.initialMask, (self.squareDim[0], self.squareDim[1]), order=0)
+        self.squareMeasuredIdxs = np.transpose(np.where(self.squareMask==1))
+        self.squareUnMeasuredIdxs = np.transpose(np.where(self.squareMask==0))
         
     #Update mzImages, TIC, origTIC, and origTimes by information in the present line files
     def readScanData(self, lineRevistMethod):
@@ -93,7 +212,7 @@ class Sample:
         if lineRevistMethod == False:
             scannedBool = [scanFile not in self.readScanFiles for scanFile in scanFiles]
             scanFiles = np.asarray(scanFiles)[scannedBool].tolist()
-
+            
         #Read in each of the lines, obtain the TIC and original sampling locations (times)
         for scanFileName in scanFiles:
             
@@ -105,17 +224,20 @@ class Sample:
             lineNum = int(scanFileName.split('line')[1].split('.')[0])-1
             self.readLines.append(lineNum)
             
+            #If ignoring missing lines, then determine the offset for correct indexing
+            if self.ignoreMissingLines: lineNum -= np.sum([lineNum > missingLine for missingLine in self.missingLines])
+            
             #Obtain the total ion chromatogram over all mz available
             xicData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
             self.origTimes[lineNum] = xicData[:,0]
             self.origTIC[lineNum] = xicData[:,1]
-
+        
         #Check and setup for normalization
         if self.normMethod == 'tic':
             self.origNormArray = self.origTIC
         elif self.normMethod == 'standard':
             for mzRangeNum in range(0, len(self.mzStandardRanges)): 
-                results = ray.get([mzrange_parhelper.remote(self.mzStandardRanges[mzRangeNum], scanFileName, self.mzMethod) for scanFileName in scanFiles])
+                results = ray.get([mzrange_parhelper.remote(self.mzStandardRanges[mzRangeNum], scanFileName, self.mzMethod, self.ignoreMissingLines, self.missingLines) for scanFileName in scanFiles])
                 for result in results: self.mzStandardImages[mzRangeNum][result[0]] = result[1]
                 self.origNormArray = np.sum(self.mzStandardImages, axis=0)
         elif self.normMethod == 'none':
@@ -124,58 +246,110 @@ class Sample:
             sys.exit('Error! - Unknown normalization method: ' + self.normMethod + ' specified for sample: ' + self.name)
 
         #Align the normalization array for visualization
-        self.normArray = np.asarray([np.interp(self.newTimes, self.origTimes[lineNum], self.origNormArray[lineNum]) for lineNum in range(0, self.numLines)])
+        self.normArray = np.asarray([np.interp(self.newTimes, self.origTimes[lineNum], self.origNormArray[lineNum]) for lineNum in range(0, self.finalDim[0])])
 
-        #For each mzRange generate a visualization
+        #For each mzRange generate a visualization, performing normalization as specified
         for mzRangeNum in range(0, len(self.mzRanges)): 
-            results = ray.get([mzrange_parhelper.remote(self.mzRanges[mzRangeNum], scanFileName, self.mzMethod) for scanFileName in scanFiles])
+            results = ray.get([mzrange_parhelper.remote(self.mzRanges[mzRangeNum], scanFileName, self.mzMethod, self.ignoreMissingLines, self.missingLines) for scanFileName in scanFiles])
             for result in results: 
-                #Perform normalization if specified
                 if self.normMethod != 'none': 
-                    self.mzImages[mzRangeNum][result[0]] = np.interp(self.newTimes, self.origTimes[result[0]], np.nan_to_num(result[1]/self.origNormArray[result[0]], nan=0, posinf=0, neginf=0))
+                    self.mzImages[mzRangeNum][result[0]] = np.interp(self.newTimes, self.origTimes[result[0]], 
+                    np.nan_to_num(result[1]/self.origNormArray[result[0]], nan=0, posinf=0, neginf=0))
                 else:
                     self.mzImages[mzRangeNum][result[0]] = np.interp(self.newTimes, self.origTimes[result[0]], result[1])
         
-        #If missing lines are to be ignored, then delete them
-        if self.ignoreMissingLines: 
-            missingLines = list(set(np.arange(1, self.numLines).tolist()) - set(self.readLines))
-            self.mzImages = np.delete(self.mzImages, missingLines, axis=1)
-            if self.normMethod == 'standard': self.mzStandardImages = np.delete(self.mzStandardImages, missingLines, axis=1)
-            self.origTIC = np.delete(self.origTIC, missingLines, axis=0)
-            self.origTimes = np.delete(self.origTIC, missingLines, axis=0)
-            self.origNormArray = np.delete(self.origNormArray, missingLines, axis=0)
-            self.normArray = np.delete(self.normArray, missingLines, axis=0)
-            self.numLines -= len(missingLines)
+        #Determine ground-truth average images
+        self.avgGroundTruthImage = np.average(np.asarray(self.mzImages), axis=0, weights=self.mzWeights)
+        self.avgGroundTruthImage = MinMaxScaler().fit_transform(self.avgGroundTruthImage.reshape(-1, 1)).reshape(self.avgGroundTruthImage.shape)
+        self.avgSquareGroundTruthImage = resize(self.avgGroundTruthImage, (self.squareDim[0], self.squareDim[1]), order=0)
         
+        #Create corresponding square variable to mzImages
+        self.squaremzImages = np.asarray([resize(mzImage, (self.squareDim[0], self.squareDim[1]), order=0) for mzImage in self.mzImages])
+
     #Scan new locations in the sample
-    def performMeasurements(self, newIdxs, simulationFlag):
+    def performMeasurements(self, newIdxs, simulationFlag, fromRecon):
 
-        #Update the maskObject according to the newIdxs
-        if len(newIdxs) != 0: self.maskObject.update(newIdxs)
+        #Update the masks according to the newIdxs; need to do so in squareMask for nearest neighbor search
+        if len(newIdxs) != 0: 
+            for pt in newIdxs: self.mask[tuple(pt)] = 1
+            self.measuredIdxs = np.transpose(np.where(self.mask==1))
+            self.unMeasuredIdxs = np.transpose(np.where(self.mask==0))
+            
+            self.squareMask = resize(self.mask, (self.squareDim[0], self.squareDim[1]), order=0)
+            self.squareMeasuredIdxs = np.transpose(np.where(self.squareMask==1))
+            self.squareUnMeasuredIdxs = np.transpose(np.where(self.squareMask==0))
+        
+        #If the measurements are not to be taken from the reconstruction image(s) (as is done for groupwise percToScan acquisition)
+        if not fromRecon:
+            #If this is not a simulation then inform equipment, wait/read/update; otherwise used stored information
+            if not simulationFlag:
+                with open('./INPUT/IMP/UNLOCK', 'w') as filehandle: filehandle.writelines(str(tuple(newIdxs[0])) + ', ' + str(tuple(newIdxs[len(newIdxs)-1])))
+                equipWait()
+                self.readScanData()
+                self.measuredmzImages = copy.deepcopy(self.mzImages)
+            else:
+                for imageNum in range(0,len(self.measuredmzImages)):
+                    temp = copy.deepcopy(np.asarray(self.mzImages[imageNum]))
+                    temp[self.mask == 0] = 0
+                    self.measuredmzImages[imageNum] = temp.copy()
 
-        #If this is not a simulation then inform equipment what points to scan, wait, read in new data, update images
-        if not simulationFlag:
-            with open('./INPUT/IMP/UNLOCK', 'w') as filehandle: filehandle.writelines(str(tuple(newIdxs[0])) + ', ' + str(tuple(newIdxs[len(newIdxs)-1])))
-            equipWait()
-            self.readScanData()
-            self.measuredmzImages = copy.deepcopy(self.mzImages)
-        else:
-            #Obtain masked values from the stored image information
-            for imageNum in range(0,len(self.measuredmzImages)):
-                temp = np.asarray(self.mzImages[imageNum]).copy()
-                temp[self.maskObject.mask == 0] = 0
-                self.measuredmzImages[imageNum] = temp.copy()
+            #Update the square mz images
+            self.squareMeasuredmzImages = np.asarray([resize(measuredmzImage, (self.squareDim[0], self.squareDim[1]), order=0) for measuredmzImage in self.measuredmzImages])
+            
+            #Perform averaging of the multiple channels and subsequent image normalization
+            self.avgMeasuredImage = np.average(np.asarray(self.measuredmzImages), axis=0, weights=self.mzWeights)
+            self.avgMeasuredImage = MinMaxScaler().fit_transform(self.avgMeasuredImage.reshape(-1, 1)).reshape(self.avgMeasuredImage.shape)
 
-        #Perform averaging of the multiple channels and subsequent image normalization
-        self.avgMeasuredImage = np.average(np.asarray(self.measuredmzImages), axis=0, weights=self.mzWeights)
-        self.avgMeasuredImage = MinMaxScaler().fit_transform(self.avgMeasuredImage.reshape(-1, 1)).reshape(self.avgMeasuredImage.shape)
+        else: #When fromRecon, only a single value is presented at a time in a list
+            if averageReconInput or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
+                self.avgMeasuredImage[newIdxs[0][0], newIdxs[0][1]] = self.avgReconImage[newIdxs[0][0], newIdxs[0][1]]
+                
+            elif percToScan != None and erdModel == 'DLADS':
+                self.measuredmzImages[:, newIdxs[0][0], newIdxs[0][1]] = self.mzReconImages[:, newIdxs[0][0], newIdxs[0][1]]
+                
+                #Update the square mz images
+                self.squareMeasuredmzImages = np.asarray([resize(measuredmzImage, (self.squareDim[0], self.squareDim[1]), order=0) for measuredmzImage in self.measuredmzImages])
+                
+                #Perform averaging of the multiple channels and subsequent image normalization
+                self.avgMeasuredImage = np.average(np.asarray(self.measuredmzImages), axis=0, weights=self.mzWeights)
+                self.avgMeasuredImage = MinMaxScaler().fit_transform(self.avgMeasuredImage.reshape(-1, 1)).reshape(self.avgMeasuredImage.shape)
+
+        self.avgSquareMeasuredImage = resize(self.avgMeasuredImage, (self.squareDim[0], self.squareDim[1]), order=0)
         
         #Update percentage pixels measured
-        self.percMeasured = (np.sum(self.maskObject.mask)/self.maskObject.area)*100
+        self.percMeasured = (np.sum(self.mask)/self.area)*100
 
+    #Reset the smaple mask and linesToScan
+    def maskReset(self, simulationFlag):
+        
+        #If this is a simulation, then set to a blank mask (no initial scan performed), otherwise set to state after initial measurements
+        if simulationFlag: self.mask = np.zeros(self.finalDim)
+        else: self.mask = copy.deepcopy(self.initialMask)
+            
+        #Set the measured/unmeasured location lists so it matches the intended state
+        self.measuredIdxs = np.transpose(np.where(self.mask==1))
+        self.unMeasuredIdxs = np.transpose(np.where(self.mask==0))
+            
+        #Now reshape and extract measured and unmeasured locations for the square pixel mask
+        self.squareMask = resize(self.initialMask, (self.squareDim[0], self.squareDim[1]), order=0)
+        self.squareMeasuredIdxs = np.transpose(np.where(self.squareMask==1))
+        self.squareUnMeasuredIdxs = np.transpose(np.where(self.squareMask==0))
+    
+    #Remove entire lines from future consideration
+    def delLine(self, index):
+        if scanMethod == 'linewise': self.linesToScan = np.delete(self.linesToScan, index, 0).tolist()
+        else: sys.exit('Error! - Attempted to delete a line with non-linewise scanning method')
+        
+    def delPoints(self, pts):
+        if scanMethod == 'linewise':
+            for lineNum in range(0, len(self.linesToScan)): self.linesToScan[lineNum] = [pt for ix, pt in enumerate(self.linesToScan[lineNum]) if pt not in pts]
+            self.linesToScan = [x for x in self.linesToScan if x]
+        else:
+            sys.exit('Error! - Attempted to delete points from lines with non-linewise scanning method')
+        
 #Singular result generated through runSLADS
 class Result():
-    def __init__(self, sample, maskObject, avgGroundTruthImage, bestCFlag, oracleFlag, simulationFlag, animationFlag):
+    def __init__(self, sample, avgGroundTruthImage, bestCFlag, oracleFlag, simulationFlag, animationFlag):
         self.sample = copy.deepcopy(sample)
         self.avgGroundTruthImage = copy.deepcopy(avgGroundTruthImage)
         self.simulationFlag = copy.deepcopy(simulationFlag)
@@ -185,7 +359,7 @@ class Result():
         self.avgImages = []
         self.reconImages = []
         self.RDImages = []
-        self.mzRecons = []
+        self.mzReconImages = []
         self.samples = []
         self.ERDValueNPs = []
         
@@ -197,27 +371,32 @@ class Result():
         
         self.percMeasuredList = []
 
-    def update(self, percMeasured, sample, maskObject, reconImage, ERDValuesNP, iterNum):
+    def update(self, sample, ERDValuesNP):
 
         #Save the model development
         self.ERDValueNPs.append(copy.deepcopy(ERDValuesNP))
         self.avgImages.append(copy.deepcopy(sample.avgMeasuredImage))
         self.samples.append(copy.deepcopy(sample))
-        self.percMeasuredList.append(copy.deepcopy(percMeasured))
-        self.reconImages.append(copy.deepcopy(reconImage))
+        self.percMeasuredList.append(copy.deepcopy(sample.percMeasured))
     
     def complete(self, optimalC): 
+    
+        #If average reconstructions were not computed during runSLADS operations, then compute them now
+        if not averageReconInput and erdModel == 'DLADS':
+            results = ray.get([computeRecon_parhelper.remote(sample.avgGroundTruthImage, sample) for sample in self.samples])
+            for resultNum in range(0, len(results)): self.samples[resultNum].avgReconImage = resize(results[resultNum], tuple(sample.finalDim), order=0)
+        
         if self.simulationFlag:
 
             #Perform statistics extraction for all images
-            for index in range(0, len(self.reconImages)):
+            for index in range(0, len(self.samples)):
                 
                 #Measure and save statistics
-                difference = np.sum(computeDifference(self.avgGroundTruthImage, self.reconImages[index]))
-                TD = difference/self.samples[index].maskObject.area
-                MSE = mean_squared_error(self.avgGroundTruthImage, self.reconImages[index])
-                SSIM = structural_similarity(self.avgGroundTruthImage, self.reconImages[index], data_range=1)
-                PSNR = compare_psnr(self.avgGroundTruthImage, self.reconImages[index], data_range=1)
+                difference = np.sum(computeDifference(self.avgGroundTruthImage, self.samples[index].avgReconImage))
+                TD = difference/self.samples[index].area
+                MSE = mean_squared_error(self.avgGroundTruthImage, self.samples[index].avgReconImage)
+                SSIM = structural_similarity(self.avgGroundTruthImage, self.samples[index].avgReconImage, data_range=1)
+                PSNR = compare_psnr(self.avgGroundTruthImage, self.samples[index].avgReconImage, data_range=1)
 
                 self.TDList.append(TD)
                 self.MSEList.append(MSE)
@@ -228,18 +407,12 @@ class Result():
             if self.bestCFlag: return self.PSNRList, self.percMeasuredList
 
             #Calculate the actual RD Image; bestCFlag data should be returned before this subroutine
-            #currMaxRD = 0
             for index in tqdm(range(0, len(self.samples)), desc='RD Calc', leave = False, ascii=True):
                 RDImage = computeRD(self.samples[index], optimalC)
                 self.RDImages.append(RDImage)
                 self.ERDPSNRList.append(compare_psnr(RDImage, self.ERDValueNPs[index], data_range=1))
-                #if np.max(RDImage) > currMaxRD: currMaxRD = np.max(RDImage)
             
-            #Normalize RD Images across sampling series and find ERD PSNR difference
-            #for index in range(0, len(self.samples)): 
-            #    self.RDImages[index] = self.RDImages[index]/currMaxRD
-            #    self.ERDPSNRList.append(compare_psnr(self.RDImages[index], self.ERDValueNPs[index], data_range=1))
-            
+
         #If an animation will be produced and the run has completed
         if self.animationFlag:
 
@@ -265,16 +438,17 @@ class Result():
                 percSampled = "{:.2f}".format(self.percMeasuredList[-1])
                 
                 #Perform reconstructions and statistics extraction for all images
-                results = ray.get([performRecon_parhelper.remote(self.samples[-1].measuredmzImages[mzImageNum], self.samples[-1].maskObject) for mzImageNum in range(0,len(self.samples[-1].measuredmzImages))])
-                self.mzRecons = [result for result in results]
-
+                if averageReconInput or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
+                    results = ray.get([computeRecon_parhelper.remote(self.samples[-1].squareMeasuredmzImages[mzImageNum], self.samples[-1]) for mzImageNum in range(0,len(self.samples[-1].squareMeasuredmzImages))])
+                    self.mzReconImages = np.asarray([resize(result, tuple(self.samples[-1].finalDim), order=0) for result in results])
+                
                 for massNum in tqdm(range(0, len(self.samples[-1].mzRanges)), desc='mz Images', leave = False, ascii=True):
                     
                     #mz image with only the actual measurements made
                     subMeasuredImage = self.samples[-1].measuredmzImages[massNum]
                     
                     #Retrieve reconstruction for the specific mz image
-                    subReconImage = self.mzRecons[massNum]
+                    subReconImage = self.mzReconImages[massNum]
 
                     #Retrieve ground truth for the specific mz image
                     mzImage = self.samples[-1].mzImages[massNum]
@@ -299,7 +473,7 @@ class Result():
                     plt.suptitle('Percent Sampled: ' + percSampled + '  Measurement mz: ' + massRange + '\nMeasured MSE: ' + measureMSE + '    Reconstruction MSE : ' + reconMSE, fontsize=20, fontweight='bold', y = 0.95)
 
                     sub = f.add_subplot(1,4,1)
-                    sub.imshow(self.samples[-1].maskObject.mask, cmap='gray', aspect='auto')
+                    sub.imshow(self.samples[-1].mask, cmap='gray', aspect='auto')
                     sub.set_title('Sampled Mask')
 
                     sub = f.add_subplot(1,4,2)
@@ -337,17 +511,17 @@ class Result():
                     cbar = f.colorbar(im, ax=ax1, orientation='vertical', pad=0.01)
 
                     ax2 = plt.subplot2grid((2,3), (0,1))
-                    im = ax2.imshow(self.reconImages[i], cmap='hot', aspect='auto', vmin=0, vmax=1)
+                    im = ax2.imshow(self.samples[i].avgReconImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
                     ax2.set_title('Reconstruction')
                     cbar = f.colorbar(im, ax=ax2, orientation='vertical', pad=0.01)
 
                     ax3 = plt.subplot2grid((2,3), (0,2))
-                    im = ax3.imshow(abs(self.avgGroundTruthImage-self.reconImages[i]), cmap='hot', aspect='auto', vmin=0, vmax=1)
+                    im = ax3.imshow(abs(self.avgGroundTruthImage-self.samples[i].avgReconImage), cmap='hot', aspect='auto', vmin=0, vmax=1)
                     ax3.set_title('Absolute Difference')
                     cbar = f.colorbar(im, ax=ax3, orientation='vertical', pad=0.01)
 
                     ax4 = plt.subplot2grid((2,3), (1,0))
-                    im = ax4.imshow(self.samples[i].maskObject.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
+                    im = ax4.imshow(self.samples[i].mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
                     ax4.set_title('Measurement Mask')
                     cbar = f.colorbar(im, ax=ax4, orientation='vertical', pad=0.01)
                     
@@ -372,7 +546,7 @@ class Result():
                     fig=plt.figure()
                     ax=fig.add_subplot(1,1,1)
                     plt.axis('off')
-                    plt.imshow(self.reconImages[i], cmap='hot', aspect='auto', vmin=0, vmax=1)
+                    plt.imshow(self.samples[i].avgReconImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                     plt.savefig(saveLocation, bbox_inches=extent)
                     plt.close()
@@ -402,7 +576,7 @@ class Result():
                     fig=plt.figure()
                     ax=fig.add_subplot(1,1,1)
                     plt.axis('off')
-                    plt.imshow(self.samples[i].maskObject.mask, cmap='gray', aspect='auto')
+                    plt.imshow(self.samples[i].mask, cmap='gray', aspect='auto')
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                     plt.savefig(saveLocation, bbox_inches=extent)
                     plt.close()
@@ -431,7 +605,7 @@ class Result():
                 fig=plt.figure()
                 ax=fig.add_subplot(1,1,1)
                 plt.axis('off')
-                plt.imshow(self.reconImages[-1], cmap='hot', aspect='auto', vmin=0, vmax=1)
+                plt.imshow(self.samples[-1].avgReconImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
                 extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                 plt.savefig(saveLocation, bbox_inches=extent)
                 plt.close()
@@ -441,7 +615,7 @@ class Result():
                 fig=plt.figure()
                 ax=fig.add_subplot(1,1,1)
                 plt.axis('off')
-                plt.imshow(self.samples[-1].maskObject.mask, cmap='gray', aspect='auto')
+                plt.imshow(self.samples[-1].mask, cmap='gray', aspect='auto')
                 extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                 plt.savefig(saveLocation, bbox_inches=extent)
                 plt.close()
@@ -449,209 +623,93 @@ class Result():
             else: #Not a simulation
                 print('Warning! - Non simulation plots not yet fixed for color issue and modified selection')
 
-#Each sample needs a mask object
-class MaskObject():
-    def __init__(self, imageWidth, imageHeight, initialPercToScan, scanMethod):
-        self.imageWidth = copy.deepcopy(imageWidth)
-        self.imageHeight = copy.deepcopy(imageHeight)
-        self.aspectRatio = imageWidth/imageHeight if imageWidth>imageHeight else imageHeight/imageWidth
-        self.area = imageWidth*imageHeight
-        self.measuredIdxs = []
-        self.unMeasuredIdxs = []
-        self.initialMeasuredIdxs = []
-        self.initialUnMeasuredIdxs = []
-        self.unMeasuredIdxsList = []
-        self.measuredIdxsList = []
-        self.initialSets = []
-
-        #Create a blank initial mask
-        self.initialMask = np.zeros([imageHeight, imageWidth])
-        
-        #If scanning is to be performed line by line
-        if scanMethod == 'linewise':
-        
-            #Generate a list of arrays (lines) contianing the x,y points that need to be scanned
-            self.linesToScan = []
-            for rowNum in np.arange(0,imageHeight,1):
-                line = []
-                for columnNum in np.arange(0, imageWidth, 1):
-                    line.append(tuple([rowNum, columnNum]))
-                self.linesToScan.append(line)
-
-            #Fix internel format, so that it is consistent throughout program operation
-            self.linesToScan = np.asarray(self.linesToScan).tolist()
-
-            #Copy the initial set of linesToScan
-            self.originalLinesToScan = copy.copy(self.linesToScan)
-        
-            #Set which lines should be acquired in initial scan
-            lineIndexes = [
-                int((imageHeight-1)*0.50)
-            ]
-
-            #Obtain the points in the specified lines and add them to the initial scan list
-            for lineIndexNum in range(0, len(lineIndexes)):
-                lineIndex = lineIndexes[lineIndexNum]
-                
-                if lineMethod == 'percLine':
-                    #Randomize and choose which points (termination %) should be scanned on the initial lines
-                    newIdxs = [pt for pt in self.linesToScan[lineIndex]]
-                    np.random.shuffle(newIdxs)
-                    newIdxs = newIdxs[:int((stopPerc/100)*imageWidth)]
-                else:
-                    #Select all of the points on the chosen lines
-                    for pt in self.linesToScan[lineIndex]: self.initialMask[tuple(pt)] = 1
-                    newIdxs = [pt for pt in self.linesToScan[lineIndex]]
-                
-                #Add the points to the initial mask
-                for pt in newIdxs: self.initialMask[tuple(pt)] = 1
-
-                #Add point information for equipment implementation
-                self.initialSets.append(newIdxs)
-
-            #Now delete the lines/points specified from the remaining potentials; in case of shared points between 'lines' (diagonals, spirals, etc.)
-            for lineIndexNum in range(0, len(lineIndexes)): self.delLine(lineIndexes[lineIndexNum]-lineIndexNum)
-            
-            #Make a duplicate for fresh initializations
-            self.initialLinesToScan = copy.copy(self.linesToScan)
-        
-        #If scanning is to be performed on a point by point basis
-        elif scanMethod == 'pointwise':
-            if impModel: sys.exit('Error! - pointwise scanning method has not been setup for physical model implementation!')
-            
-            #Generate a random initial mask that scans requested percent of sample pixels
-            self.unMeasuredIdxs = np.transpose(np.where(self.initialMask == 0))
-            np.random.shuffle(self.unMeasuredIdxs)
-            for pt in self.unMeasuredIdxs[:int((initialPercToScan/100)*self.area)]: self.initialMask[tuple(pt)] = 1
-        
-        #Store the initially measured and unmeasured mask locations for the first measurement step
-        self.initialMeasuredIdxs = np.transpose(np.where(self.initialMask == 1))
-        self.initialUnMeasuredIdxs = np.transpose(np.where(self.initialMask == 0))
-        
-        #Reset the internal mask to match the initial
-        self.mask = copy.deepcopy(self.initialMask)
-        self.measuredIdxs = np.transpose(np.where(self.mask == 1))
-        self.unMeasuredIdxs = np.transpose(np.where(self.mask == 0))
-    
-    #Update the mask given a set of new measurement locations
-    def update(self, newIdxs):
-        for pt in newIdxs: self.mask[tuple(pt)] = 1
-        
-        #SUGGESTED IMPROVEMENT: Should change this to add new Idxs to the list, rather than going through the whole list again
-        self.measuredIdxs = np.transpose(np.where(self.mask == 1))
-        self.unMeasuredIdxs = np.transpose(np.where(self.mask == 0))
-
-    #Reset the training sample's mask and linesToScan
-    def reset(self, simulationFlag):
-        #If this is a simulation, then reset to blank mask (no initial scan)
-        if simulationFlag:
-            self.mask = np.zeros([self.imageHeight, self.imageWidth])
-            if scanMethod == 'linewise': self.linesToScan = copy.copy(self.originalLinesToScan)
-            self.measuredIdxs = np.transpose(np.where(self.mask == 1))
-            self.unMeasuredIdxs = np.transpose(np.where(self.mask == 0))
-        else: #Reset to state after initial measurements have been made
-            self.mask = copy.deepcopy(self.initialMask)
-            self.measuredIdxs = np.transpose(np.where(self.mask == 1))
-            self.unMeasuredIdxs = np.transpose(np.where(self.mask == 0))
-
-    #Remove entire lines from future consideration
-    def delLine(self, index):
-        if scanMethod == 'linewise':
-            self.linesToScan = np.delete(self.linesToScan, index, 0).tolist()
-        else:
-            sys.exit('Error! - Attempted to delete a line with non-linewise scanning method')
-
-    #Remove points from future consideration
-    def delPoints(self, pts):
-        if scanMethod == 'linewise':
-            for lineNum in range(0, len(self.linesToScan)): self.linesToScan[lineNum] = [pt for ix, pt in enumerate(self.linesToScan[lineNum]) if pt not in pts]
-            self.linesToScan = [x for x in self.linesToScan if x]
-        else:
-            sys.exit('Error! - Attempted to delete points from lines with non-linewise scanning method')
-
 def iou(groundTruth, prediction):
     return np.sum(np.logical_and(groundTruth, prediction)) / np.sum(np.logical_or(groundTruth, prediction))
 
 @ray.remote
-def performRecon_parhelper(image, maskObject):
-    return performRecon(image, maskObject)
+def computeRecon_parhelper(image, sample):
+    return computeRecon(image, sample)
 
 #Generate/apply a gaussian kernel to a window of an image centered at an idx, summing result; window size according to sigma strength
-def gaussianGenerator(inputImage, idx, sigma, maskObject):
+def gaussianGenerator(inputImage, idx, sigma):
     
     #Determine odd number >= 3 times the given sigma value for a reasonable window size to generate, (width, height)
     windowSize = int(np.ceil((np.ceil(sigma*3)//2)*2+1))
     
-    #Penalize according to the aspect ratio
-    if maskObject.imageWidth>maskObject.imageHeight:
-        windowSize = [int(np.ceil(windowSize/maskObject.aspectRatio)), windowSize]
-    else:
-        windowSize = [windowSize, int(np.ceil(windowSize/maskObject.aspectRatio))]
-    
     #Pad input image based on window size, to ensure no data is lost when splitting into windows
-    paddedInputImage = np.pad(inputImage, [(int(np.floor(windowSize[0]/2)), ), (int(np.floor(windowSize[1]/2)), )], mode='constant')
-
+    paddedInputImage = np.pad(inputImage, [(int(np.floor(windowSize/2)), ), (int(np.floor(windowSize/2)), )], mode='constant')
+    
     #Extract window around specified idx and calculate kernel
-    window = viewW(paddedInputImage, (windowSize[0], windowSize[1]))[idx[0], idx[1]]
-    kernel = np.outer(signal.gaussian(windowSize[0], std=sigma), signal.gaussian(windowSize[1], std=sigma))
+    window = viewW(paddedInputImage, (windowSize, windowSize))[idx[0], idx[1]]
+    kernel = np.outer(signal.gaussian(windowSize, std=sigma), signal.gaussian(windowSize, std=sigma))
     
     return np.sum(window*kernel)
 
 #Perform gaussianGenerator for a set of sigma values
 @ray.remote
-def gaussian_parhelper(idxs, inputImage, sigmaValues, maskObject, indexes):
-    return [gaussianGenerator(inputImage, idxs[index], sigmaValues[index], maskObject) for index in indexes]
+def gaussian_parhelper(idxs, inputImage, sigmaValues, indexes):
+    return [gaussianGenerator(inputImage, idxs[index], sigmaValues[index]) for index in indexes]
 
 def computeRD(sample, cValue):
-
+    
+    if RDMethod == 'var':
+        #Compute the difference between the ground-truth mz images and their reconstructions
+        difference = abs(sample.squaremzImages-sample.squaremzReconImages)
+        #Flatten difference stack by finding the variance at each pixel 
+        RDPP_id = ray.put(np.var(difference, axis=0))
+    elif RDMethod == 'max':
+        #Compute the difference between the ground-truth mz images and their reconstructions
+        difference = abs(sample.squaremzImages-sample.squaremzReconImages)
+        #Flatten difference stack by finding the maximum value at each pixel
+        RDPP_id = ray.put(np.max(difference, axis=0))
+    else:
+        RDPP_id = ray.put(computeDifference(sample.avgSquareGroundTruthImage, sample.avgSquareReconImage))
+        
     #Find neighbor information
-    neighborIndices, neighborWeights, neighborDistances = findNeighbors(sample.maskObject)
+    neighborIndices, neighborWeights, neighborDistances = findNeighbors(sample.squareMeasuredIdxs, sample.squareUnMeasuredIdxs)
     
     #Calculate the sigma value for chosen c value, store directly into shared memory
     sigmaValues_id = ray.put(neighborDistances[:,0]/cValue)
     
-    #Compute the difference between the original and reconstructed images, store directly into shared memory
-    RDPP_id = ray.put(computeDifference(sample.avgGroundTruthImage, sample.reconImage))
-    
-    #Split computation sets to be run on multiple `
-    indexes = np.asarray(list(range(0, np.sum(sample.maskObject.mask==0))))
+    #Split computation sets to be run on multiple processes
+    indexes = np.asarray(list(range(0, len(sample.squareUnMeasuredIdxs))))
     blockSize = int(np.ceil(len(indexes) / float(multiprocessing.cpu_count())))
     indexSets = np.split(indexes, np.arange(blockSize, len(indexes), blockSize))
     
     #Store indexes into shared memory
-    unMeasuredIdxs_id = ray.put(sample.maskObject.unMeasuredIdxs)
-    
-    #Store aspect ratio into shared memory
-    maskObject_id = ray.put(sample.maskObject)
+    unMeasuredIdxs_id = ray.put(sample.squareUnMeasuredIdxs)
     
     #Perform computation of RD values for each unmeasured point
-    results = ray.get([gaussian_parhelper.remote(unMeasuredIdxs_id, RDPP_id, sigmaValues_id, maskObject_id, indexes) for indexes in indexSets])
+    results = ray.get([gaussian_parhelper.remote(unMeasuredIdxs_id, RDPP_id, sigmaValues_id, indexes) for indexes in indexSets])
     RDValues = [result for resultSet in results for result in resultSet]
     
     #Reassemble the values into a single image
-    RDImage = np.zeros((sample.avgGroundTruthImage.shape))
-    RDImage[np.where(sample.maskObject.mask==0)] = RDValues
+    RDImage = np.zeros((sample.squareMask.shape))
+    RDImage[np.where(sample.squareMask==0)] = RDValues
     
     #Normalize
     RDImage = MinMaxScaler().fit_transform(RDImage.reshape(-1, 1)).reshape(RDImage.shape)
 
+    #Resize to physical domain dimensionality
+    RDImage = resize(RDImage, tuple(sample.finalDim), order=0)
+
     return RDImage
 
-def computePolyFeatures(maskObject, reconImage):
+def computePolyFeatures(sample, reconImage):
     
     #Retreive recon values
-    inputValues = reconImage[maskObject.unMeasuredIdxs[:,0], maskObject.unMeasuredIdxs[:,1]]
+    inputValues = reconImage[sample.squareUnMeasuredIdxs[:,0], sample.squareUnMeasuredIdxs[:,1]]
     
     #Retrieve the measured values
-    idxsX, idxsY = map(list, zip(*[tuple(idx) for idx in maskObject.measuredIdxs]))
+    idxsX, idxsY = map(list, zip(*[tuple(idx) for idx in sample.squareMeasuredIdxs]))
     measuredValues = reconImage[np.asarray(idxsX), np.asarray(idxsY)]
     
     #Find neighbor information
-    neighborIndices, neighborWeights, neighborDistances = findNeighbors(maskObject)
+    neighborIndices, neighborWeights, neighborDistances = findNeighbors(sample.squareMeasuredIdxs, sample.squareUnMeasuredIdxs)
     neighborValues = measuredValues[neighborIndices]
     
     #Create array to hold features
-    feature = np.zeros((np.shape(maskObject.unMeasuredIdxs)[0],6))
+    feature = np.zeros((np.shape(sample.squareUnMeasuredIdxs)[0],6))
     
     #Compute std div features
     diffVect = computeDifference(neighborValues, np.transpose(np.matlib.repmat(inputValues, np.shape(neighborValues)[1],1)))
@@ -659,56 +717,52 @@ def computePolyFeatures(maskObject, reconImage):
     feature[:,1] = np.sqrt(np.sum(np.power(diffVect,2),axis=1))
     
     #Compute distance/density features
-    cutoffDist = np.ceil(np.sqrt((featDistCutoff/100)*(maskObject.area/np.pi)))
+    cutoffDist = np.ceil(np.sqrt((featDistCutoff/100)*(sample.area/np.pi)))
     feature[:,2] = neighborDistances[:,0]
     neighborsInCircle = np.sum(neighborDistances<=cutoffDist,axis=1)
     feature[:,3] = (1+(np.pi*(np.square(cutoffDist))))/(1+neighborsInCircle)
     
     #Compute gradient features; assume continuous features
     gradientImageX, gradientImageY = np.gradient(reconImage)
-    feature[:,4] = abs(gradientImageY)[maskObject.unMeasuredIdxs[:,0], maskObject.unMeasuredIdxs[:,1]]
-    feature[:,5] = abs(gradientImageX)[maskObject.unMeasuredIdxs[:,0], maskObject.unMeasuredIdxs[:,1]]
+    feature[:,4] = abs(gradientImageY)[sample.squareUnMeasuredIdxs[:,0], sample.squareUnMeasuredIdxs[:,1]]
+    feature[:,5] = abs(gradientImageX)[sample.squareUnMeasuredIdxs[:,0], sample.squareUnMeasuredIdxs[:,1]]
     
     #Fit polynomial features to the determined array
     polyFeatures = PolynomialFeatures(degree=2).fit_transform(feature)
     
     return polyFeatures
 
-def computeERD(iterNum, sample, model):
+def computeERD(sample, model):
     
     if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net':
         
         #Compute ERD values
-        polyFeatures = computePolyFeatures(sample.maskObject, sample.reconImage)
+        polyFeatures = computePolyFeatures(sample, sample.avgSquareReconImage)
         ERDValues = model.predict(polyFeatures)
         
         #Rearrange ERD values into array; those that have already been measured have 0 ERD
-        ERD = np.zeros([sample.maskObject.imageHeight, sample.maskObject.imageWidth])
-        ERD[sample.maskObject.unMeasuredIdxs[:, 0], sample.maskObject.unMeasuredIdxs[:, 1]] = ERDValues
+        ERD = np.zeros(sample.squareDim)
+        ERD[sample.squareUnMeasuredIdxs[:, 0], sample.squareUnMeasuredIdxs[:, 1]] = ERDValues
         
         #Remove values that are less than those already scanned (0 ERD)
         ERD[np.where((ERD < 0))] = 0
+        
+        #Resize to physical domain dimensionality
+        ERD = resize(ERD, tuple(sample.finalDim), order=0)
     
     elif erdModel == 'DLADS':
         
-        #Form measured image
-        measuredImage = np.zeros((sample.maskObject.mask.shape))
-        measuredImage[np.where(sample.maskObject.mask)] = sample.avgMeasuredImage[np.where(sample.maskObject.mask)]
-
-        #Compute feature image for network input
-        featureImage = featureExtractor(sample.maskObject, measuredImage, sample.reconImage)
-
         #Send input through trained model
-        inputImage, originalShape = makeCompatible(featureImage)
-        ERD = model.predict(inputImage, steps=1)[0,:,:,0]
-        
-        #Revert to the original shape
-        ERD = resize(ERD, (originalShape), order=0)
+        if averageReconInput: 
+            measuredImage = copy.deepcopy(sample.avgSquareMeasuredImage)
+            #measuredImage[sample.squareMask==0] = 0
+            inputImage, originalShape = makeCompatible(featureExtractor(sample, measuredImage, sample.avgSquareReconImage))
+        else:
+            inputImage, originalShape = makeCompatible(np.stack(sample.squareMeasuredmzImages, axis=-1))
 
-        #Ensure points already measured and those with values less than those have a 0 ERD
-        ERD[sample.maskObject.measuredIdxs[:, 0], sample.maskObject.measuredIdxs[:, 1]] = 0
-        ERD[np.where((ERD < 0))] = 0
-    
+        #Compute ERD and resize to finalDim
+        ERD = resize(model.predict(inputImage, steps=1)[0,:,:,0], tuple(sample.finalDim), order=0)
+
     return ERD
     
 def runSLADS(samples, model, scanMethod, cValue, percToScan, stopPerc, sampleNum, simulationFlag, trainPlotFlag, animationFlag, tqdmHide, oracleFlag, bestCFlag):
@@ -718,38 +772,41 @@ def runSLADS(samples, model, scanMethod, cValue, percToScan, stopPerc, sampleNum
     else: #Here sample.mzImages contains only the initially measured images
         sample = samples
         sample.measuredmzImages = sample.mzImages
+        sample.squareMeasuredmzImages = sample.squaremzImages
         
     #Reinitialize the mask to starting state
-    sample.maskObject.reset(simulationFlag)
+    sample.maskReset(simulationFlag)
 
     #Indicate the stopping condition has not yet been met
     completedRunFlag = False
-
-    #Set the current iteration
-    iterNum = 1
-
-    #Perform the initial measurements
-    if simulationFlag: sample.performMeasurements(sample.maskObject.initialMeasuredIdxs, simulationFlag)
-
-    #Calculate the reconstruction image
-    sample.reconImage = performRecon(sample.avgMeasuredImage, sample.maskObject)
     
+    #Perform the initial measurements
+    if simulationFlag: sample.performMeasurements(np.transpose(np.where(sample.initialMask == 1)), simulationFlag, False)
+
+    #Calculate the reconstruction(s)
+    if averageReconInput or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
+        sample.avgSquareReconImage = computeRecon(sample.avgSquareMeasuredImage, sample)
+        sample.avgReconImage = resize(sample.avgSquareReconImage, tuple(sample.finalDim), order=0)
+    elif percToScan != None and erdModel == 'DLADS':
+        sample.squaremzReconImages = np.asarray(ray.get([computeRecon_parhelper.remote(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages]))
+        sample.mzReconImages = [resize(squaremzReconImage, tuple(sample.finalDim), order=0) for squaremzReconImage in sample.squaremzReconImages]
+
     #Determine ERD or use the RD as the ERD if the oracleFlag or bestCFlag is enabled
     if oracleFlag or bestCFlag:
         ERDValuesNP = computeRD(sample, cValue)
     else:
-        ERDValuesNP = computeERD(iterNum, sample, model)
+        ERDValuesNP = computeERD(sample, model)
 
     #Initialize and perform first update for a result object
-    result = Result(sample, sample.maskObject, sample.avgGroundTruthImage, bestCFlag, oracleFlag, simulationFlag, animationFlag)
-    result.update(sample.percMeasured, sample, sample.maskObject, sample.reconImage, ERDValuesNP, iterNum)
+    result = Result(sample, sample.avgGroundTruthImage, bestCFlag, oracleFlag, simulationFlag, animationFlag)
+    result.update(sample, ERDValuesNP)
 
     #Check stopping criteria, just in case of a bad input
     if (scanMethod == 'pointwise' or not lineVisitAll) and (round(sample.percMeasured) >= stopPerc): completedRunFlag = True
-    if scanMethod == 'linewise' and len(sample.maskObject.linesToScan) == 0: completedRunFlag = True
+    if scanMethod == 'linewise' and len(sample.linesToScan) == 0: completedRunFlag = True
 
     #Until the stopping criteria has been met
-    with tqdm(total = float(100), desc = '% Sampled', leave = False, ascii=True, disable=tqdmHide) as pbar:
+    with tqdm(total = float(stopPerc), desc = '% Sampled', leave = False, ascii=True, disable=tqdmHide) as pbar:
 
         #Initialize progress bar state according to % measured
         pbar.n = round(sample.percMeasured,2)
@@ -758,30 +815,32 @@ def runSLADS(samples, model, scanMethod, cValue, percToScan, stopPerc, sampleNum
         #Until the program has completed
         while not completedRunFlag:
             
-            #Step the iteration counter
-            iterNum += 1
-            
             #Find next measurement locations
-            newIdxs = findNewMeasurementIdxs(sample, ERDValuesNP, percToScan, scanMethod)
+            newIdxs = findNewMeasurementIdxs(sample, result, model, ERDValuesNP, scanMethod, cValue, simulationFlag, oracleFlag, bestCFlag, percToScan)
             
             #Perform measurements
-            sample.performMeasurements(newIdxs, simulationFlag)
+            sample.performMeasurements(newIdxs, simulationFlag, False)
+            
+            #Calculate the reconstruction(s)
+            if averageReconInput or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
+                sample.avgSquareReconImage = computeRecon(sample.avgSquareMeasuredImage, sample)
+                sample.avgReconImage = resize(sample.avgSquareReconImage, tuple(sample.finalDim), order=0)
+            elif percToScan != None and erdModel == 'DLADS':
+                sample.squaremzReconImages = np.asarray(ray.get([computeRecon_parhelper.remote(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages]))
+                sample.mzReconImages = [resize(squaremzReconImage, tuple(sample.finalDim), order=0) for squaremzReconImage in sample.squaremzReconImages]
+                    
+            #Determine ERD or use the RD as the ERD if the oracleFlag or bestCFlag is enabled
+            if oracleFlag or bestCFlag: ERDValuesNP = computeRD(sample, cValue)
+            else: ERDValuesNP = computeERD(sample, model)
             
             #Check stopping conditions
             if (scanMethod == 'pointwise' or not lineVisitAll) and (round(sample.percMeasured) >= stopPerc): completedRunFlag = True
-            if scanMethod == 'linewise' and len(sample.maskObject.linesToScan) == 0: completedRunFlag = True
+            if scanMethod == 'linewise' and len(sample.linesToScan) == 0: completedRunFlag = True
 
-            #Calculate the reconstruction
-            sample.reconImage = performRecon(sample.avgMeasuredImage, sample.maskObject)
-            
-            #Determine ERD or use the RD as the ERD if the oracleFlag or bestCFlag is enabled
-            if oracleFlag or bestCFlag:
-                ERDValuesNP = computeRD(sample, cValue)
-            else:
-                ERDValuesNP = computeERD(iterNum, sample, model)
-
-            #Update the result
-            result.update(sample.percMeasured, sample, sample.maskObject, sample.reconImage, ERDValuesNP, iterNum)
+            #If viz limit, only update when percToViz has been met; otherwise update every iteration
+            if ((percToViz != None) and ((sample.percMeasured - result.samples[-1].percMeasured) >= percToViz)) or (percToViz == None):
+                result.update(sample, ERDValuesNP)
+                performUpdate = False
 
             #Update the progress bar
             pbar.n = round(sample.percMeasured,2)
@@ -789,58 +848,99 @@ def runSLADS(samples, model, scanMethod, cValue, percToScan, stopPerc, sampleNum
 
     return result
 
-def findNewMeasurementIdxs(sample, ERDValuesNP, percToScan, scanMethod):
+def findNewMeasurementIdxs(sample, result, model, ERDValuesNP, scanMethod, cValue, simulationFlag, oracleFlag, bestCFlag, percToScan):
 
     #Make sure ERDValuesNP is in np array
     ERDValuesNP = np.asarray(ERDValuesNP)
     
     if scanMethod == 'random':
-        newIdxs = np.asarray(random.sample(sample.maskObject.unMeasuredIdxs.tolist(), int((percToScan/100)*sample.maskObject.area)))
+        newIdxs = np.asarray(random.sample(sample.unMeasuredIdxs.tolist(), int((percToScan/100)*sample.area)))
     elif scanMethod == 'pointwise':
         
-        #Obtain a list of all ERD values for unmeasured locations
-        ERDValueList = [ERDValuesNP[tuple(pt)] for pt in sample.maskObject.unMeasuredIdxs]
+        #If performing a groupwise scan, use reconstruction as the "performed" measurement, until reaching target
+        if percToScan != None:
         
-        #Sort the values in reverse order and choose the top 1% of values
-        newIdxs = sample.maskObject.unMeasuredIdxs[np.argsort(ERDValueList)][::-1][:int((percToScan/100)*sample.maskObject.area)]
+            #Create a list to hold the chosen scanning locations
+            newIdxs = []
+            
+            #Until the percToScan has been reached, substitute reconstruction values for actual measurements
+            while True:
+
+                #Find next measurement location and store the chosen scanning location for later, actual measurement
+                newIdxs.append(sample.unMeasuredIdxs[np.argmax(ERDValuesNP[sample.mask==0])])
+                
+                #Perform the measurement, using values from reconstruction 
+                sample.performMeasurements([newIdxs[-1]], simulationFlag, True)
+                
+                #When enough new locations have been determined, break from loop
+                if (sample.percMeasured-result.samples[-1].percMeasured) >= percToScan: break
+                
+                #Re-compute ERD/RD; ensure in an array
+                if oracleFlag or bestCFlag: ERDValuesNP = np.asarray(computeRD(sample, cValue))
+                else: ERDValuesNP = np.asarray(computeERD(sample, model))
+        else:
+            #Identify the unmeasured location with the highest ERD value; return in a list to ensure it is iterable
+            newIdxs = [sample.unMeasuredIdxs[np.argmax(ERDValuesNP[sample.mask==0])]]
 
     elif scanMethod == 'linewise':
         #==========================================
         #OPTIMAL LINE DETERMINATION
         #==========================================
-        
-        lineERDSums = [np.nansum(ERDValuesNP[tuple([x[0] for x in line]), tuple([y[1] for y in line])]) for line in sample.maskObject.linesToScan]
-        
+
         #Choose the line with maximum ERD and extract the actual indices
+        lineERDSums = [np.nansum(ERDValuesNP[tuple([x[0] for x in line]), tuple([y[1] for y in line])]) for line in sample.linesToScan]
         lineToScanIdx = np.nanargmax(lineERDSums)
-        lineToScanIdxs = sample.maskObject.linesToScan[lineToScanIdx]
-        
-        #Set the default new Idxs to be all of the indexes identified
-        newIdxs = lineToScanIdxs.copy()
+        lineToScanIdxs = sample.linesToScan[lineToScanIdx]
         
         #Obtain the ERD values in the chosen line
-        lineERDValues = [ERDValuesNP[tuple(pt)] for pt in newIdxs]
-        
-        #==========================================
+        lineERDValues = [ERDValuesNP[tuple(pt)] for pt in lineToScanIdxs]
         
         #==========================================
         #PARTIAL LINE BY PERCENT
         #==========================================
         #Scan stopPerc locations on the line with maximized ERD
         if lineMethod == 'percLine':
-            newIdxs = np.asarray(newIdxs)[np.argsort(lineERDValues)][::-1][:int((stopPerc/100)*len(lineERDValues))]
-            newIdxs = newIdxs.tolist()
+        
+            #Create a list to hold the chosen scanning locations
+            newIdxs = []
+            
+            #Until the stopPerc has been reached, substitute reconstruction values for actual measurements
+            while True:
+            
+                #Identify the next scanning location and store it for later, actual measurement
+                nextIndex = np.argmax(lineERDValues)
+                newIdxs.append(lineToScanIdxs[nextIndex])
+                
+                #Remove that location from further consideration in this loop
+                lineToScanIdxs = np.delete(lineToScanIdxs, nextIndex)
+                
+                #Perform the measurement, using values from reconstruction 
+                sample.performMeasurements([newIdxs[-1]], simulationFlag, True)
+                
+                #When enough new locations have been determined, break from loop
+                if (sample.percMeasured-result.samples[-1].percMeasured) >= stopPerc: break
+                
+                #Re-compute ERD/RD; ensure in an array
+                if oracleFlag or bestCFlag: ERDValuesNP = np.asarray(computeRD(sample, cValue))
+                else: ERDValuesNP = np.asarray(computeERD(sample, model))
+                
+                #Obtain the ERD values in the chosen line
+                lineERDValues = [ERDValuesNP[tuple(pt)] for pt in lineToScanIdxs]
+
         #==========================================
         
         #==========================================
         #PARTIAL LINE BY START/END POINTS
         #==========================================
         #Choose segment to scan on line which contains at least stopPerc locations with maximal ERD
-        if lineMethod == 'startEndPoints':
+        elif lineMethod == 'startEndPoints':
+            newIdxs = lineToScanIdxs.copy()
             newIdxs = np.asarray(newIdxs)[np.argsort(lineERDValues)][::-1][:int((stopPerc/100)*len(lineERDValues))]
             orderedNewIdxs = newIdxs[np.argsort(newIdxs[:,0]*newIdxs[:,1])]
             startLocation, endLocation = orderedNewIdxs[0], orderedNewIdxs[len(orderedNewIdxs)-1]
             newIdxs = np.asarray(lineToScanIdxs[lineToScanIdxs.index(startLocation.tolist()):lineToScanIdxs.index(endLocation.tolist())])
+        else:
+            sys.error('Error! - Unknown line method specified in configuation: ' + lineMethod)
             
         #==========================================
         
@@ -856,26 +956,15 @@ def findNewMeasurementIdxs(sample, ERDValuesNP, percToScan, scanMethod):
         #==========================================
         #Remove the selected points from further consideration, allows revisting lines
         if lineRevistMethod:
-            sample.maskObject.delPoints(newIdxs)
+            sample.delPoints(newIdxs)
         else:
             #Remove the line selected from further consideration, does not allow revisiting
-            sample.maskObject.delLine(lineToScanIdx)
+            sample.delLine(lineToScanIdx)
         #==========================================
 
     return newIdxs
 
-def findNeighbors(maskObject):
-
-    #Penalize neighbor distances according to the image aspect ratio
-    if asymPenalty:
-        unMeasuredIdxs = np.copy(maskObject.unMeasuredIdxs)
-        measuredIdxs = np.copy(maskObject.measuredIdxs)
-        if maskObject.imageWidth>maskObject.imageHeight:
-            unMeasuredIdxs[:,0] = unMeasuredIdxs[:,0]*maskObject.aspectRatio
-            measuredIdxs[:,0] = measuredIdxs[:,0]*maskObject.aspectRatio
-        elif maskObject.imageWidth<maskObject.imageHeight:
-            unMeasuredIdxs[:,1] = unMeasuredIdxs[:,1]*maskObject.aspectRatio
-            measuredIdxs[:,1] = measuredIdxs[:,1]*maskObject.aspectRatio
+def findNeighbors(measuredIdxs, unMeasuredIdxs):
 
     #Calculate knn
     neigh = NearestNeighbors(n_neighbors=numNeighbors)
@@ -889,29 +978,28 @@ def findNeighbors(maskObject):
     return neighborIndices, neighborWeights, neighborDistances
 
 #Perform the reconstruction without 0-padding
-def performRecon(inputImage, maskObject):
+def computeRecon(inputImage, sample):
 
     #Find neighbor information
-    neighborIndices, neighborWeights, neighborDistances = findNeighbors(maskObject)
+    neighborIndices, neighborWeights, neighborDistances = findNeighbors(sample.squareMeasuredIdxs, sample.squareUnMeasuredIdxs)
 
     #Create a blank image for the reconstruction
-    reconImage = np.zeros((maskObject.imageHeight, maskObject.imageWidth))
+    reconImage = np.zeros(sample.squareDim)
 
     #Retreive measured values
-    idxsX, idxsY = map(list, zip(*[tuple(idx) for idx in maskObject.measuredIdxs]))
+    idxsX, idxsY = map(list, zip(*[tuple(idx) for idx in sample.squareMeasuredIdxs]))
     measuredValues = inputImage[np.asarray(idxsX), np.asarray(idxsY)]
 
     #Compute reconstruction values using IDW (inverse distance weighting)
-    reconImage[maskObject.unMeasuredIdxs[:,0], maskObject.unMeasuredIdxs[:,1]] = np.sum(measuredValues[neighborIndices]*neighborWeights, axis=1)
+    reconImage[sample.squareUnMeasuredIdxs[:,0], sample.squareUnMeasuredIdxs[:,1]] = np.sum(measuredValues[neighborIndices]*neighborWeights, axis=1)
 
     #Combine measured values back into the reconstruction image
-    reconImage[maskObject.measuredIdxs[:,0], maskObject.measuredIdxs[:,1]] = measuredValues
+    reconImage[sample.squareMeasuredIdxs[:,0], sample.squareMeasuredIdxs[:,1]] = measuredValues
 
     return reconImage
 
-
 #Perform the reconstruction with 0-padding; removes stretching in initial measurements
-#def performRecon(inputImage, maskObject):
+#def computeRecon(inputImage, maskObject):
 #
 #    #Pad input image with a 0-border (known 0 values around the image)
 #    inputImage = np.pad(inputImage, [(1, 1), (1, 1)], mode='constant', constant_values=0)
@@ -1005,56 +1093,52 @@ def mlp(numFilters, numChannels):
 
     return tf.keras.Model(inputs=inputs, outputs=output)
 
-#U-Net
 def unet(numFilters, numChannels):
-    
+
     inputs = Input(shape=(None,None,numChannels))
-
-    conv_1 = Conv2D(numFilters, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
-    down_1 = Conv2D(numFilters, (1,1), strides=(2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv_1)
-
-    conv_2 = Conv2D(numFilters*2, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(down_1)
-    down_2 = Conv2D(numFilters*2, (1,1), strides=(2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv_2)
-
-    conv_3 = Conv2D(numFilters*4, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(down_2)
-    down_3 = Conv2D(numFilters*4, (1,1), strides=(2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv_3)
     
-    conv_4 = Conv2D(numFilters*8, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(down_3)
+    conv1 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
+    conv1 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv1)
+    down1 = Conv2D(numFilters, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv1)
+    
+    conv2 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down1)
+    conv2 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv2)
+    down2 = Conv2D(numFilters, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv2)
+    
+    conv3 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down2)
+    conv3 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv3)
+    down3 = Conv2D(numFilters, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv3)
+    
+    conv4 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down3)
+    conv4 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv4)
 
-    upScale_5 = Conv2D(numFilters*4, (1,1), activation='relu', padding='same', kernel_initializer='he_normal')(UpSampling2D(interpolation='nearest')(conv_4))
-    skip_5 = concatenate([upScale_5, conv_3], axis=3)
-    conv_5 = Conv2D(numFilters*4, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(skip_5)
+    up7 = Conv2D(numFilters, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv4))
+    merge7 = concatenate([conv3,up7], axis = 3)
+    conv7 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge7)
+    conv7 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv7)
+
+    up8 = Conv2D(numFilters, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv7))
+    merge8 = concatenate([conv2,up8], axis = 3)
+    conv8 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge8)
+    conv8 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv8)
+
+    up9 = Conv2D(numFilters, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv8))
+    merge9 = concatenate([conv1,up9], axis = 3)
+    conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge9)
+    conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
     
-    upScale_6 = Conv2D(numFilters*2, (1,1), activation='relu', padding='same', kernel_initializer='he_normal')(UpSampling2D(interpolation='nearest')(conv_5))
-    skip_6 = concatenate([upScale_6, conv_2], axis=3)
-    conv_6 = Conv2D(numFilters*2, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(skip_6)
-    
-    upScale_7 = Conv2D(numFilters, (1,1), activation='relu', padding='same', kernel_initializer='he_normal')(UpSampling2D(interpolation='nearest')(conv_6))
-    skip_7 = concatenate([upScale_7, conv_1], axis=3)
-    conv_7 = Conv2D(numFilters, (3,3), activation='relu', padding='same', kernel_initializer='he_normal')(skip_7)
-    
-    conv_8 = Conv2D(numFilters, (1,1), activation='relu', padding='same', kernel_initializer='he_normal')(conv_7)
-    output = Conv2D(1, (1,1), activation='linear', padding='same', kernel_initializer='he_normal')(conv_8)
+    output = Conv2D(1, (1,1), activation='linear', padding='same')(conv9)
     output = tfp.math.clip_by_value_preserve_gradient(output, 0, 1)
-    
+
     return tf.keras.Model(inputs=inputs, outputs=output)
 
 #Extract features of interest from a reconstruction for propogation through network
-def featureExtractor(maskObject, measuredImage, reconImage):
-
-    #Create blank image to build on for remaining visualized features
-    featureImage = np.zeros([maskObject.imageHeight, maskObject.imageWidth])
-
-    #Stack measured value image
-    featureImage = np.dstack((featureImage, measuredImage))
+def featureExtractor(sample, measuredImage, reconImage):
 
     #Stack recon values for only unmeasured locations
     tempReconImage = copy.deepcopy(reconImage)
-    tempReconImage[maskObject.measuredIdxs[:,0], maskObject.measuredIdxs[:,1]] = 0
-    featureImage = np.dstack((featureImage, tempReconImage))
-    
-    #Delete the blank first channel
-    featureImage = np.delete(featureImage, 0, -1)
+    tempReconImage[sample.squareMask==1] = 0
+    featureImage = np.dstack((measuredImage, tempReconImage))
 
     return featureImage
 
