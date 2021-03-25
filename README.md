@@ -56,7 +56,7 @@
                     0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
                     0.8.0   RAW MSI file integration (.raw, .d)
                     0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
-                    0.8.2   Multichannel integration, fixed groupwise, square pixels, and altered configuration files
+                    0.8.2   Multichannel, fixed groupwise, square pixels, accelerated RD, altered visuals/metrics
                     ~0.8.3  GAN
                     ~0.8.4  Custom adversarial network
                     ~0.9.0  Multimodal integration
@@ -117,17 +117,18 @@
     	|	|	|-------> DONE
     	|------->RESULTS
     	|	|------->TEST
-    	|	|	|------->Animations
-    	|	|	|	|------->TEST_SAMPLE_1
-    	|	|	|	|------->TEST_SAMPLE_2
+    	|	|	|-------TEST_SAMPLE_1
+    	|	|	|	|------->Average
+    	|	|	|	|------->mz
+    	|	|	|	|------->Videos
+    	|	|	|	|-------dataPrintout.csv
     	|	|	|	|------->...
-    	|	|	|------->mzResults
-    	|	|	|	|------->TEST_SAMPLE_1
-    	|	|	|	|------->TEST_SAMPLE_2
+    	|	|	|-------TEST_SAMPLE_2
+    	|	|	|	|------->Average
+    	|	|	|	|------->mz
+    	|	|	|	|------->Videos
+    	|	|	|	|-------dataPrintout.csv
     	|	|	|	|------->...
-    	|	|	|------->dataPrintout.csv
-    	|	|	|------->testingAverageSSIM_Percentage.csv
-    	|	|	|------->testingAverageSSIM_Percentage.png
     	|	|------->TRAIN
     	|	|	|------->Model Training Images
     	|	|	|	|------->...
@@ -316,7 +317,7 @@ In the case that multiple configuration files are provided in the form of: CONFI
 
 **Note:** In order to use a SLADS model in a physical implementation, the files resultant from the training procedure must be located within './RESULTS/TRAIN_RESULTS/', particularly:  bestC.npy and bestTheta.npy.
 
-Prior to engaging the physical equipment run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, (Can multiply by Time Resolution, as specified in the sample's sampleInfo.txt to find equivalent times to scan) saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in .csv files for each of the specified mz ranges in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. A sampleInfo.txt and mz.csv must be included in the implementation directory as outlined in the CONFIGURATION section. 
+Prior to engaging the physical equipment run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, (Can multiply by Time Resolution, as specified in the sample's sampleInfo.txt to find equivalent times to scan) saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in MSI files in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. A sampleInfo.txt and mz.csv must be included in the implementation directory as outlined in the CONFIGURATION section. 
 
 # FAQ
 ###  **I read through the README thoroughly, but I'm still getting an error, or am confused...**
@@ -336,7 +337,7 @@ Although the error would suggest there is something wrong with the network conne
 
 ###  **Why is SLADS not compatible with Linux distributions, or Mac operating systems**
 
-As of v0.8.0, SLADS obtains information directly from MSI raw files, rather than pre-processed .csv m/z visualizations. These operations are reliant on vendor specific .dll files as provided in the multiplierz package. Supperficially it appears as though the multiplierz API might function within Linux. For example, the packages pythonnet and comtypes can be installed, albeit with some difficulty, but cannot actually function in a linux environment. An alternative approach, that may work, might be to attempt an installation through wineDocker. 
+As of v0.8.0, SLADS obtains information directly from MSI files, rather than pre-processed .csv m/z visualizations. These operations are reliant on vendor specific .dll files as provided in the multiplierz package. Supperficially it appears as though the multiplierz API might function within Linux. For example, the packages pythonnet and comtypes can be installed, but cannot actually function in a linux environment. An alternative approach, that may work, might be to attempt an installation through wineDocker. 
 
 While it does not currently function, multiplierz may be installed directly on Ubuntu 18.04 with the following commands:
 

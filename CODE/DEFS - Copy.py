@@ -28,161 +28,12 @@ def mzrange_parhelper(mzRange, scanFileName, mzMethod, ignoreMissingLines, missi
 
 #Visualize single sample progression step
 @ray.remote
-def visualize_parhelper(sample, simulationFlag, dir_avgProgression, dir_mzProgressions):
+def visualize_parhelper(sample):
 
-    #Re-import libraries inside of thread to set plotting backend as non-interactive
-    import matplotlib
-    matplotlib.use('agg')
-    import matplotlib.pyplot as plt
-    from matplotlib.pyplot import figure
 
-    #Turn percent measured into a string
-    percMeasured = "{:.2f}".format(sample.percMeasured)
-    
-    #Turn metrics into strings
-    if simulationFlag: avgmzImagePSNR = "{:.2f}".format(sample.avgmzImagePSNR)
-    if simulationFlag: erdPSNR = "{:.2f}".format(sample.ERDPSNR)
 
-    #For each of the mz ranges, generate visuals
-    for mzNum in range(0, len(sample.mzRanges)):
-        
-        #Turn metrics into strings
-        massRange = str(sample.mzRanges[mzNum][0]) + '-' + str(sample.mzRanges[mzNum][1])
-        if simulationFlag: mzImagePSNR = "{:.2f}".format(sample.mzImagePSNRList[mzNum])
-        if simulationFlag: avgImagePSNR = "{:.2f}".format(sample.avgImagePSNR)
-        
-        #Measured mz image
-        f = plt.figure(figsize=(20,5.3865))
-        if simulationFlag: plt.suptitle(r"$\bf{Sample:\ }$" + sample.name + r"$\bf{\ \ mz:\ }$" + massRange + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured + '\n' + r"$\bf{PSNR - mz\ Recon:\ }$" + mzImagePSNR + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + avgmzImagePSNR)
-        else: plt.suptitle(r"$\bf{Sample:\ }$" + sample.name + r"$\bf{\ \ mz:\ }$" + massRange + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured)
 
-        if simulationFlag: ax = plt.subplot2grid(shape=(1,3), loc=(0,0))
-        else: ax = plt.subplot2grid(shape=(1,3), loc=(0,0))
-        im = ax.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
-        ax.set_title('Sampled Mask')
-        cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
-        if simulationFlag:
-            ax = plt.subplot2grid(shape=(1,3), loc=(0,1))
-            im = ax.imshow(sample.mzImages[mzNum], cmap='hot', aspect='auto', vmin=0, vmax=1)
-            ax.set_title('Ground-Truth')
-            cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
-        
-        if simulationFlag: ax = plt.subplot2grid(shape=(1,3), loc=(0,2))
-        else: ax = plt.subplot2grid(shape=(1,3), loc=(0,1))
-        im = ax.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', vmin=0, vmax=1)
-        ax.set_title('Reconstruction')
-        cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
-        
-        #Save
-        f.tight_layout()
-        saveLocation = dir_mzProgressions[mzNum] + 'progression_mz_' + massRange + '_perc_' + str(sample.percMeasured) +'.png'
-        plt.savefig(saveLocation, bbox_inches='tight')
-        plt.close()
-        
-        #Do borderless saves for each mz image here; mask will be the same as produced in the average output
-        saveLocation = dir_mzProgressions[mzNum] + 'reconstruction_mz_' + massRange + '_perc_' + str(sample.percMeasured) + '.png'
-        fig=plt.figure()
-        ax=fig.add_subplot(1,1,1)
-        plt.axis('off')
-        plt.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', vmin=0, vmax=1)
-        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-        plt.savefig(saveLocation, bbox_inches=extent)
-        plt.close()
-    
-    #For the average, generate visual
-    f = plt.figure(figsize=(20,10))
-    if simulationFlag: plt.suptitle(r"$\bf{Sample:\ }$" + sample.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured + '\n' + r"$\bf{PSNR - Average\ Recon: }$" + avgImagePSNR + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + avgmzImagePSNR + r"$\bf{\ \ ERD:\ }$" + erdPSNR)
-    else:  plt.suptitle(r"$\bf{Sample:\ }$" + sample.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured)
-    
-    if simulationFlag: 
-        ax = plt.subplot2grid(shape=(2,3), loc=(0,0))
-        im = ax.imshow(sample.avgGroundTruthImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
-        ax.set_title('Ground-Truth')
-        cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
-
-    if simulationFlag: ax = plt.subplot2grid((2,3), (0,1))
-    else: ax = plt.subplot2grid((1,3), (0,0))
-    im = ax.imshow(sample.avgReconImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
-    ax.set_title('Reconstruction')
-    cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
-
-    if simulationFlag: 
-        ax = plt.subplot2grid((2,3), (0,2))
-        im = ax.imshow(abs(sample.avgGroundTruthImage-sample.avgReconImage), cmap='hot', aspect='auto', vmin=0, vmax=1)
-        ax.set_title('Absolute Difference')
-        cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
-
-    if simulationFlag: ax = plt.subplot2grid((2,3), (1,0))
-    else: ax = plt.subplot2grid((1,3), (0,1))
-    im = ax.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
-    ax.set_title('Measurement Mask')
-    cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
-    
-    if simulationFlag: ax = plt.subplot2grid((2,3), (1,1))
-    else: ax = plt.subplot2grid((1,3), (0,2))
-    im = ax.imshow(sample.ERD, cmap='viridis', vmin=0, vmax=1, aspect='auto')
-    ax.set_title('ERD')
-    cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
-
-    if simulationFlag: 
-        ax = plt.subplot2grid((2,3), (1,2))
-        im = ax.imshow(sample.RDImage, cmap='viridis', vmin=0, vmax=1, aspect='auto')
-        ax.set_title('RD')
-        cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
-    
-    #Save
-    f.tight_layout()
-    saveLocation = dir_avgProgression + 'progression_perc_' + str(sample.percMeasured) + '_avg.png'
-    plt.savefig(saveLocation, bbox_inches='tight')
-    plt.close()
-
-    #Borderless saves
-    saveLocation = dir_avgProgression + 'reconstruction_perc_' + str(sample.percMeasured) + '.png'
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
-    plt.axis('off')
-    plt.imshow(sample.avgReconImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    plt.savefig(saveLocation, bbox_inches=extent)
-    plt.close()
-    
-    saveLocation = dir_avgProgression + 'mask_perc_' + str(sample.percMeasured) + '.png'
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
-    plt.axis('off')
-    plt.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    plt.savefig(saveLocation, bbox_inches=extent)
-    plt.close()
-    
-    saveLocation = dir_avgProgression + 'ERD_perc_' + str(sample.percMeasured) + '.png'
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
-    plt.axis('off')
-    plt.imshow(sample.ERD, aspect='auto', vmin=0, vmax=1)
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    plt.savefig(saveLocation, bbox_inches=extent)
-    plt.close()
-    
-    saveLocation = dir_avgProgression + 'measured_perc_' + str(sample.percMeasured) + '.png'
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
-    plt.axis('off')
-    plt.imshow(sample.avgMeasuredImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    plt.savefig(saveLocation, bbox_inches=extent)
-    plt.close()
-    
-    if simulationFlag:
-        saveLocation = dir_avgProgression + 'RD_perc_' + str(sample.percMeasured) + '.png'
-        fig=plt.figure()
-        ax=fig.add_subplot(1,1,1)
-        plt.axis('off')
-        plt.imshow(sample.RDImage, aspect='auto', vmin=0, vmax=1)
-        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-        plt.savefig(saveLocation, bbox_inches=extent)
-        plt.close()
 
 #All information pertaining to a sample
 class Sample:
@@ -598,11 +449,161 @@ class Result():
             dir_videos= dir_sampleResults + 'Videos' + os.path.sep
             os.makedirs(dir_videos)
             
-            #Perform visualizations in parallel
-            futures = [visualize_parhelper.remote(sample, self.simulationFlag, dir_avgProgression, dir_mzProgressions) for sample in self.samples]
-            results = [x for x in tqdm(rayIteractor(futures), total=len(futures), desc='Visualizations', leave=False, ascii=True)]
+            #Perform visualizations
+            results = ray.get[visualize_parhelper.remote(sample) for sample in self.samples]
+            
+            #Generate visualizations and videos of progressions for mz images and for avg of the mz images
+            for sample in tqdm(self.samples, desc='Visualizations', leave=False, ascii=True):
+                
+                #Turn percent measured into a string
+                percMeasured = "{:.2f}".format(sample.percMeasured)
+                
+                #Turn metrics into strings
+                if self.simulationFlag: avgmzImagePSNR = "{:.2f}".format(sample.avgmzImagePSNR)
+                if self.simulationFlag: erdPSNR = "{:.2f}".format(sample.ERDPSNR)
+            
+                #For each of the mz ranges, generate visuals
+                for mzNum in tqdm(range(0, len(sample.mzRanges)), desc='mz Ranges', leave = False, ascii=True):
+                    
+                    #Turn metrics into strings
+                    massRange = str(sample.mzRanges[mzNum][0]) + '-' + str(sample.mzRanges[mzNum][1])
+                    if self.simulationFlag: mzImagePSNR = "{:.2f}".format(sample.mzImagePSNRList[mzNum])
+                    if self.simulationFlag: avgImagePSNR = "{:.2f}".format(sample.avgImagePSNR)
+                    
+                    #Measured mz image
+                    f = plt.figure(figsize=(20,5.3865))
+                    if self.simulationFlag: plt.suptitle(r"$\bf{Sample:\ }$" + sample.name + r"$\bf{\ \ mz:\ }$" + massRange + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured + '\n' + r"$\bf{PSNR - mz\ Recon:\ }$" + mzImagePSNR + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + avgmzImagePSNR)
+                    else: plt.suptitle(r"$\bf{Sample:\ }$" + sample.name + r"$\bf{\ \ mz:\ }$" + massRange + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured)
 
-            #Ground truth borderless avg image
+                    if self.simulationFlag: ax = plt.subplot2grid(shape=(1,3), loc=(0,0))
+                    else: ax = plt.subplot2grid(shape=(1,3), loc=(0,0))
+                    im = ax.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
+                    ax.set_title('Sampled Mask')
+                    cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+
+                    if self.simulationFlag:
+                        ax = plt.subplot2grid(shape=(1,3), loc=(0,1))
+                        im = ax.imshow(sample.mzImages[mzNum], cmap='hot', aspect='auto', vmin=0, vmax=1)
+                        ax.set_title('Ground-Truth')
+                        cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+                    
+                    if self.simulationFlag: ax = plt.subplot2grid(shape=(1,3), loc=(0,2))
+                    else: ax = plt.subplot2grid(shape=(1,3), loc=(0,1))
+                    im = ax.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', vmin=0, vmax=1)
+                    ax.set_title('Reconstruction')
+                    cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+                    
+                    #Save
+                    f.tight_layout()
+                    saveLocation = dir_mzProgressions[mzNum] + 'progression_mz_' + massRange + '_perc_' + str(sample.percMeasured) +'.png'
+                    plt.savefig(saveLocation, bbox_inches='tight')
+                    plt.close()
+                    
+                    #Do borderless saves for each mz image here; mask will be the same as produced in the average output
+                    saveLocation = dir_mzProgressions[mzNum] + 'reconstruction_mz_' + massRange + '_perc_' + str(sample.percMeasured) + '.png'
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', vmin=0, vmax=1)
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(saveLocation, bbox_inches=extent)
+                    plt.close()
+                
+                #For the average, generate visual
+                f = plt.figure(figsize=(20,10))
+                if self.simulationFlag: plt.suptitle(r"$\bf{Sample:\ }$" + sample.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured + '\n' + r"$\bf{PSNR - Average\ Recon: }$" + avgImagePSNR + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + avgmzImagePSNR + r"$\bf{\ \ ERD:\ }$" + erdPSNR)
+                else:  plt.suptitle(r"$\bf{Sample:\ }$" + sample.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured)
+                
+                if self.simulationFlag: 
+                    ax = plt.subplot2grid(shape=(2,3), loc=(0,0))
+                    im = ax.imshow(sample.avgGroundTruthImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
+                    ax.set_title('Ground-Truth')
+                    cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+
+                if self.simulationFlag: ax = plt.subplot2grid((2,3), (0,1))
+                else: ax = plt.subplot2grid((1,3), (0,0))
+                im = ax.imshow(sample.avgReconImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
+                ax.set_title('Reconstruction')
+                cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+
+                if self.simulationFlag: 
+                    ax = plt.subplot2grid((2,3), (0,2))
+                    im = ax.imshow(abs(sample.avgGroundTruthImage-sample.avgReconImage), cmap='hot', aspect='auto', vmin=0, vmax=1)
+                    ax.set_title('Absolute Difference')
+                    cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+
+                if self.simulationFlag: ax = plt.subplot2grid((2,3), (1,0))
+                else: ax = plt.subplot2grid((1,3), (0,1))
+                im = ax.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
+                ax.set_title('Measurement Mask')
+                cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+                
+                if self.simulationFlag: ax = plt.subplot2grid((2,3), (1,1))
+                else: ax = plt.subplot2grid((1,3), (0,2))
+                im = ax.imshow(sample.ERD, cmap='viridis', vmin=0, vmax=1, aspect='auto')
+                ax.set_title('ERD')
+                cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+
+                if self.simulationFlag: 
+                    ax = plt.subplot2grid((2,3), (1,2))
+                    im = ax.imshow(sample.RDImage, cmap='viridis', vmin=0, vmax=1, aspect='auto')
+                    ax.set_title('RD')
+                    cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
+                
+                #Save
+                f.tight_layout()
+                saveLocation = dir_avgProgression + 'progression_perc_' + str(sample.percMeasured) + '_avg.png'
+                plt.savefig(saveLocation, bbox_inches='tight')
+                plt.close()
+
+                #Borderless saves
+                saveLocation = dir_avgProgression + 'reconstruction_perc_' + str(sample.percMeasured) + '.png'
+                fig=plt.figure()
+                ax=fig.add_subplot(1,1,1)
+                plt.axis('off')
+                plt.imshow(sample.avgReconImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
+                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                plt.savefig(saveLocation, bbox_inches=extent)
+                plt.close()
+                
+                saveLocation = dir_avgProgression + 'mask_perc_' + str(sample.percMeasured) + '.png'
+                fig=plt.figure()
+                ax=fig.add_subplot(1,1,1)
+                plt.axis('off')
+                plt.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
+                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                plt.savefig(saveLocation, bbox_inches=extent)
+                plt.close()
+                
+                saveLocation = dir_avgProgression + 'ERD_perc_' + str(sample.percMeasured) + '.png'
+                fig=plt.figure()
+                ax=fig.add_subplot(1,1,1)
+                plt.axis('off')
+                plt.imshow(sample.ERD, aspect='auto', vmin=0, vmax=1)
+                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                plt.savefig(saveLocation, bbox_inches=extent)
+                plt.close()
+                
+                saveLocation = dir_avgProgression + 'measured_perc_' + str(sample.percMeasured) + '.png'
+                fig=plt.figure()
+                ax=fig.add_subplot(1,1,1)
+                plt.axis('off')
+                plt.imshow(sample.avgMeasuredImage, cmap='hot', aspect='auto', vmin=0, vmax=1)
+                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                plt.savefig(saveLocation, bbox_inches=extent)
+                plt.close()
+                
+                if self.simulationFlag:
+                    saveLocation = dir_avgProgression + 'RD_perc_' + str(sample.percMeasured) + '.png'
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(sample.RDImage, aspect='auto', vmin=0, vmax=1)
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(saveLocation, bbox_inches=extent)
+                    plt.close()
+            
+            #Ground truth borderless avg image export once
             if self.simulationFlag:
                 saveLocation = dir_avgProgression + 'avgGroundTruth.png'
                 fig=plt.figure()
@@ -613,9 +614,9 @@ class Result():
                 plt.savefig(saveLocation, bbox_inches=extent)
                 plt.close()
                              
-            #Ground truth borderless mz images
+            #Ground truth borderless mz images export once
             if self.simulationFlag:
-                for mzNum in range(0, len(sample.mzRanges)):
+                for mzNum in tqdm(range(0, len(sample.mzRanges)), desc='mz Ranges', leave = False, ascii=True):
                     saveLocation = dir_mzProgressions[mzNum] + 'groundTruth.png'
                     fig=plt.figure()
                     ax=fig.add_subplot(1,1,1)
@@ -624,9 +625,8 @@ class Result():
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                     plt.savefig(saveLocation, bbox_inches=extent)
                     plt.close()
-            
-            #Combine mz images into animations
-            for mzNum in tqdm(range(0, len(sample.mzRanges)), desc='mz Videos', leave = False, ascii=True): 
+                
+            for mzNum in tqdm(range(0, len(sample.mzRanges)), desc='mz Ranges', leave = False, ascii=True): 
                 dataFileNames = natsort.natsorted(glob.glob(dir_mzProgressions[mzNum] + 'progression_*.png'))
                 height, width, layers = cv2.imread(dataFileNames[0]).shape
                 animation = cv2.VideoWriter(dir_videos + str(sample.mzRanges[mzNum][0]) + '-' + str(sample.mzRanges[mzNum][1]) + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
@@ -641,7 +641,10 @@ class Result():
             for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
             animation.release()
             animation = None
+            
 
+            
+                
 def iou(groundTruth, prediction):
     return np.sum(np.logical_and(groundTruth, prediction)) / np.sum(np.logical_or(groundTruth, prediction))
 

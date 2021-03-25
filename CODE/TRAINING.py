@@ -33,12 +33,12 @@ class EpochEnd(keras.callbacks.Callback):
             currentPSNR = logs.get('PSNR')
         else:
             currentPSNR = logs.get('val_PSNR')
-        if (currentPSNR > self.bestPSNR) and (epoch >= self.minimumEpochs):
+        if (currentPSNR > self.bestPSNR) and (epoch >= self.minimumEpochs-1):
             self.patience = 0
             self.bestPSNR = currentPSNR
             self.bestEpoch = epoch
             self.bestWeights = self.model.get_weights()
-        elif (epoch >= self.minimumEpochs):
+        elif (epoch >= self.minimumEpochs-1):
             self.patience += 1
             if self.patience >= self.maxPatience:
                 self.stopped_epoch = epoch
@@ -148,13 +148,16 @@ class EpochEnd(keras.callbacks.Callback):
             plt.close()
 
 def importInitialData(sortedTrainingSampleFolders):
-
+    
+    #Make sure sample mask initialization is consistent, particularly important for c value optimization
+    if consistentSeed: np.random.seed(0)
+    
     #For each sample, generate an object containing its relevant data
     trainingSamples = []
     for trainingSampleFolder in tqdm(sortedTrainingSampleFolders, desc = 'Training Samples', ascii=True):
-
+        
         #Read all available scan data into a sample object
-        sample = Sample(trainingSampleFolder, ignoreMissingLines=True)
+        sample = Sample(trainingSampleFolder, initialPercToScan, scanMethod, ignoreMissingLines=True)
         sample.readScanData(lineRevistMethod)
         
         #Save a visual of the averaged ground-truth
@@ -186,51 +189,53 @@ def importInitialData(sortedTrainingSampleFolders):
     
     return trainingSamples
 
+@ray.remote
+def runSLADS_parhelper(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc, simulationFlag, trainPlotFlag, animationFlag, tqdmHide, oracleFlag, bestCFlag):
+    return runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc, simulationFlag, trainPlotFlag, animationFlag, tqdmHide, oracleFlag, bestCFlag)
+
 #Given a set of training samples, determine an optimal c value
 def optimizeC(trainingSamples):
 
     #If there are more than one c value, determine which minimizes the total distortion in the samples, force this optimization to be performed with pointwise scanning
     if len(cValues)>1:
-        areaUnderCurveList = []
-        for cNum in tqdm(range(0, len(cValues)), desc = 'c Values', position=0, leave=True, ascii=True):
-            
-            PSNRLists = []
-            percLists = []
-            for sampleNum in tqdm(range(0, len(trainingSamples)), desc = 'Samples', leave=False, ascii=True):
-                result = runSLADS(trainingSamples, None, 'pointwise', cValues[cNum], percToScan, stopPerc, sampleNum, simulationFlag=True, trainPlotFlag=True, animationFlag=False, tqdmHide=False, oracleFlag=True, bestCFlag=True)
-                PSNRList, percMeasuredList = result.complete(None)
-                PSNRLists.append(PSNRList)
-                percLists.append(percMeasuredList)
         
+        areaUnderCurveList = []
+        futures = []
+        for cNum in range(0, len(cValues)):
+            for sampleNum in range(0, len(trainingSamples)):
+                futures.append(runSLADS_parhelper.remote(trainingSamples[sampleNum], None, 'pointwise', cValues[cNum], 1, None, stopPerc, simulationFlag=True, trainPlotFlag=True, animationFlag=False, tqdmHide=True, oracleFlag=True, bestCFlag=True))
+        results = np.split(np.asarray([x for x in tqdm(rayIteractor(futures), total=len(futures), desc='Generation', leave=True, ascii=True)]), len(cValues))
+                
+        for cNum in range(0, len(cValues)):
+            
             #Extract percentage results at the specified precision
-            percents, trainingPSNR_mean = percResults(PSNRLists, percLists, precision)
+            percents, trainingmzPSNR_mean = percResults([result.avgmzImagePSNRList for result in results[cNum]], [result.percMeasuredList  for result in results[cNum]], precision)
 
             #Compute and save area under the PSNR curve
-            areaUnderCurve = np.trapz(trainingPSNR_mean, percents)
-            areaUnderCurveList.append(areaUnderCurve)
+            areaUnderCurveList.append(np.trapz(trainingmzPSNR_mean, percents))
         
             #Save data and visualize/save the averaged curve for the given c value
-            np.savetxt(dir_TrainingResultsImages+'trainingAveragePSNR_Percentage_c_' + str(cValues[cNum]) + '.csv', np.transpose([percents, trainingPSNR_mean]), delimiter=',')
+            np.savetxt(dir_TrainingResultsImages+'trainingAveragePSNR_Percentage_c_' + str(cValues[cNum]) + '.csv', np.transpose([percents, trainingmzPSNR_mean]), delimiter=',')
             font = {'size' : 18}
             plt.rc('font', **font)
             f = plt.figure(figsize=(20,8))
             ax1 = f.add_subplot(1,1,1)
-            ax1.plot(percents, trainingPSNR_mean, color='black')
-            ax1.set_xlabel('% Pixels Measured')
-            ax1.set_ylabel('Average PSNR (dB)')
-            ax1.set_title('Area Under Curve: ' + str(areaUnderCurve), fontsize=15, fontweight='bold')
-            plt.savefig(dir_TrainingResultsImages + 'trainingAveragePSNR_Percentage_c_' + str(cValues[cNum]) + '.png')
+            ax1.plot(percents, trainingmzPSNR_mean, color='black')
+            ax1.set_xlabel('% Measured')
+            ax1.set_ylabel('Average PSNR of mz Reconstructions (dB)')
+            ax1.set_title('Area Under Curve: ' + str(areaUnderCurveList[-1]), fontsize=15, fontweight='bold')
+            plt.savefig(dir_TrainingResultsImages + 'trainingAveragemzPSNR_Percentage_c_' + str(cValues[cNum]) + '.png')
             plt.close()
-
-        #Select the c value and corresponding model that maximizes the PSNR across the samples
-        bestCIndex = np.argmax(areaUnderCurveList)
+            
+            #Select the c value and corresponding model that maximizes the PSNR across the samples' progression
+            bestCIndex = np.argmax(areaUnderCurveList)
     else:
         bestCIndex = 0
         
-    #Save the best c value
+    #Save the final c value
     np.save(dir_TrainingResults + 'optimalC', cValues[bestCIndex])
-    print('Optimal C: ' + str(cValues[bestCIndex]))
-
+    print('Final c Value: ' + str(cValues[bestCIndex]))
+    
     return cValues[bestCIndex]
 
 #Given a set of samples and a chosen c value, generate a training database
@@ -242,101 +247,111 @@ def generateTrainingData(samples, optimalC):
         #For the number of mask iterations specified, create and extract training databases for each of the c values
         for maskNum in tqdm(range(0,numMasks), desc = 'Masks', leave=False, ascii=True):
             
-            #Create a new instance of the sample
-            newSample = Sample(sample.sampleFolder, ignoreMissingLines=True)
-            newIdxs = np.transpose(np.where(sample.initialMask == 1))
+            #Indiate first iteration through loop
+            firstIteration = True
             
             #For each of the measurement percentages, update a training sample, evaluate it, and store the results; prepare to normalize RD image series
             for measurementPerc in tqdm(measurementPercs, desc = '%', leave=False, ascii=True):
-
+                
+                #If this is the first iteration, then create a new mask object
+                if firstIteration: 
+                    newSample = copy.deepcopy(sample)
+                    newSample.maskReset(True)
+                    newSample.readScanData(lineRevistMethod)
+                    newIdxs = np.transpose(np.where(newSample.initialMask == 1))
+                
                 #Until the next measurement percentage has been reached, continue scanning
                 while (round(newSample.percMeasured) < measurementPerc):
-
-                    #If this is the first iteration, then create a new mask object and deactivate first iteration flag, otherwise pointwise scan randomly
-                    if not firstIteration: newIdxs = findNewMeasurementIdxs(newSample, newSample.RDImage, measurementPerc-newSample.percMeasured, 'random')
+                    
+                    #If this isn't the first iteration, then scan pointwise randomly in a new sample instance
+                    if not firstIteration: newIdxs = findNewMeasurementIdxs(newSample, None, None, 'random', optimalC, True, False, False, measurementPerc-newSample.percMeasured)
                     else: firstIteration = False
                     
                     #Perform measurements
-                    newSample.performMeasurements(newIdxs, True)
-
-                    #Update the percentage by what was actually measured
-                    newSample.percMeasured = (np.sum(newSample.mask)/newSample.area)*100
+                    newSample.performMeasurements(newIdxs, True, False)
                     
-                    #Compute reconstruction
-                    newSample.avgReconImage = computeRecon(sample.avgSquareMeasuredImage, sample)
-                    newSample.avgReconImage = resize(newSample.avgReconImage, tuple(sample.finalDim), order=0)
+                    #Calculate the reconstruction(s)
+                    #if averageReconInput or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
+                    newSample.avgSquareReconImage = computeRecon(newSample.avgSquareMeasuredImage, newSample)
+                    newSample.avgReconImage = resize(newSample.avgSquareReconImage, tuple(newSample.finalDim), order=0)
+                    #elif percToScan != None and erdModel == 'DLADS':
+                    newSample.squaremzReconImages = np.asarray(list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(newSample.squareMeasuredmzImages, newSample, indexes) for indexes in np.array_split(np.arange(0, len(newSample.squareMeasuredmzImages)), multiprocessing.cpu_count())]))))
+                    newSample.mzReconImages = np.asarray([resize(squaremzReconImage, tuple(newSample.finalDim), order=0) for squaremzReconImage in newSample.squaremzReconImages])
                     
-                    #Calculate the RD Image
-                    newSample.RDImage = computeRD(newSample, optimalC)
+                    #Calculate the RD Image, with square pixels
+                    newSample.RDImage = computeRD(newSample, optimalC, False, False)
+                
+                #Determine features and flat RD Values for SLADS models
+                if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
+                    newSample.polyFeatures = computePolyFeatures(newSample, newSample.avgSquareReconImage)
+                    newSample.squareRDValues = newSample.avgSquareReconImage[np.where(newSample.squareMask==0)]
+                
+                #Append the result into the training database
+                trainingDatabase.append(copy.deepcopy(newSample))
+                
+                #Visualize and save data if desired
+                if trainingDataPlot:
+                    saveLocation = dir_TrainingResultsImages+ 'training_c_' + str(optimalC) + '_var_' + str(maskNum) + '_' + newSample.name + '_perc_' + str(round(newSample.percMeasured, 4))+ '.png'
                     
-                    #Append the result into the training database
-                    newSample.polyFeatures = computePolyFeatures(newSample, newSample.reconImage)
-                    newSample.RDValues = newSample.RDImage[np.where(newSample.maskObject.mask==0)]
-                    trainingDatabase.append(copy.deepcopy(newSample))
+                    f = plt.figure(figsize=(20,5))
+                    f.subplots_adjust(top = 0.7)
+                    f.subplots_adjust(wspace=0.15, hspace=0.2)
+                    plt.suptitle('c: ' + str(optimalC) + '  Variation: ' + str(maskNum) + '\nSample: ' + newSample.name + '  Percent Sampled: ' + str(round(newSample.percMeasured, 4)), fontsize=20, fontweight='bold', y = 0.95)
                     
-                    #Visualize and save data if desired
-                    if trainingDataPlot:
-                        saveLocation = dir_TrainingResultsImages+ 'training_c_' + str(optimalC) + '_var_' + str(maskNum) + '_' + newSample.name + '_perc_' + str(round(newSample.percMeasured, 4))+ '.png'
-                        
-                        f = plt.figure(figsize=(20,5))
-                        f.subplots_adjust(top = 0.7)
-                        f.subplots_adjust(wspace=0.15, hspace=0.2)
-                        plt.suptitle('c: ' + str(optimalC) + '  Variation: ' + str(maskNum) + '\nSample: ' + newSample.name + '  Percent Sampled: ' + str(round(newSample.percMeasured, 4)), fontsize=20, fontweight='bold', y = 0.95)
-                        
-                        ax = plt.subplot2grid(shape=(1,5), loc=(0,0))
-                        ax.imshow(newSample.maskObject.mask, cmap='gray', aspect='auto')
-                        ax.set_title('Mask', fontsize=15)
+                    ax = plt.subplot2grid(shape=(1,5), loc=(0,0))
+                    ax.imshow(newSample.mask, cmap='gray', aspect='auto')
+                    ax.set_title('Mask', fontsize=15)
 
-                        ax = plt.subplot2grid(shape=(1,5), loc=(0,1))
-                        ax.imshow(newSample.avgMeasuredImage, cmap='hot', aspect='auto')
-                        ax.set_title('Measured', fontsize=15)
+                    ax = plt.subplot2grid(shape=(1,5), loc=(0,1))
+                    ax.imshow(newSample.avgMeasuredImage, cmap='hot', aspect='auto')
+                    ax.set_title('Measured', fontsize=15)
 
-                        ax = plt.subplot2grid(shape=(1,5), loc=(0,2))
-                        ax.imshow(newSample.avgGroundTruthImage, cmap='hot', aspect='auto')
-                        ax.set_title('Ground-Truth', fontsize=15)
+                    ax = plt.subplot2grid(shape=(1,5), loc=(0,2))
+                    ax.imshow(newSample.avgGroundTruthImage, cmap='hot', aspect='auto')
+                    ax.set_title('Ground-Truth', fontsize=15)
 
-                        ax = plt.subplot2grid(shape=(1,5), loc=(0,3))
-                        ax.imshow(newSample.avgReconImage, cmap='hot', aspect='auto')
-                        ax.set_title('Recon - PSNR: ' + str(round(compare_psnr(newSample.avgGroundTruthImage, newSample.avgReconImage, data_range=1), 4)), fontsize=15)
+                    ax = plt.subplot2grid(shape=(1,5), loc=(0,3))
+                    ax.imshow(newSample.avgReconImage, cmap='hot', aspect='auto')
+                    ax.set_title('Recon - PSNR: ' + str(round(compare_psnr(newSample.avgGroundTruthImage, newSample.avgReconImage, data_range=1), 4)), fontsize=15)
 
-                        ax = plt.subplot2grid(shape=(1,5), loc=(0,4))
-                        ax.imshow(newSample.RDImage, aspect='auto')
-                        ax.set_title('RD', fontsize=15)
-                        plt.savefig(saveLocation)
-                        plt.close()
-                        
-                        #Borderless saves
-                        fig=plt.figure()
-                        ax=fig.add_subplot(1,1,1)
-                        plt.axis('off')
-                        plt.imshow(newSample.maskObject.mask, aspect='auto', cmap='gray')
-                        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                        plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
-                        plt.close()
-                        
-                        fig=plt.figure()
-                        ax=fig.add_subplot(1,1,1)
-                        plt.axis('off')
-                        plt.imshow(newSample.RDImage, aspect='auto')
-                        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                        plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
-                        plt.close()
-                        
-                        fig=plt.figure()
-                        ax=fig.add_subplot(1,1,1)
-                        plt.axis('off')
-                        plt.imshow(newSample.avgMeasuredImage, aspect='auto', cmap='hot')
-                        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                        plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
-                        plt.close()
-                        
-                        fig=plt.figure()
-                        ax=fig.add_subplot(1,1,1)
-                        plt.axis('off')
-                        plt.imshow(newSample.avgReconImage, aspect='auto', cmap='hot')
-                        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                        plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
-                        plt.close()
+                    ax = plt.subplot2grid(shape=(1,5), loc=(0,4))
+                    ax.imshow(resize(newSample.RDImage, tuple(newSample.finalDim), order=0), aspect='auto')
+                    ax.set_title('RD', fontsize=15)
+                    plt.savefig(saveLocation)
+                    plt.close()
+                    
+                    #Borderless saves
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(newSample.mask, aspect='auto', cmap='gray')
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                    plt.close()
+                    
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(resize(newSample.RDImage, tuple(newSample.finalDim), order=0), aspect='auto')
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                    plt.close()
+                    
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(newSample.avgMeasuredImage, aspect='auto', cmap='hot')
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                    plt.close()
+                    
+                    fig=plt.figure()
+                    ax=fig.add_subplot(1,1,1)
+                    plt.axis('off')
+                    plt.imshow(newSample.avgReconImage, aspect='auto', cmap='hot')
+                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                    plt.close()
                         
             
     #Save the complete databases
@@ -350,22 +365,22 @@ def trainModel(trainingDatabase, optimalC):
     if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net':
         firstFlag = True
         for trainingSample in tqdm(trainingDatabase, desc = 'Setup', leave=True, ascii=True):
-
+            
             #Stack polyFeatures for the regression
             if firstFlag:
                 bigPolyFeatures = trainingSample.polyFeatures
-                bigRD = trainingSample.RDValues
+                bigRD = trainingSample.squareRDValues
                 firstFlag = False
             else:
                 bigPolyFeatures = np.row_stack((bigPolyFeatures, trainingSample.polyFeatures))
-                bigRD = np.append(bigRD, trainingSample.RDValues)
-
+                bigRD = np.append(bigRD, trainingSample.squareRDValues)
+        
         #Create regression model based on user selection
         if erdModel == 'SLADS-LS':
             model = linear_model.LinearRegression()
         elif erdModel == 'SLADS-Net':
             model = nnr(activation='identity', solver='adam', alpha=1e-5, hidden_layer_sizes=(50, 5), random_state=1, max_iter=500)
-
+        
         model.fit(bigPolyFeatures, bigRD)
 
         #Save the model
@@ -383,11 +398,10 @@ def trainModel(trainingDatabase, optimalC):
         for trainingSample in tqdm(trainingDatabase, desc = 'Setup', leave=True, ascii=True):
             
             #Compute feature image for network input
-            
             if averageReconInput: 
-                inputImage, originalShape = makeCompatible(featureExtractor(trainingSample.maskObject, trainingSample.avgMeasuredImage, trainingSample.reconImage))
+                inputImage, originalShape = makeCompatible(featureExtractor(trainingSample, trainingSample.avgSquareMeasuredImage, trainingSample.avgSquareReconImage))
             else:
-                inputImage, originalShape = makeCompatible(np.stack(trainingSample.measuredmzImages, axis=-1))
+                inputImage, originalShape = makeCompatible(np.stack(trainingSample.squareMeasuredmzImages, axis=-1))
             
             outputImage, originalShape = makeCompatible(trainingSample.RDImage)
             

@@ -24,130 +24,78 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
         testingSamples.append(copy.deepcopy(sample))
 
     #Create holding arrays for all of the results
-    MSE_testingResults = []
-    SSIM_testingResults = []
-    PSNR_testingResults = []
-    TD_testingResults = []
+    mzAvgPSNR_testingResults = []
+    avgPSNR_testingResults = []
     ERDPSNR_testingResults = []
     perc_testingResults = []
     time_testingResults = []
     
-    #If an animation will be produced
-    if animationGen:
-        dir_AnimationVideos = dir_Animations + 'Videos/'
-        if os.path.exists(dir_AnimationVideos): shutil.rmtree(dir_AnimationVideos)
-        os.makedirs(dir_AnimationVideos)
-
+    #Run algorithm for each of the testing samples, timing and storing metric progression for each
     for sampleNum in tqdm(range(0,len(testingSamples)), desc='Testing Samples', position=0, leave=True, ascii=True):
         t0 = time.time()
-        result = runSLADS([testingSamples[sampleNum]], model, scanMethod, optimalC, percToScan, stopPerc, 0, simulationFlag=True, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
+        result = runSLADS(testingSamples[sampleNum], model, scanMethod, optimalC, percToScan, percToViz, stopPerc, simulationFlag=True, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
         time_testingResults.append(time.time()-t0)
         result.complete(optimalC)
-        MSE_testingResults.append(result.MSEList)
-        SSIM_testingResults.append(result.SSIMList)
-        PSNR_testingResults.append(result.PSNRList)
-        TD_testingResults.append(result.TDList)
+        mzAvgPSNR_testingResults.append(result.mzAvgPSNRList)
+        avgPSNR_testingResults.append(result.avgPSNRList)
         ERDPSNR_testingResults.append(result.ERDPSNRList)
         perc_testingResults.append(result.percMeasuredList)
-    
+        
     #Extract percentage results at the specified precision
-    percents, testingMSE_mean = percResults(MSE_testingResults, perc_testingResults, precision)
-    percents, testingSSIM_mean = percResults(SSIM_testingResults, perc_testingResults, precision)
-    percents, testingPSNR_mean = percResults(PSNR_testingResults, perc_testingResults, precision)
-    percents, testingTD_mean = percResults(TD_testingResults, perc_testingResults, precision)
-    percents, ERDPSNR_mean = percResults(ERDPSNR_testingResults, perc_testingResults, precision)
-
+    percents, mzAvgPSNR_testingResults_mean = percResults(mzAvgPSNR_testingResults, perc_testingResults, precision)
+    percents, avgPSNR_testingResults_mean = percResults(avgPSNR_testingResults, perc_testingResults, precision)
+    percents, ERDPSNR_testingResults_mean = percResults(ERDPSNR_testingResults, perc_testingResults, precision)
+    
     #Save average results per percentage data
-    np.savetxt(dir_TestingResults+'testingAverageMSE_Percentage.csv', np.transpose([percents, testingMSE_mean]), delimiter=',')
-    np.savetxt(dir_TestingResults+'testingAverageSSIM_Percentage.csv', np.transpose([percents, testingSSIM_mean]), delimiter=',')
-    np.savetxt(dir_TestingResults+'testingAveragePSNR_Percentage.csv', np.transpose([percents, testingPSNR_mean]), delimiter=',')
-    np.savetxt(dir_TestingResults+'testingAverageTD_Percentage.csv', np.transpose([percents, testingTD_mean]), delimiter=',')
-    np.savetxt(dir_TestingResults+'testingAverageERDPSNR_Percentage.csv', np.transpose([percents, ERDPSNR_mean]), delimiter=',')
+    np.savetxt(dir_TestingResults+'mzAvgPSNR_Percentage.csv', np.transpose([percents, mzAvgPSNR_testingResults_mean]), delimiter=',')
+    np.savetxt(dir_TestingResults+'avgPSNR_Percentage.csv', np.transpose([percents, avgPSNR_testingResults_mean]), delimiter=',')
+    np.savetxt(dir_TestingResults+'ERDPSNR_Percentage.csv', np.transpose([percents, ERDPSNR_testingResults_mean]), delimiter=',')
 
-    #Save average plots per percentage data in plot
     font = {'size' : 18}
     plt.rc('font', **font)
     f = plt.figure(figsize=(20,8))
     ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(percents, testingMSE_mean,color='black') 
-    ax1.set_xlabel('% Pixels Measured')
-    ax1.set_ylabel('Average MSE')
-    plt.savefig(dir_TestingResults + 'testingAverageMSE_Percentage' + '.png')
+    ax1.plot(percents, mzAvgPSNR_testingResults_mean, color='black')
+    #ax1.set_ylim([0, 50])
+    ax1.set_xlabel('% Measured')
+    ax1.set_ylabel('Average mz PSNR')
+    plt.savefig(dir_TestingResults + 'mzAvgPSNR_Percentage' + '.png')
     plt.close()
 
     font = {'size' : 18}
     plt.rc('font', **font)
     f = plt.figure(figsize=(20,8))
     ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(percents, testingSSIM_mean,color='black') 
-    ax1.set_xlabel('% Pixels Measured')
-    ax1.set_ylabel('Average SSIM')
-    plt.savefig(dir_TestingResults + 'testingAverageSSIM_Percentage' + '.png')
-    plt.close()
-
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(percents, testingPSNR_mean,color='black') 
-    ax1.set_xlabel('% Pixels Measured')
+    ax1.plot(percents, avgPSNR_testingResults_mean, color='black')
+    #ax1.set_ylim([0, 50])
+    ax1.set_xlabel('% Measured')
     ax1.set_ylabel('Average PSNR')
-    plt.savefig(dir_TestingResults + 'testingAveragePSNR_Percentage' + '.png')
+    plt.savefig(dir_TestingResults + 'avgPSNR_Percentage' + '.png')
     plt.close()
     
     font = {'size' : 18}
     plt.rc('font', **font)
     f = plt.figure(figsize=(20,8))
     ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(percents, testingTD_mean,color='black') 
-    ax1.set_xlabel('% Pixels Measured')
-    ax1.set_ylabel('Average Total Distortion')
-    plt.savefig(dir_TestingResults + 'testingAverageTD_Percentage' + '.png')
-    plt.close()
-
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(percents, ERDPSNR_mean,color='black') 
-    ax1.set_xlabel('% Pixels Measured')
-    ax1.set_ylabel('Average ERD PSNR')
+    ax1.plot(percents, ERDPSNR_testingResults_mean, color='black')
+    #ax1.set_ylim([0, 50])    
+    ax1.set_xlabel('% Measured')
+    ax1.set_ylabel('Average PSNR')
     plt.savefig(dir_TestingResults + 'ERDPSNR_Percentage' + '.png')
     plt.close()
-
+    
     #Find the final results for each image
-    lastSSIMResult = []
-    lastMSEResult = []
-    lastPSNRResult = []
-    lastTDResult = []
-    lastERDPSNRResult = []
-    lastTimeResult = []
-    #percLinesScanned = []
-    percPixelsScanned = []
-    for i in range(0, len(SSIM_testingResults)):
-        lastPercMeasured = perc_testingResults[i][len(perc_testingResults[i])-1]
-        lastSSIMResult.append(SSIM_testingResults[i][len(SSIM_testingResults[i])-1])
-        lastMSEResult.append(MSE_testingResults[i][len(MSE_testingResults[i])-1])
-        lastPSNRResult.append(PSNR_testingResults[i][len(PSNR_testingResults[i])-1])
-        lastTDResult.append(TD_testingResults[i][len(TD_testingResults[i])-1])
-        lastERDPSNRResult.append(ERDPSNR_testingResults[i][len(ERDPSNR_testingResults[i])-1])
-        lastTimeResult.append(time_testingResults[i]/lastPercMeasured)
-        #percLinesScanned.append((len(SSIM_testingResults[i])/len(sample.linesToScan))*100)
-        percPixelsScanned.append(lastPercMeasured)
-
-    time_testingResults = time_testingResults/np.mean(percPixelsScanned)
-
+    lastPercMeasured = [perc_testingResults[i][-1] for i in range(0, len(testingSamples))]
+    lastmzAvgPSNR = [mzAvgPSNR_testingResults[i][-1] for i in range(0, len(testingSamples))]
+    lastAvgPSNR = [avgPSNR_testingResults[i][-1] for i in range(0, len(testingSamples))]
+    lastERDPSNR = [ERDPSNR_testingResults[i][-1] for i in range(0, len(testingSamples))]
+    lastTime = [time_testingResults[i] for i in range(0, len(testingSamples))]
+    
     #Printout final results 
     dataPrintout = []
-    dataPrintout.append(['Average MSE:', np.mean(lastMSEResult), '+/-', np.std(lastMSEResult)])
-    dataPrintout.append(['Average SSIM:', np.mean(lastSSIMResult), '+/-', np.std(lastSSIMResult)])
-    dataPrintout.append(['Average PSNR:', np.mean(lastPSNRResult), '+/-', np.std(lastPSNRResult)])
-    dataPrintout.append(['Average TD:', np.mean(lastTDResult), '+/-', np.std(lastTDResult)])
-    dataPrintout.append(['Average ERD PSNR:', np.mean(lastERDPSNRResult), '+/-', np.std(lastERDPSNRResult)])
-    dataPrintout.append(['Average Time', np.mean(lastTimeResult), '+/-', np.std(lastTimeResult)])
-    #dataPrintout.append(['Average % Lines Scanned:', np.mean(percLinesScanned),'+/-', np.std(percLinesScanned)])
-    dataPrintout.append(['Average % Pixels Scanned:', np.mean(percPixelsScanned),'+/-',np.std(percPixelsScanned)])
+    dataPrintout.append(['Average Final %:', np.mean(lastPercMeasured), '+/-', np.std(lastPercMeasured)])
+    dataPrintout.append(['Average mz PSNR:', np.mean(lastmzAvgPSNR), '+/-', np.std(lastmzAvgPSNR)])
+    dataPrintout.append(['Average PSNR:', np.mean(lastAvgPSNR), '+/-', np.std(lastAvgPSNR)])
+    dataPrintout.append(['Average ERD PSNR:', np.mean(lastERDPSNR), '+/-', np.std(lastERDPSNR)])
+    dataPrintout.append(['Average Time:', np.mean(lastTime), '+/-', np.std(lastTime)])
     pd.DataFrame(dataPrintout).to_csv(dir_TestingResults + 'dataPrintout.csv')
-
-
-

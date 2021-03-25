@@ -5,7 +5,7 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    10 March 2021
+#DATE MODIFIED:	    24 March 2021
 #
 #VERSION NUM:	    0.8.2
 #
@@ -49,7 +49,7 @@
 #               0.7.5   c value selection performed before training database generation
 #               0.8.0   Raw MSI file integration (Thermo .raw, Agilent .d), only Windows compatible
 #               0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
-#               0.8.2   Multichannel integration, fixed groupwise, square pixels, and altered configuration files
+#               0.8.2   Multichannel, fixed groupwise, square pixels, accelerated RD, altered visuals/metrics
 #               ~0.8.3  GAN 
 #               ~0.8.4  Custom adversarial network
 #               ~0.9.0  Multimodal integration

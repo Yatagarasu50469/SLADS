@@ -3,12 +3,6 @@
 #====================================================================
 #==================================================================
 
-#var, max, orig
-RDMethod = 'orig'
-
-#Use averaged reconstruction as input
-averageReconInput = True
-
 ##################################################################
 #PARAMETERS: L0
 #TASKS TO BE PERFORMED
@@ -29,6 +23,18 @@ impModel = False
 #If an implementation run, what name should be used for data obtained
 impSampleName = 'SAMPLE_1'
 
+#If an implementation run, where will the MSI files be located (location will be emptied on run); None equivalent to './RESULTS/IMP/'
+impResultsDir = None
+
+#How many CPU threads can be used for multithreading; None will use all
+numThreads = None
+
+#var, max, avg, original (original collapses before difference between recon and ground-truth mz)
+RDMethod = 'original'
+
+#Use averaged reconstruction as input (True); use mz images as input (False)
+averageReconInput = False
+
 ##################################################################
 
 
@@ -43,14 +49,10 @@ impSampleName = 'SAMPLE_1'
 erdModel = 'DLADS'
 
 #Which scanning method shoud be used: pointwise or linewise
-scanMethod = 'linewise'
+scanMethod = 'pointwise'
 
 #Stopping percentage for number of acquired pixels
 stopPerc = 40
-
-#Should distances be penalized according to aspect ratio
-#True if data artifically stretched through interpolation (nano-DESI MSI: True)
-asymPenalty = True
 
 #==================================================================
 #PARAMETERS: L1-0
@@ -60,8 +62,11 @@ asymPenalty = True
 #What percentage of points should be initially acquired (random)
 initialPercToScan = 1
 
-#What percentage of points should be scanned each iteration
+#If group-wise, what percentage of points should be acquired; otherwise set to None
 percToScan = 1
+
+#What percentage of points should be acquired between visualization steps; if all steps should be, then set to None
+percToViz = None
 
 #==================================================================
 
@@ -77,7 +82,7 @@ lineMethod = 'percLine'
 lineRevistMethod = False
 
 #Should all lines be scanned at least once
-lineVisitAll = True
+lineVisitAll = False
 
 #==================================================================
 
@@ -90,7 +95,7 @@ lineVisitAll = True
 measurementPercs = np.arange(1,41).tolist()
 
 #Possible c values for RD approximation
-cValues = np.array([1, 2, 4, 8, 16, 32, 64, 128])
+cValues = np.array([1, 2, 4, 8, 16])
 
 #How many masks should be used for each percentage during training
 numMasks = 1
@@ -121,13 +126,13 @@ featDistCutoff = 0.25
 #==================================================================
 
 #Which model should be used for training: cnn, or unet
-modelDef = 'cnn'
+modelDef = 'unet'
 
 #How many filters should be used (doubles by layer in unet, constant in cnn)
-numStartFilters = 64
+numStartFilters = 32
 
 #What should the learning rate of the model's optimizer be
-learningRate = 1e-4
+learningRate = 1e-3
 
 #What should the batch size for pushing data through the network be
 batchSize = 1
@@ -142,7 +147,7 @@ earlyCutoff = True
 maxPatience = 100
 
 #How many epochs at minimum should be performed before starting to save the current best model and consider termination
-minimumEpochs = 50
+minimumEpochs = 20
 
 #What percentage of the training data should be used for training
 #Early stopping is only functional with at least 1 validation sample

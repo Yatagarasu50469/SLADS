@@ -17,15 +17,8 @@ elif consoleRunning and systemOS == 'Windows':
 else:
     consoleRows, consoleColumns = 40, 40
 
-#Specify non-interactive backend for plotting images
-if consoleRunning: matplotlib.use('Agg')
-    
-
 #INTERNAL OBJECT SETUP
 #==================================================================
-
-#If consistency in the random generator is desired for comparisons
-if consistentSeed: np.random.seed(0)
 
 #Set the multiple for which the input data must be for network compatability
 if modelDef == 'cnn':
@@ -39,10 +32,11 @@ depthFactor=2**numConvolutionLayers
 
 #Initialize multiprocessing pool server
 ray.shutdown()
-ray.init(logging_level=logging.ERROR)
+if numThreads==None: ray.init(logging_level=logging.ERROR)
+else: ray.init(num_cpus = numThreads, logging_level=logging.ERROR)
 
 #Force tensorflow to use (a) specific GPU(s) if indicated
-if availableGPUs != 'None': os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
+if availableGPUs != 'None': os.envirosn["CUDA_VISIBLE_DEVICES"] = availableGPUs
 
 #Check chosen regression model is available
 if not erdModel in ['SLADS-LS', 'SLADS-Net', 'DLADS']: sys.exit('Error - Specified erdModel is not available')
@@ -63,7 +57,10 @@ dir_TrainingModelResults = dir_TrainingResults + 'Model Training Images' + os.pa
 dir_TrainingResultsImages = dir_TrainingResults + 'Training Data Images' + os.path.sep
 dir_TestingResults = dir_Results + 'TEST' + os.path.sep
 dir_TestingResultsImages = dir_TestingResults + 'Images' + os.path.sep
-dir_ImpResults = dir_Results + 'IMP'+ os.path.sep
+
+if impResultsDir == None: dir_ImpResults = dir_Results + 'IMP'+ os.path.sep
+else: dir_ImpResults = impResultsDir
+
 dir_ImpResultsImages = dir_ImpResults + 'Images' + os.path.sep
 
 #Check that the result directory exists for cases where existing training data/model are to be used
@@ -99,18 +96,6 @@ if impModel:
     dir_ImpDataFinal = dir_ImpData + impSampleName + os.path.sep
     if os.path.exists(dir_ImpDataFinal): shutil.rmtree(dir_ImpDataFinal)
     os.makedirs(dir_ImpDataFinal)
-
-if animationGen:
-    dir_Animations = dir_TestingResults + 'Animations/'
-    dir_AnimationVideos = dir_Animations + 'Videos/'
-    dir_mzResults = dir_TestingResults + 'mzResults/'
-    
-    if os.path.exists(dir_Animations): shutil.rmtree(dir_Animations)    
-    os.makedirs(dir_Animations)
-    if os.path.exists(dir_AnimationVideos): shutil.rmtree(dir_AnimationVideos)    
-    os.makedirs(dir_AnimationVideos)
-    if os.path.exists(dir_mzResults): shutil.rmtree(dir_mzResults)    
-    os.makedirs(dir_mzResults)
 
 #Clear the screen
 os.system('cls' if os.name=='nt' else 'clear')

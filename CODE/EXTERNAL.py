@@ -14,6 +14,7 @@ import glob
 import logging
 import math
 import matplotlib
+matplotlib.use('agg') #Non-interactive plotting mode
 import matplotlib.pyplot as plt
 import multiplierz
 import multiprocessing
@@ -40,15 +41,18 @@ import warnings
 from datetime import datetime
 from IPython import display
 from IPython.core.debugger import Tracer
+from itertools import chain
 from joblib import Parallel, delayed
 from matplotlib.pyplot import figure
 from multiplierz.mzAPI import mzFile
 from multiplierz.spectral_process import mz_range
+from numba import jit
 from PIL import Image
 from scipy import misc
 from scipy import signal
 from scipy.io import loadmat
 from scipy.io import savemat
+from scipy.ndimage import gaussian_filter
 from scipy.signal import find_peaks
 from scipy.special import softmax
 from sklearn import linear_model
