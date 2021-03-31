@@ -16,7 +16,7 @@
 
 
     NAME: 		SLADS
-    VERSION NUM:	0.8.2
+    VERSION NUM:	0.8.3
     LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
@@ -57,8 +57,10 @@
                     0.8.0   RAW MSI file integration (.raw, .d)
                     0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
                     0.8.2   Multichannel, fixed groupwise, square pixels, accelerated RD, altered visuals/metrics
-                    ~0.8.3  GAN
-                    ~0.8.4  Custom adversarial network
+                    0.8.3   Method cleanup, mask seed fix, normalization for sim. fix, non-Ray option
+                    ~0.8.4  Option for original SLADS(-Net) comparisons (static window, synchronize preprocess)
+                    ~0.8.5  GAN
+                    ~0.8.6  Custom adversarial network
                     ~0.9.0  Multimodal integration
                     ~1.0.0  Initial release
 
@@ -159,6 +161,7 @@ This implementation of SLADS is only functional within Windows 10, given a relia
         pandas          1.1.4
         psutil          5.7.3
         matplotlib      3.3.2
+	numba		0.53.0
         pillow          8.0.1
         ray             1.0.0
         setuptools      50.3.0
@@ -193,11 +196,11 @@ Note that the actual location of the specified file may vary depending on potent
 Navigate inside the command prompt to the SLADS base directory then enter the following commands:
 
 	$ python3 -m pip install --upgrade pip
-	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib pillow ray scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tqdm numpy opencv-python pydot graphviz
+	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib numba pillow ray scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tqdm numpy opencv-python pydot graphviz
 	$ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
 
 	$ python
-	$ from multiplierz.mzAPI.management import register Interfaces
+	$ from multiplierz.mzAPI.management import registerInterfaces
 	$ registerInterfaces()
 
 If the final printout indicates actions relating to the MSI file format intended for use, then follow through as neccessary. 

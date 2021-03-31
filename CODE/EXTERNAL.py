@@ -9,6 +9,7 @@ from __future__ import absolute_import, division, print_function
 import cv2
 import contextlib
 import copy
+import datetime
 import gc
 import glob
 import logging
@@ -27,10 +28,8 @@ import pickle
 import PIL
 import PIL.ImageOps
 import platform
-import psutil
 import ray
 import re
-import random
 import sys
 import scipy
 import shutil
@@ -38,7 +37,6 @@ import sklearn
 import time
 import warnings
 
-from datetime import datetime
 from IPython import display
 from IPython.core.debugger import Tracer
 from itertools import chain

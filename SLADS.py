@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    24 March 2021
+#DATE MODIFIED:	    30 March 2021
 #
-#VERSION NUM:	    0.8.2
+#VERSION NUM:	    0.8.3
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -50,8 +50,10 @@
 #               0.8.0   Raw MSI file integration (Thermo .raw, Agilent .d), only Windows compatible
 #               0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
 #               0.8.2   Multichannel, fixed groupwise, square pixels, accelerated RD, altered visuals/metrics
-#               ~0.8.3  GAN 
-#               ~0.8.4  Custom adversarial network
+#               0.8.3   Method cleanup, mask seed fix, normalization for sim. fix, non-Ray option
+#               ~0.8.4  Option for original SLADS(-Net) comparisons (static window, synchronize preprocess)
+#               ~0.8.5  GAN 
+#               ~0.8.6  Custom adversarial network
 #               ~0.9.0  Multimodal integration
 #               ~1.0.0  Initial release
 #====================================================================
@@ -60,7 +62,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum='0.8.2'
+versionNum='0.8.3'
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
@@ -176,7 +178,7 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
     configCopy = shutil.copy(configFileName, destResultsFolder+'/'+os.path.basename(configFileName))
 
     #Shutdown the ray server
-    ray.shutdown()
+    if parallelization: ray.shutdown()
 
     #AFTER INTENDED PROCEDURES (TRAINING/TESTING) HAVE BEEN PERFORMED
     sectionTitle('PROGRAM COMPLETE')

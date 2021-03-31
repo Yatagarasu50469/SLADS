@@ -5,7 +5,7 @@
 #Given a set of sample paths, perform testing using a trained SLADS Model
 def testSLADS(sortedTestingSampleFolders, model, optimalC):
 
-    #If consistentcy in the random generator is desired for comparisons
+    #If consistentcy in the random generator is desired for comparisons, then reset seed
     if consistentSeed: np.random.seed(0)
     
     #Setup testing samples

@@ -4,7 +4,7 @@
 
 #Tensorflow callback object to check early stopping criteria and visualize the network's current training progression/status
 class EpochEnd(keras.callbacks.Callback):
-    def __init__(self, maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizInputValTensors, vizInputValImages, vizOutputValImages, vizValShapes, dir_TrainingModelResults):
+    def __init__(self, maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizInputValTensors, vizInputValImages, vizOutputValTensors, vizOutputValImages, vizValShapes, dir_TrainingModelResults):
         self.maxPatience = maxPatience
         self.patience = 0
         self.bestWeights = None
@@ -19,6 +19,7 @@ class EpochEnd(keras.callbacks.Callback):
         self.train_psnrList = []
         self.vizInputValTensors = vizInputValTensors
         self.vizInputValImages = vizInputValImages
+        self.vizOutputValTensors = vizOutputValTensors
         self.vizOutputValImages = vizOutputValImages
         self.vizValShapes = vizValShapes
         self.dir_TrainingModelResults = dir_TrainingModelResults
@@ -33,12 +34,12 @@ class EpochEnd(keras.callbacks.Callback):
             currentPSNR = logs.get('PSNR')
         else:
             currentPSNR = logs.get('val_PSNR')
-        if (currentPSNR > self.bestPSNR) and (epoch >= self.minimumEpochs-1):
+        if (currentPSNR > self.bestPSNR) and (epoch >= self.minimumEpochs):
             self.patience = 0
             self.bestPSNR = currentPSNR
             self.bestEpoch = epoch
             self.bestWeights = self.model.get_weights()
-        elif (epoch >= self.minimumEpochs-1):
+        elif (epoch >= self.minimumEpochs):
             self.patience += 1
             if self.patience >= self.maxPatience:
                 self.stopped_epoch = epoch
@@ -53,14 +54,12 @@ class EpochEnd(keras.callbacks.Callback):
             self.val_psnrList.append(logs.get('val_PSNR'))
             
         #Perform visualization as needed/specified
-        if trainingProgressionVisuals and ((epoch == 0) or ((epoch+1) % trainingVizSteps == 0) or (self.stopped_epoch == epoch) or (self.bestEpoch == epoch)):
+        if trainingProgressionVisuals and ((epoch == 0) or (epoch % trainingVizSteps == 0) or (self.stopped_epoch == epoch) or (self.bestEpoch == epoch)):
 
             #If there are no validation tensors, then just save a plot of the training losses
             if self.noValFlag:
-                if averageReconInput: 
-                    f = plt.figure(figsize=(35,10))
-                else:
-                    f = plt.figure(figsize=(30,10))
+                if averageReconInput: f = plt.figure(figsize=(35,10))
+                else: f = plt.figure(figsize=(30,10))
                     
                 f.subplots_adjust(top = 0.80)
                 f.subplots_adjust(wspace=0.2, hspace=0.2)
@@ -81,10 +80,8 @@ class EpochEnd(keras.callbacks.Callback):
                 ax.set_yscale('log')
                 ax.set_title('Training PSNR: ' + str(round(self.train_psnrList[-1,8])), fontsize=15, fontweight='bold')
             else:
-                if averageReconInput: 
-                    f = plt.figure(figsize=(35,25))
-                else:
-                    f = plt.figure(figsize=(30,25))
+                if averageReconInput: f = plt.figure(figsize=(35,25))
+                else: f = plt.figure(figsize=(30,25))
                     
                 f.subplots_adjust(top = 0.88)
                 f.subplots_adjust(wspace=0.2, hspace=0.2)
@@ -107,9 +104,11 @@ class EpochEnd(keras.callbacks.Callback):
                 
                 #Show a validation sample result at min and max sampling percentages (variables provided through callback initialization)
                 for imageNum in range(0, len(self.vizOutputValImages)):
-                    outputTensor = self.model.predict(self.vizInputValTensors[imageNum], steps=1)
-                    ERD = resize(outputTensor[0,:,:,0], (self.vizValShapes[imageNum]), order=0)
-                    ERD_PSNR = compare_psnr(self.vizOutputValImages[imageNum], ERD, data_range=1)
+                    predictionTensor = self.model.predict(self.vizInputValTensors[imageNum], steps=1)
+                    ERD_PSNR = PSNR(self.vizOutputValTensors[imageNum], predictionTensor).numpy()
+                    imagePred = tf.divide(tf.subtract(predictionTensor,tf.reduce_min(predictionTensor)), tf.subtract(tf.reduce_max(predictionTensor),tf.reduce_min(predictionTensor)))
+                    ERD = resize(imagePred[0,:,:,0], (self.vizValShapes[imageNum]), order=0)
+                    #ERD_PSNR = compare_psnr(self.vizOutputValImages[imageNum], ERD, data_range=1)
                     
                     if averageReconInput:
                         ax = plt.subplot2grid((3,4), (imageNum+1,0))
@@ -199,13 +198,18 @@ def optimizeC(trainingSamples):
     #If there are more than one c value, determine which minimizes the total distortion in the samples, force this optimization to be performed with pointwise scanning
     if len(cValues)>1:
         
+        if parallelization:
+            futures = []
+            for cNum in range(0, len(cValues)):
+                for sampleNum in range(0, len(trainingSamples)):
+                    futures.append(runSLADS_parhelper.remote(trainingSamples[sampleNum], None, 'pointwise', cValues[cNum], 1, None, stopPerc, simulationFlag=True, trainPlotFlag=True, animationFlag=False, tqdmHide=True, oracleFlag=True, bestCFlag=True))
+            results = np.split(np.asarray([x for x in tqdm(rayIterator(futures), total=len(futures), desc='Generation', leave=True, ascii=True)]), len(cValues))
+        else:
+            results = []
+            for cNum in tqdm(range(0, len(cValues)), desc='c Values', leave=True, ascii=True):
+                results.append([runSLADS(trainingSamples[sampleNum], None, 'pointwise', cValues[cNum], 1, None, stopPerc, simulationFlag=True, trainPlotFlag=True, animationFlag=False, tqdmHide=True, oracleFlag=True, bestCFlag=True) for sampleNum in tqdm(range(0, len(trainingSamples)), desc='Samples', leave=False, ascii=True)])
+        
         areaUnderCurveList = []
-        futures = []
-        for cNum in range(0, len(cValues)):
-            for sampleNum in range(0, len(trainingSamples)):
-                futures.append(runSLADS_parhelper.remote(trainingSamples[sampleNum], None, 'pointwise', cValues[cNum], 1, None, stopPerc, simulationFlag=True, trainPlotFlag=True, animationFlag=False, tqdmHide=True, oracleFlag=True, bestCFlag=True))
-        results = np.split(np.asarray([x for x in tqdm(rayIteractor(futures), total=len(futures), desc='Generation', leave=True, ascii=True)]), len(cValues))
-                
         for cNum in range(0, len(cValues)):
             
             #Extract percentage results at the specified precision
@@ -241,6 +245,9 @@ def optimizeC(trainingSamples):
 #Given a set of samples and a chosen c value, generate a training database
 def generateTrainingData(samples, optimalC):
     
+    #Make sure sample mask initialization is consistent
+    if consistentSeed: np.random.seed(0)
+    
     trainingDatabase = []
     for sample in tqdm(samples, desc = 'Samples', leave=True, ascii=True):
         
@@ -253,10 +260,9 @@ def generateTrainingData(samples, optimalC):
             #For each of the measurement percentages, update a training sample, evaluate it, and store the results; prepare to normalize RD image series
             for measurementPerc in tqdm(measurementPercs, desc = '%', leave=False, ascii=True):
                 
-                #If this is the first iteration, then create a new mask object
+                #If this is the first iteration, then create a new sample
                 if firstIteration: 
-                    newSample = copy.deepcopy(sample)
-                    newSample.maskReset(True)
+                    newSample = Sample(sample.sampleFolder, initialPercToScan, 'pointwise', ignoreMissingLines=True)
                     newSample.readScanData(lineRevistMethod)
                     newIdxs = np.transpose(np.where(newSample.initialMask == 1))
                 
@@ -271,21 +277,22 @@ def generateTrainingData(samples, optimalC):
                     newSample.performMeasurements(newIdxs, True, False)
                     
                     #Calculate the reconstruction(s)
-                    #if averageReconInput or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
                     newSample.avgSquareReconImage = computeRecon(newSample.avgSquareMeasuredImage, newSample)
                     newSample.avgReconImage = resize(newSample.avgSquareReconImage, tuple(newSample.finalDim), order=0)
-                    #elif percToScan != None and erdModel == 'DLADS':
-                    newSample.squaremzReconImages = np.asarray(list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(newSample.squareMeasuredmzImages, newSample, indexes) for indexes in np.array_split(np.arange(0, len(newSample.squareMeasuredmzImages)), multiprocessing.cpu_count())]))))
+                    if parallelization:
+                        newSample.squaremzReconImages = np.asarray(list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(newSample.squareMeasuredmzImages, newSample, indexes) for indexes in np.array_split(np.arange(0, len(newSample.squareMeasuredmzImages)), multiprocessing.cpu_count())]))))
+                    else:
+                        newSample.squaremzReconImages = np.asarray([computeRecon(squareMeasuredmzImage, newSample) for squareMeasuredmzImage in newSample.squareMeasuredmzImages])
+
                     newSample.mzReconImages = np.asarray([resize(squaremzReconImage, tuple(newSample.finalDim), order=0) for squaremzReconImage in newSample.squaremzReconImages])
                     
                     #Calculate the RD Image, with square pixels
                     newSample.RDImage = computeRD(newSample, optimalC, False, False)
                 
                 #Determine features and flat RD Values for SLADS models
-                if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
-                    newSample.polyFeatures = computePolyFeatures(newSample, newSample.avgSquareReconImage)
-                    newSample.squareRDValues = newSample.avgSquareReconImage[np.where(newSample.squareMask==0)]
-                
+                newSample.polyFeatures = computePolyFeatures(newSample, newSample.avgSquareReconImage)
+                newSample.squareRDValues = newSample.avgSquareReconImage[np.where(newSample.squareMask==0)]
+            
                 #Append the result into the training database
                 trainingDatabase.append(copy.deepcopy(newSample))
                 
@@ -352,7 +359,6 @@ def generateTrainingData(samples, optimalC):
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
                     plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
                     plt.close()
-                        
             
     #Save the complete databases
     pickle.dump(trainingDatabase, open(dir_TrainingResults + 'trainingDatabase.p', 'wb'))
@@ -398,11 +404,9 @@ def trainModel(trainingDatabase, optimalC):
         for trainingSample in tqdm(trainingDatabase, desc = 'Setup', leave=True, ascii=True):
             
             #Compute feature image for network input
-            if averageReconInput: 
-                inputImage, originalShape = makeCompatible(featureExtractor(trainingSample, trainingSample.avgSquareMeasuredImage, trainingSample.avgSquareReconImage))
-            else:
-                inputImage, originalShape = makeCompatible(np.stack(trainingSample.squareMeasuredmzImages, axis=-1))
-            
+            if averageReconInput: inputImage, originalShape = makeCompatible(featureExtractor(trainingSample, trainingSample.avgSquareMeasuredImage, trainingSample.avgSquareReconImage))
+            else: inputImage, originalShape = makeCompatible(np.stack(trainingSample.squareMeasuredmzImages, axis=-1))
+            inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
             outputImage, originalShape = makeCompatible(trainingSample.RDImage)
             
             #Add to lists
@@ -440,11 +444,12 @@ def trainModel(trainingDatabase, optimalC):
         if not noValFlag: valData = tf.data.Dataset.from_generator(lambda: iter(zip(valInputImages, valOutputImages)), output_types=(tf.float32, tf.float32), output_shapes=([1,None,None,numChannels], [1,None,None,1]))
         
         #Extract validation input/output images desired for visualization
-        vizInputValTensors, vizInputValImages, vizOutputValImages, vizValShapes = [], [], [], []
+        vizInputValTensors, vizOutputValTensors, vizInputValImages, vizOutputValImages, vizValShapes = [], [], [], [], []
         if not noValFlag:
             sampleLocations = [0, numMasks+len(measurementPercs)-2]
             for sampleLocation in sampleLocations:
                 vizInputValTensors.append(valInputImages[sampleLocation])
+                vizOutputValTensors.append(valOutputImages[sampleLocation])
                 if averageReconInput: vizInputValImages.append(resize(valInputImages[sampleLocation][0,:,:,:], (valShapes[sampleLocation]), order=0))
                 vizValShapes.append(valShapes[sampleLocation])
                 vizOutputValImages.append(resize(valOutputImages[sampleLocation][0,:,:,0], (valShapes[sampleLocation]), order=0))
@@ -452,10 +457,10 @@ def trainModel(trainingDatabase, optimalC):
         #Perform training
         t0 = time.time()
         if not noValFlag: 
-            history = model.fit(trainData, epochs=numEpochs, callbacks=[EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizInputValTensors, vizInputValImages, vizOutputValImages, vizValShapes, dir_TrainingModelResults)], validation_data=valData, validation_freq=1, verbose=1, shuffle=True)
+            history = model.fit(trainData, epochs=numEpochs, callbacks=[EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizInputValTensors, vizInputValImages, vizOutputValTensors, vizOutputValImages, vizValShapes, dir_TrainingModelResults)], validation_data=valData, validation_freq=1, verbose=1, shuffle=True)
         else:
-            history = model.fit(trainData, epochs=numEpochs, callbacks=[EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizInputValTensors, vizInputValImages, vizOutputValImages, vizValShapes, dir_TrainingModelResults)], verbose=1, shuffle=True)
-        print('Total Training Time: ', time.time()-t0)
+            history = model.fit(trainData, epochs=numEpochs, callbacks=[EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizInputValTensors, vizInputValImages, vizOutputValTensors, vizOutputValImages, vizValShapes, dir_TrainingModelResults)], verbose=1, shuffle=True)
+        print('Total Training Time: ' + str(datetime.timedelta(seconds=(time.time()-t0))))
 
         #Save the final model and weights
         model.save(dir_TrainingResults+'model_cValue_'+str(optimalC))

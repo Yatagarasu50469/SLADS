@@ -30,10 +30,10 @@ elif modelDef == 'mlp':
 
 depthFactor=2**numConvolutionLayers
 
-#Initialize multiprocessing pool server
-ray.shutdown()
-if numThreads==None: ray.init(logging_level=logging.ERROR)
-else: ray.init(num_cpus = numThreads, logging_level=logging.ERROR)
+#Initialize multiprocessing pool server; make sure a pool isn't still running from a ctl+c exit
+if parallelization: 
+    ray.shutdown()
+    ray.init(logging_level=logging.ERROR)
 
 #Force tensorflow to use (a) specific GPU(s) if indicated
 if availableGPUs != 'None': os.envirosn["CUDA_VISIBLE_DEVICES"] = availableGPUs

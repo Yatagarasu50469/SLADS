@@ -26,13 +26,13 @@ impSampleName = 'SAMPLE_1'
 #If an implementation run, where will the MSI files be located (location will be emptied on run); None equivalent to './RESULTS/IMP/'
 impResultsDir = None
 
-#How many CPU threads can be used for multithreading; None will use all
-numThreads = None
+#Should parallelization calls be used (True); if memory overflow issues develop, set to False
+parallelization = True
 
 #var, max, avg, original (original collapses before difference between recon and ground-truth mz)
-RDMethod = 'original'
+RDMethod = 'max'
 
-#Use averaged reconstruction as input (True); use mz images as input (False)
+#Use averaged reconstruction as network input
 averageReconInput = False
 
 ##################################################################
@@ -76,7 +76,7 @@ percToViz = None
 #==================================================================
 
 #What method should be used for linewise point selection: (startEndPoints, partial line segment) (percLine, Top stopPerc% ERD locations) (none, full line)
-lineMethod = 'startEndPoints'
+lineMethod = 'percLine'
 
 #Should lines be allowed to be revisited
 lineRevistMethod = False
@@ -128,11 +128,11 @@ featDistCutoff = 0.25
 #Which model should be used for training: cnn, or unet
 modelDef = 'unet'
 
-#How many filters should be used (doubles by layer in unet, constant in cnn)
+#How many filters should be used
 numStartFilters = 32
 
 #What should the learning rate of the model's optimizer be
-learningRate = 1e-3
+learningRate = 1e-4
 
 #What should the batch size for pushing data through the network be
 batchSize = 1
@@ -147,7 +147,7 @@ earlyCutoff = True
 maxPatience = 100
 
 #How many epochs at minimum should be performed before starting to save the current best model and consider termination
-minimumEpochs = 20
+minimumEpochs = 10
 
 #What percentage of the training data should be used for training
 #Early stopping is only functional with at least 1 validation sample
