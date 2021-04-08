@@ -783,15 +783,10 @@ def computeRD(sample, cValue, finalDimRD, bestCFlag, update=False, RDImage=None)
         unMeasuredLocations = np.empty((0,2)).astype(int)
         updateLocations = np.argwhere(sample.prevSquareMask-sample.squareMask)
         
-        #Find neighbor information
-        #neigh = NearestNeighbors(n_neighbors=1)
-        #neigh.fit(sample.squareMeasuredIdxs)
-        #neighborDistances, neighborIndices = neigh.kneighbors(sample.squareUnMeasuredIdxs)
-        
         #Prepare variables for indexing
         updateLocations_list = updateLocations.tolist()
         squareMeasuredIdxs_list = sample.squareMeasuredIdxs.tolist()
-        neighborIndices = sample.neighborIndices.ravel()
+        neighborIndices = sample.neighborIndices[:,0].ravel()
         
         #Find indices of updateLocations and then the indices of neighboring unMeasuredLocations 
         indices = [squareMeasuredIdxs_list.index(updateLocations_list[index]) for index in range(0, len(updateLocations))]
@@ -801,7 +796,7 @@ def computeRD(sample, cValue, finalDimRD, bestCFlag, update=False, RDImage=None)
         if len(indices)==0: return RDImage
         
         #Extract unMeasuredLocations to be updated and their relevant neighbor information (to avoid recalculation)
-        neighborDistances = sample.neighborDistances[indices]
+        neighborDistances = sample.neighborDistances[:,0][indices]
         unMeasuredLocations = sample.squareUnMeasuredIdxs[indices]
     
     #If not performing just an update
