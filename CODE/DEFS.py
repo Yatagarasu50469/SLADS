@@ -1035,7 +1035,7 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
             
             #t0 = time.time()
             #If viz limit, only update when percToViz has been met; otherwise update every iteration
-            if ((percToViz != None) and ((sample.percMeasured - result.percMeasuredList[-1]) >= percToViz)) or (percToViz == None): result.update(sample, completedRunFlag)
+            if ((scanMethod =='pointwise') and (percToViz != None) and ((sample.percMeasured - result.percMeasuredList[-1]) >= percToViz)) or (percToViz == None) or completedRunFlag: result.update(sample, completedRunFlag)
             #print('Result Update: ' + str(time.time()-t0))
 
             #t0 = time.time()

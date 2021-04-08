@@ -66,7 +66,7 @@ initialPercToScan = 1
 percToScan = None
 
 #What percentage of points should be acquired between visualization steps; if all steps should be, then set to None
-percToViz = 1
+percToViz = None
 
 #==================================================================
 
