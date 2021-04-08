@@ -980,7 +980,7 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
     result = Result(sample, sample.avgGroundTruthImage, cValue, bestCFlag, oracleFlag, simulationFlag, animationFlag, neighborCalcFlag)
     
     #Check stopping criteria, just in case of a bad input
-    if (scanMethod == 'pointwise' or not lineVisitAll) and (round(sample.percMeasured) >= stopPerc): completedRunFlag = True
+    if (scanMethod == 'pointwise' or not lineVisitAll) and (sample.percMeasured >= stopPerc): completedRunFlag = True
     if scanMethod == 'linewise' and len(sample.linesToScan) == 0: completedRunFlag = True
     
     #Perform the first update for the result
@@ -1029,7 +1029,7 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
             
             #t0 = time.time()
             #Check stopping conditions
-            if (scanMethod == 'pointwise' or not lineVisitAll) and (round(sample.percMeasured) >= stopPerc): completedRunFlag = True
+            if (scanMethod == 'pointwise' or not lineVisitAll) and (sample.percMeasured >= stopPerc): completedRunFlag = True
             if scanMethod == 'linewise' and len(sample.linesToScan) == 0: completedRunFlag = True
             #print('Stopping Cond: ' + str(time.time()-t0))
             
