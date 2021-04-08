@@ -75,7 +75,7 @@ percToViz = 1
 #LINEWISE OPTIONS
 #==================================================================
 
-#What method should be used for linewise point selection: (startEndPoints, partial line segment) (percLine, Top stopPerc% ERD locations) (none, full line)
+#What method should be used for linewise point selection: (segLine, partial line segment) (percLine, Top stopPerc% ERD locations) (none, full line)
 lineMethod = 'percLine'
 
 #Should lines be allowed to be revisited
