@@ -813,12 +813,9 @@ def computeRD(sample, cValue, finalDimRD, bestCFlag, update=False, RDImage=None)
         elif RDMethod == 'avg': sample.RDPP = np.mean(abs(sample.squaremzImages-sample.squaremzReconImages), axis=0)
         elif RDMethod == 'original': sample.RDPP = computeDifference(sample.avgSquareGroundTruthImage, sample.avgSquareReconImage)
         else: sys.exit('Error! - Unknown RD Method specified in configuration: ' + RDMethod)
-        
-        #Neighbor information for all unmeasured locations is already in the sample
-        neighborDistances = sample.neighborDistances
     
     #Calculate the sigma values for chosen c value
-    sigmaValues = neighborDistances[:,0]/cValue
+    sigmaValues = sample.neighborDistances[:,0]/cValue
     
     #Determine RDValues, parallelizing if not done so at a higher level
     if not bestCFlag and parallelization:
