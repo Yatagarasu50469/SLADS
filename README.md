@@ -57,8 +57,8 @@
                     0.8.0   RAW MSI file integration (.raw, .d)
                     0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
                     0.8.2   Multichannel, fixed groupwise, square pixels, accelerated RD, altered visuals/metrics
-                    0.8.3   Method cleanup, mask seed fix, normalization for sim. fix, non-Ray option
-                    ~0.8.4  Option for original SLADS(-Net) comparisons (static window, synchronize preprocess)
+                    0.8.3   Mask seed fix, normalization for sim. fix, non-Ray option, pad instead of resize
+                    ~0.8.4  Static window option, global mz selection
                     ~0.8.5  GAN
                     ~0.8.6  Custom adversarial network
                     ~0.9.0  Multimodal integration

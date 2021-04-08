@@ -41,11 +41,11 @@ def performImplementation(model, optimalC):
     #Run SLADS
     result = runSLADS(sample, bestModel, scanMethod, optimalC, percToScan, percToViz, stopPerc, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
     
-    #Call completion/printout function
-    result.complete(None)
-    
     #Indicate to equipment that the sample scan has concluded
     with open(dir_ImpResults + 'DONE', 'w') as filehandle: filehandle.writelines('')
+
+    #Call completion/printout function
+    result.complete(None)
 
     #Move all of the files to finalized directory
     for fileName in glob.glob(dir_ImpResults + '*'): shutil.move(fileName, dir_ImpDataFinal)

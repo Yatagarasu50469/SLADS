@@ -20,10 +20,15 @@ else:
 #INTERNAL OBJECT SETUP
 #==================================================================
 
+#If using DLADS, then numNeighbors should only ever be 1, otherwise numNeighbors affects computePolyFeatures
+if erdModel == 'DLADS': numNeighbors = 1
+
 #Set the multiple for which the input data must be for network compatability
 if modelDef == 'cnn':
     numConvolutionLayers = 1
 elif modelDef == 'unet':
+    numConvolutionLayers = 3
+elif modelDef =='flatunet':
     numConvolutionLayers = 3
 elif modelDef == 'mlp':
     numConvolutionLayers = 1

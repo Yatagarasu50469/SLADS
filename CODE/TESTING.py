@@ -10,7 +10,7 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
     
     #Setup testing samples
     testingSamples = []
-    for testingSampleFolder in sortedTestingSampleFolders:
+    for testingSampleFolder in tqdm(sortedTestingSampleFolders, desc='Reading Samples', leave=True, ascii=True):
         dataSampleName = os.path.basename(testingSampleFolder)
         
         #Read all available scan data into a sample object
@@ -23,18 +23,20 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
         #Define information as a new Sample object
         testingSamples.append(copy.deepcopy(sample))
 
-    #Create holding arrays for all of the results
+    #Run algorithm for each of the testing samples, timing and storing metric progression for each
+    time_testingResults = []
+    results =[]
+    for sampleNum in tqdm(range(0,len(testingSamples)), desc='Testing Samples', position=0, leave=True, ascii=True):
+        t0 = time.time()
+        results.append(runSLADS(testingSamples[sampleNum], model, scanMethod, optimalC, percToScan, percToViz, stopPerc, simulationFlag=True, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False))
+        time_testingResults.append(time.time()-t0)
+    
+    #Perform completion/visualization routines
     mzAvgPSNR_testingResults = []
     avgPSNR_testingResults = []
     ERDPSNR_testingResults = []
     perc_testingResults = []
-    time_testingResults = []
-    
-    #Run algorithm for each of the testing samples, timing and storing metric progression for each
-    for sampleNum in tqdm(range(0,len(testingSamples)), desc='Testing Samples', position=0, leave=True, ascii=True):
-        t0 = time.time()
-        result = runSLADS(testingSamples[sampleNum], model, scanMethod, optimalC, percToScan, percToViz, stopPerc, simulationFlag=True, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
-        time_testingResults.append(time.time()-t0)
+    for result in tqdm(results, desc='Visualization', position=0, leave=True, ascii=True):
         result.complete(optimalC)
         mzAvgPSNR_testingResults.append(result.mzAvgPSNRList)
         avgPSNR_testingResults.append(result.avgPSNRList)

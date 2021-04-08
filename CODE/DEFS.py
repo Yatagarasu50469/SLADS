@@ -2,6 +2,11 @@
 #SLADS DEFINITIONS GENERAL
 #==================================================================
 
+#Determine measured and unmeasured locations given a binary mask
+@jit(nopython=True)
+def indexMask(mask):
+    return np.transpose(np.vstack(np.where(mask==1))), np.transpose(np.vstack(np.where(mask==0)))
+
 #Iterate object ids in ray, so as to provide progress feedback
 def rayIterator(ids):
         while ids:
@@ -249,6 +254,9 @@ class Sample:
         elif self.mzSpec == 'range':
             self.mzRanges = np.loadtxt(self.sampleFolder+os.path.sep+'mz.csv', delimiter=',')
         
+        #Setup averages of the mz ranges for visualizations
+        self.mzAverageRanges = np.average(self.mzRanges, axis=1)
+        
         #Prepare variables to hold sample data
         self.mzWeights = np.ones(len(self.mzRanges))/len(self.mzRanges)
 
@@ -317,6 +325,11 @@ class Sample:
         #Initial mask variables for first scan and reseting
         self.initialMask = np.zeros(self.finalDim)
         
+        #Initialize map for most important mz found for RDPP
+        self.mzRDPPMap = np.zeros(self.squareDim)
+        self.mzMap = np.empty(self.finalDim)
+        self.mzMap[:] = np.NaN
+        
         #List of what points/lines should be initially measured
         self.initialSets = []
         
@@ -380,8 +393,8 @@ class Sample:
         self.squareMeasuredIdxs = np.transpose(np.where(self.squareMask==1))
         self.squareUnMeasuredIdxs = np.transpose(np.where(self.squareMask==0))
         
-        #Find neighbor information
-        self.neighborIndices, self.neighborWeights, self.neighborDistances = findNeighbors(self.squareMeasuredIdxs, self.squareUnMeasuredIdxs)
+        #Find neighbor information if neccessary
+        #self.neighborIndices, self.neighborWeights, self.neighborDistances = findNeighbors(self.squareMeasuredIdxs, self.squareUnMeasuredIdxs)
         
     #Update mzImages, TIC, origTIC, and origTimes by information in the present line files
     def readScanData(self, lineRevistMethod):
@@ -455,17 +468,18 @@ class Sample:
         self.squaremzImages = np.asarray([resize(mzImage, (self.squareDim[0], self.squareDim[1]), order=0) for mzImage in self.mzImages])
         
     #Scan new locations in the sample
-    def performMeasurements(self, newIdxs, simulationFlag, fromRecon):
+    def performMeasurements(self, newIdxs, percToScan, simulationFlag, fromRecon, bestCFlag, neighborCalcFlag):
+    
+        #Ensure newIdxs are indexible in 2 dimensions
+        newIdxs = np.atleast_2d(newIdxs)
         
-        #Update the masks according to the newIdxs; need to do so in squareMask for nearest neighbor search
-        if len(newIdxs) != 0: 
-            for pt in newIdxs: self.mask[tuple(pt)] = 1
-            self.measuredIdxs = np.transpose(np.where(self.mask==1))
-            self.unMeasuredIdxs = np.transpose(np.where(self.mask==0))
-            
-            self.squareMask = resize(self.mask, (self.squareDim[0], self.squareDim[1]), order=0)
-            self.squareMeasuredIdxs = np.transpose(np.where(self.squareMask==1))
-            self.squareUnMeasuredIdxs = np.transpose(np.where(self.squareMask==0))
+        #Update mask and indexes
+        #t0 = time.time()
+        for pt in newIdxs: self.mask[tuple(pt)] = 1
+        self.measuredIdxs, self.unMeasuredIdxs = indexMask(self.mask)
+        self.squareMask = resize(self.mask, (self.squareDim[0], self.squareDim[1]), order=0)
+        self.squareMeasuredIdxs, self.squareUnMeasuredIdxs = indexMask(self.squareMask)
+        #print('     Index and Mask: ' + str(time.time()-t0))
         
         #If the measurements are not to be taken from the reconstruction image(s) (as is done for groupwise percToScan acquisition)
         if not fromRecon:
@@ -474,42 +488,48 @@ class Sample:
                 with open(dir_ImpResults + 'UNLOCK', 'w') as filehandle: filehandle.writelines(str(sample.initialSets[setNum][0]) + ', ' + str(sample.initialSets[setNum][1]))
                 equipWait()
                 self.readScanData()
-                self.measuredmzImages = copy.deepcopy(self.mzImages)
+                self.measuredmzImages = np.asarray(self.mzImages)
             else:
-                for imageNum in range(0,len(self.measuredmzImages)):
-                    temp = copy.deepcopy(np.asarray(self.mzImages[imageNum]))
-                    temp[self.mask == 0] = 0
-                    self.measuredmzImages[imageNum] = temp.copy()
-
+                self.measuredmzImages[:, newIdxs[:,0], newIdxs[:,1]] = np.asarray(self.mzImages)[:, newIdxs[:,0], newIdxs[:,1]]
+                
+            #t0 = time.time()
             #Update the square mz images
-            self.squareMeasuredmzImages = np.asarray([resize(measuredmzImage, (self.squareDim[0], self.squareDim[1]), order=0) for measuredmzImage in self.measuredmzImages])
+            self.squareMeasuredmzImages = resize(self.measuredmzImages, (self.measuredmzImages.shape[0], self.squareDim[0], self.squareDim[1]), order=0)
+            #print('     Update Square: ' + str(time.time()-t0))
             
+            #t0 = time.time()
             #Perform averaging of the multiple channels
             self.avgMeasuredImage = np.average(np.asarray(self.measuredmzImages), axis=0, weights=self.mzWeights)
-        
-        else: #When fromRecon, only a single value is presented at a time in a list
+            #print('     Average Image: ' + str(time.time()-t0))
+            
+            #If not groupwise, then update the mzMap here, otherwise updated as indexes are chosen in groupwise
+            if percToScan == None and bestCFlag and len(self.mzReconImages)>0: 
+                self.mzRDPPMap = np.argmax(abs(self.mzImages-self.mzReconImages), axis=0).astype(int)
+                self.mzMap[newIdxs[:,0], newIdxs[:,1]] = self.mzAverageRanges[self.mzRDPPMap[newIdxs[:,0], newIdxs[:,1]]]
+
+        else: #When fromRecon (groupwise), only a single value is presented at a time in a list, set measured as recon value
+            
+            #If groupwise, the mzMap should updated as indexes are chosen, not when actual measurements are made
+            if percToScan != None and bestCFlag and len(self.mzReconImages)>0: 
+                self.mzRDPPMap = np.argmax(abs(self.mzImages-self.mzReconImages), axis=0).astype(int)
+                self.mzMap[newIdxs[:,0], newIdxs[:,1]] = self.mzAverageRanges[self.mzRDPPMap[newIdxs[:,0], newIdxs[:,1]]]
+            
+            #If reliant on the average image then set that, otherwise set for all of the mz images
             if averageReconInput or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
-                self.avgMeasuredImage[newIdxs[0][0], newIdxs[0][1]] = self.avgReconImage[newIdxs[0][0], newIdxs[0][1]]
-                
-            elif percToScan != None and erdModel == 'DLADS':
-                
-                #'Scan' values from the reconstructions
-                self.measuredmzImages[:, newIdxs[0][0], newIdxs[0][1]] = self.mzReconImages[:, newIdxs[0][0], newIdxs[0][1]]
-                
-                #Update the square mz images
-                self.squareMeasuredmzImages = np.asarray([resize(measuredmzImage, (self.squareDim[0], self.squareDim[1]), order=0) for measuredmzImage in self.measuredmzImages])
-                
-                #Perform averaging of the multiple channels
+                self.avgMeasuredImage[newIdxs[:,0], newIdxs[:,1]] = self.avgReconImage[newIdxs[:,0], newIdxs[:,1]]
+            else:
+                self.measuredmzImages[:, newIdxs[:,0], newIdxs[:,1]] = self.mzReconImages[:, newIdxs[:,0], newIdxs[:,1]]
+                self.squareMeasuredmzImages = resize(self.measuredmzImages, (self.measuredmzImages.shape[0], self.squareDim[0], self.squareDim[1]), order=0)
                 self.avgMeasuredImage = np.average(np.asarray(self.measuredmzImages), axis=0, weights=self.mzWeights)
         
-        self.avgSquareMeasuredImage = resize(self.avgMeasuredImage, (self.squareDim[0], self.squareDim[1]), order=0)
+        #Update unmeasured locations' neighbor information if neccessary
+        if neighborCalcFlag: self.neighborIndices, self.neighborWeights, self.neighborDistances = findNeighbors(self.squareMeasuredIdxs, self.squareUnMeasuredIdxs)
+
+        self.avgSquareMeasuredImage = resize(self.avgMeasuredImage, (self.squareDim), order=0)
         
-        #Update percentage pixels measured
+        #Update percentage pixels measured; only when not fromRecon
         self.percMeasured = (np.sum(self.mask)/self.area)*100
         
-        #Update unmeasured locations' neighbor information
-        self.neighborIndices, self.neighborWeights, self.neighborDistances = findNeighbors(self.squareMeasuredIdxs, self.squareUnMeasuredIdxs)
-
     #Reset the smaple mask and linesToScan
     def maskReset(self, simulationFlag):
         
@@ -540,7 +560,7 @@ class Sample:
         
 #Singular result generated through runSLADS
 class Result():
-    def __init__(self, sample, avgGroundTruthImage, cValue, bestCFlag, oracleFlag, simulationFlag, animationFlag):
+    def __init__(self, sample, avgGroundTruthImage, cValue, bestCFlag, oracleFlag, simulationFlag, animationFlag, neighborCalcFlag):
         self.sample = copy.deepcopy(sample)
         self.avgGroundTruthImage = copy.deepcopy(avgGroundTruthImage)
         self.cValue = cValue
@@ -548,37 +568,49 @@ class Result():
         self.animationFlag = copy.deepcopy(animationFlag)
         self.bestCFlag = copy.deepcopy(bestCFlag)
         self.oracleFlag = copy.deepcopy(oracleFlag)
+        self.neighborCalcFlag = copy.deepcopy(neighborCalcFlag)
         self.samples = []
+        self.mzMap = None
         self.percMeasuredList = []
         self.avgmzImagePSNRList = []
     
     #Save the model development
-    def update(self, sample):
+    def update(self, sample, completedRunFlag):
     
-        #If optimizing c, then do not store the sample, in order to reduce memory overhead
-        if not self.bestCFlag: self.samples.append(copy.deepcopy(sample))
+        #If optimizing c, then store mzMap at last step, and save average PSNR of the mz reconstructions, otherwise save duplicate of sample at this step
+        if self.bestCFlag:
+            if completedRunFlag: self.mzMap = copy.deepcopy(sample.mzMap)
+            self.avgmzImagePSNRList.append(np.average([compare_psnr(sample.mzImages[index], sample.mzReconImages[index], data_range=1) for index in range(0, len(sample.mzReconImages))]))
+        else:
+            self.samples.append(copy.deepcopy(sample))
+        
+        #Update list with percentage measured this step
         self.percMeasuredList.append(copy.deepcopy(sample.percMeasured))
         
-        #If optimizing c, then find and save the average PSNR of the mz reconstructions
-        if self.bestCFlag:
-            if len(sample.mzReconImages) == 0: sample.mzReconImages = np.asarray([resize(computeRecon(sample.squareMeasuredmzImages[index], sample), tuple(sample.finalDim), order=0) for index in range(0, len(sample.squareMeasuredmzImages))])
-            self.avgmzImagePSNRList.append(np.average([compare_psnr(sample.mzImages[index], sample.mzReconImages[index], data_range=1) for index in range(0, len(sample.mzReconImages))]))
-    
     #Generate visualiations/metrics as needed at the end of scanning
     def complete(self, optimalC): 
         
-        #If a simulation, then can do some pre-computation of values for normalization of mz Images/reconstructions
+        #If a simulation, then can do 
         if self.simulationFlag:
+            
+            #If neighbor information was not calculated live, then calculate it now for computation of comparative RD
+            if not self.neighborCalcFlag: 
+                for sample in tqdm(self.samples, desc='Neighbor Info', leave=False, ascii=True): 
+                    sample.neighborIndices, sample.neighborWeights, sample.neighborDistances = findNeighbors(sample.squareMeasuredIdxs, sample.squareUnMeasuredIdxs)
+            
+            #Some pre-computation of values for normalization of mz Images/reconstructions
             minMzImageValue, maxMzImageValue = np.min(self.samples[-1].mzImages), np.max(self.samples[-1].mzImages)
             diffMzImageValue = maxMzImageValue-minMzImageValue
-            
+        
         #Compute/compare reconstructions for all mz ranges at each step of the progression
         for sample in self.samples:
-            if parallelization:
-                results = list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(sample.squareMeasuredmzImages, sample, indexes) for indexes in np.array_split(np.arange(0, len(sample.squareMeasuredmzImages)), multiprocessing.cpu_count())])))
-            else:
-                results = [computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages]
-            if len(sample.mzReconImages) == 0: sample.mzReconImages = np.asarray([resize(result, tuple(self.samples[-1].finalDim), order=0) for result in results])
+            if len(sample.mzReconImages) == 0:
+                if parallelization:
+                    results = list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(sample.squareMeasuredmzImages, sample, indexes) for indexes in np.array_split(np.arange(0, len(sample.squareMeasuredmzImages)), multiprocessing.cpu_count())])))
+                else:
+                    results = [computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages]
+                sample.squaremzReconImages = np.asarray(results)
+                sample.mzReconImages = np.asarray([resize(result, tuple(self.samples[-1].finalDim), order=0) for result in results])
             
             #If a simulation, then normalize by the ground truth values and evaluate reconstructions
             if self.simulationFlag: 
@@ -682,7 +714,7 @@ class Result():
             for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
             animation.release()
             animation = None
-
+            
 #Perform gaussianGenerator for a set of sigma values
 @ray.remote
 def computeRecon_parhelper(images, sample, indexes):
@@ -752,14 +784,14 @@ def computeRD(sample, cValue, finalDimRD, bestCFlag, update=False, RDImage=None)
         updateLocations = np.argwhere(sample.prevSquareMask-sample.squareMask)
         
         #Find neighbor information
-        neigh = NearestNeighbors(n_neighbors=1)
-        neigh.fit(sample.squareMeasuredIdxs)
-        neighborDistances, neighborIndices = neigh.kneighbors(sample.squareUnMeasuredIdxs)
+        #neigh = NearestNeighbors(n_neighbors=1)
+        #neigh.fit(sample.squareMeasuredIdxs)
+        #neighborDistances, neighborIndices = neigh.kneighbors(sample.squareUnMeasuredIdxs)
         
         #Prepare variables for indexing
         updateLocations_list = updateLocations.tolist()
         squareMeasuredIdxs_list = sample.squareMeasuredIdxs.tolist()
-        neighborIndices = neighborIndices.ravel()
+        neighborIndices = sample.neighborIndices.ravel()
         
         #Find indices of updateLocations and then the indices of neighboring unMeasuredLocations 
         indices = [squareMeasuredIdxs_list.index(updateLocations_list[index]) for index in range(0, len(updateLocations))]
@@ -769,7 +801,7 @@ def computeRD(sample, cValue, finalDimRD, bestCFlag, update=False, RDImage=None)
         if len(indices)==0: return RDImage
         
         #Extract unMeasuredLocations to be updated and their relevant neighbor information (to avoid recalculation)
-        neighborDistances = neighborDistances[indices]
+        neighborDistances = sample.neighborDistances[indices]
         unMeasuredLocations = sample.squareUnMeasuredIdxs[indices]
     
     #If not performing just an update
@@ -777,15 +809,18 @@ def computeRD(sample, cValue, finalDimRD, bestCFlag, update=False, RDImage=None)
         
         #For novel variations, collapse mz difference stack, for original compute difference of collapsed mz stack
         if RDMethod == 'var': sample.RDPP = np.var(abs(sample.squaremzImages-sample.squaremzReconImages), axis=0)
-        elif RDMethod == 'max': sample.RDPP = np.max(abs(sample.squaremzImages-sample.squaremzReconImages), axis=0)
+        elif RDMethod == 'max': 
+            sample.RDPP = np.max(abs(sample.squaremzImages-sample.squaremzReconImages), axis=0)
+            
+            #If optimizing c/mz then identify which mz ranges were used for each pixel (in the physical domain)
+            #if bestCFlag: sample.mzRDPPMap = np.argmax(resize(abs(sample.squaremzImages-sample.squaremzReconImages), (len(sample.mzRanges), sample.finalDim[0], sample.finalDim[1]), order=0), axis=0)
+            
         elif RDMethod == 'avg': sample.RDPP = np.mean(abs(sample.squaremzImages-sample.squaremzReconImages), axis=0)
         elif RDMethod == 'original': sample.RDPP = computeDifference(sample.avgSquareGroundTruthImage, sample.avgSquareReconImage)
         else: sys.exit('Error! - Unknown RD Method specified in configuration: ' + RDMethod)
         
-        #Find neighbor information
-        neigh = NearestNeighbors(n_neighbors=1)
-        neigh.fit(sample.squareMeasuredIdxs)
-        neighborDistances, _ = neigh.kneighbors(unMeasuredLocations)
+        #Neighbor information for all unmeasured locations is already in the sample
+        neighborDistances = sample.neighborDistances
     
     #Calculate the sigma values for chosen c value
     sigmaValues = neighborDistances[:,0]/cValue
@@ -793,7 +828,7 @@ def computeRD(sample, cValue, finalDimRD, bestCFlag, update=False, RDImage=None)
     #Determine RDValues, parallelizing if not done so at a higher level
     if not bestCFlag and parallelization:
         RDPP_id = ray.put(sample.RDPP)
-        sigmaValues_id = ray.put(neighborDistances[:,0]/cValue)
+        sigmaValues_id = ray.put(sigmaValues)
         idxs_id = ray.put(unMeasuredLocations)
         results = np.asarray(list(chain.from_iterable(ray.get([gaussian_parhelper.remote(RDPP_id, idxs_id, sigmaValues_id, update, indexes) for indexes in np.array_split(np.arange(0, len(unMeasuredLocations)), multiprocessing.cpu_count())]))))
     else:
@@ -802,7 +837,6 @@ def computeRD(sample, cValue, finalDimRD, bestCFlag, update=False, RDImage=None)
     #Update or compute 2D RD; save pre-Normalization image in case of future updates
     if not update:
         RDImage = np.zeros((sample.squareMask.shape))
-        #RDImage[np.where(sample.squareMask==0)] = results
         RDImage[tuple(unMeasuredLocations.T)] = results
         sample.preNormRDImage = copy.deepcopy(RDImage)
     else:
@@ -871,32 +905,49 @@ def computeERD(sample, model):
         #Remove values that are less than those already scanned (0 ERD)
         ERD[np.where((ERD < 0))] = 0
         
-        #Resize to physical domain dimensionality
-        ERD = resize(ERD, tuple(sample.finalDim), order=0)
-    
         #Normalize for PSNR comparisons
         ERD = (ERD-np.min(ERD))/(np.max(ERD)-np.min(ERD))
         
+        #Resize to physical domain dimensionality
+        ERD = resize(ERD, tuple(sample.finalDim), order=0)
+    
     elif erdModel == 'DLADS':
         
-        #Send input through trained model
-        if averageReconInput: inputImage, originalShape = makeCompatible(featureExtractor(sample, sample.avgSquareMeasuredImage, sample.avgSquareReconImage))
-        else: inputImage, originalShape = makeCompatible(np.stack(sample.squareMeasuredmzImages, axis=-1))
-
-        #Normalize inputs, compute ERD, normalize output and resize to finalDim
+        #t0=time.time()
+        #Get and normalize input data
+        if averageReconInput: inputImage = featureExtractor(sample, sample.avgSquareMeasuredImage, sample.avgSquareReconImage)
+        else: inputImage = np.stack(sample.squareMeasuredmzImages, axis=-1)
         inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
-        predictionTensor = model.predict(inputImage, steps=1)
-        imagePred = tf.divide(tf.subtract(predictionTensor,tf.reduce_min(predictionTensor)), tf.subtract(tf.reduce_max(predictionTensor),tf.reduce_min(predictionTensor)))
-        ERD = resize(imagePred[0,:,:,0], tuple(sample.finalDim), order=0)
+        inputImage, topBottomPad, leftRightPad = makeCompatible(inputImage)
+        #print('Compatability: ' + str(time.time()-t0))
+        
+        #Send input through trained model
+        #t0=time.time()
+        ERD = model(inputImage, training=False)[0,:,:,0].numpy()
+        #print('Model ERD (GPU): ' + str(time.time()-t0))
+        
+        #t0=time.time()
+        ERD = ERD[topBottomPad:, leftRightPad:]
+        ERD = (ERD-np.min(ERD))/(np.max(ERD)-np.min(ERD))
+        ERD = resize(ERD, tuple(sample.finalDim), order=0)
+        #print('Normalize/Resize Output: ' + str(time.time()-t0))
 
     return ERD
 
 #Dynamically scan a sample so as to maximize reconstruction PSNR
 def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc, simulationFlag, trainPlotFlag, animationFlag, tqdmHide, oracleFlag, bestCFlag):
     
+    #Setup flags for whether reconstructions need to be performed of averages and/or each mz range
+    avgReconstructionFlag, mzReconstructionFlag = False, False
+    if averageReconInput or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net' or RDMethod == 'original': avgReconstructionFlag = True
+    if bestCFlag or (percToScan != None and erdModel == 'DLADS' and ((lineMethod != 'segLine' and scanMethod=='linewise') or scanMethod=='pointwise')): mzReconstructionFlag = True
+    
+    #Determine whether neighbor information needs to be calculated each iteration
+    if avgReconstructionFlag or mzReconstructionFlag or oracleFlag: neighborCalcFlag = True
+    else: neighborCalcFlag = False
+
     #If bestC (parallel run) then need to make sample writable
     if bestCFlag: sample = copy.deepcopy(sample)
-    #else: sample = samples[sampleNum]
     
     #If not a simulation then sample.mzImages contains the initially measured images, mask is already populated with initial points
     if not simulationFlag: 
@@ -906,17 +957,17 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
     #Reinitialize the mask to starting state
     sample.maskReset(simulationFlag)
 
-    #Indicate the stopping condition has not yet been met
+    #Indicate that the stopping condition has not yet been met
     completedRunFlag = False
     
     #Perform the initial measurements
-    if simulationFlag: sample.performMeasurements(np.transpose(np.where(sample.initialMask == 1)), simulationFlag, False)
+    if simulationFlag: sample.performMeasurements(np.transpose(np.where(sample.initialMask == 1)), percToScan, simulationFlag, False, bestCFlag, neighborCalcFlag)
 
     #Calculate the reconstruction(s)
-    if averageReconInput or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net' or RDMethod == 'original': 
+    if avgReconstructionFlag: 
         sample.avgSquareReconImage = computeRecon(sample.avgSquareMeasuredImage, sample)
         sample.avgReconImage = resize(sample.avgSquareReconImage, tuple(sample.finalDim), order=0)
-    if percToScan != None and erdModel == 'DLADS':
+    if mzReconstructionFlag:
         if not bestCFlag and parallelization: sample.squaremzReconImages = np.asarray(list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(sample.squareMeasuredmzImages, sample, indexes) for indexes in np.array_split(np.arange(0, len(sample.squareMeasuredmzImages)), multiprocessing.cpu_count())]))))
         else: sample.squaremzReconImages = np.asarray([computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages])
         sample.mzReconImages = np.asarray([resize(squaremzReconImage, tuple(sample.finalDim), order=0) for squaremzReconImage in sample.squaremzReconImages])
@@ -925,15 +976,17 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
     if oracleFlag or bestCFlag: sample.ERD = computeRD(sample, cValue, True, bestCFlag)
     else: sample.ERD = computeERD(sample, model)
 
-    #Initialize and perform first update for a result object
-    result = Result(sample, sample.avgGroundTruthImage, cValue, bestCFlag, oracleFlag, simulationFlag, animationFlag)
-    result.update(sample)
-
+    #Initialize a result object
+    result = Result(sample, sample.avgGroundTruthImage, cValue, bestCFlag, oracleFlag, simulationFlag, animationFlag, neighborCalcFlag)
+    
     #Check stopping criteria, just in case of a bad input
     if (scanMethod == 'pointwise' or not lineVisitAll) and (round(sample.percMeasured) >= stopPerc): completedRunFlag = True
     if scanMethod == 'linewise' and len(sample.linesToScan) == 0: completedRunFlag = True
-
-    if not lineVisitAll: maxProgress = stopPerc
+    
+    #Perform the first update for the result
+    result.update(sample, completedRunFlag)
+    
+    if not lineVisitAll or scanMethod != 'linewise': maxProgress = stopPerc
     else: maxProgress = 100
     #Until the stopping criteria has been met
     with tqdm(total = float(maxProgress), desc = '% Sampled', leave = False, ascii=True, disable=tqdmHide) as pbar:
@@ -945,42 +998,58 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
         #Until the program has completed
         while not completedRunFlag:
             
+            #print('\n')
+            
+            #t0 = time.time()
             #Find next measurement locations
-            newIdxs = findNewMeasurementIdxs(sample, result, model, scanMethod, cValue, simulationFlag, oracleFlag, bestCFlag, percToScan)
+            newIdxs = findNewMeasurementIdxs(sample, result, model, scanMethod, cValue, simulationFlag, oracleFlag, bestCFlag, neighborCalcFlag, percToScan)
+            #print('Find Time: ' + str(time.time()-t0))
             
+            #t0 = time.time()
             #Perform measurements
-            sample.performMeasurements(newIdxs, simulationFlag, False)
+            sample.performMeasurements(newIdxs, percToScan, simulationFlag, False, bestCFlag, neighborCalcFlag)
+            #print('Scan Time: ' + str(time.time()-t0))
             
+            #t0 = time.time()
             #Calculate the reconstruction(s)
-            if averageReconInput or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net' or RDMethod == 'original': 
+            if avgReconstructionFlag:
                 sample.avgSquareReconImage = computeRecon(sample.avgSquareMeasuredImage, sample)
                 sample.avgReconImage = resize(sample.avgSquareReconImage, tuple(sample.finalDim), order=0)
-            if percToScan != None and erdModel == 'DLADS':
+            if mzReconstructionFlag:
                 if not bestCFlag and parallelization: sample.squaremzReconImages = np.asarray(list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(sample.squareMeasuredmzImages, sample, indexes) for indexes in np.array_split(np.arange(0, len(sample.squareMeasuredmzImages)), multiprocessing.cpu_count())]))))
                 else: sample.squaremzReconImages = np.asarray([computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages])
                 sample.mzReconImages = np.asarray([resize(squaremzReconImage, tuple(sample.finalDim), order=0) for squaremzReconImage in sample.squaremzReconImages])
-                    
+            #print('Reconstructions: ' + str(time.time()-t0))
+            
+            #t0 = time.time()
             #Determine ERD or use the RD as the ERD if the oracleFlag or bestCFlag is enabled
             if oracleFlag or bestCFlag: sample.ERD = computeRD(sample, cValue, True, bestCFlag)
             else: sample.ERD = computeERD(sample, model)
+            #print('E/RD Computation: ' + str(time.time()-t0))
             
+            #t0 = time.time()
             #Check stopping conditions
             if (scanMethod == 'pointwise' or not lineVisitAll) and (round(sample.percMeasured) >= stopPerc): completedRunFlag = True
             if scanMethod == 'linewise' and len(sample.linesToScan) == 0: completedRunFlag = True
-
+            #print('Stopping Cond: ' + str(time.time()-t0))
+            
+            #t0 = time.time()
             #If viz limit, only update when percToViz has been met; otherwise update every iteration
-            if ((percToViz != None) and ((sample.percMeasured - result.percMeasuredList[-1]) >= percToViz)) or (percToViz == None):
-                result.update(sample)
-                performUpdate = False
+            if ((percToViz != None) and ((sample.percMeasured - result.percMeasuredList[-1]) >= percToViz)) or (percToViz == None): result.update(sample, completedRunFlag)
+            #print('Result Update: ' + str(time.time()-t0))
 
+            #t0 = time.time()
             #Update the progress bar
             pbar.n = round(sample.percMeasured,2)
             pbar.refresh()
-
+            #print('Progress Bar: ' + str(time.time()-t0))
+            
+            #print('\n')
+            
     return result
 
 #Determine which unmeasured points of a sample should be scanned given the current E/RD
-def findNewMeasurementIdxs(sample, result, model, scanMethod, cValue, simulationFlag, oracleFlag, bestCFlag, percToScan):
+def findNewMeasurementIdxs(sample, result, model, scanMethod, cValue, simulationFlag, oracleFlag, bestCFlag, neighborCalcFlag, percToScan):
 
     if scanMethod == 'random':
         newIdxs = sample.unMeasuredIdxs.tolist()
@@ -991,8 +1060,8 @@ def findNewMeasurementIdxs(sample, result, model, scanMethod, cValue, simulation
         ERD = np.asarray(sample.ERD)
     if scanMethod == 'pointwise':
         
-        #If performing a groupwise scan, use reconstruction as the "performed" measurement, until reaching target
-        if (percToScan != None):
+        #If performing a groupwise scan, use reconstruction as the measurement value, until reaching target number of points to scan
+        if percToScan != None:
         
             #Create a list to hold the chosen scanning locations
             newIdxs = []
@@ -1004,10 +1073,9 @@ def findNewMeasurementIdxs(sample, result, model, scanMethod, cValue, simulation
                 newIdxs.append(sample.unMeasuredIdxs[np.argmax(ERD[sample.mask==0])])
                 
                 #Perform the measurement, using values from reconstruction 
-                sample.performMeasurements([newIdxs[-1]], simulationFlag, True)
+                sample.performMeasurements(newIdxs[-1], percToScan, simulationFlag, True, bestCFlag, neighborCalcFlag)
                 
                 #When enough new locations have been determined, break from loop
-                
                 if (sample.percMeasured-result.percMeasuredList[-1]) >= percToScan: break
                 
                 #Re-compute/update ERD/RD; ensure in an array
@@ -1051,7 +1119,7 @@ def findNewMeasurementIdxs(sample, result, model, scanMethod, cValue, simulation
                 lineToScanIdxs = np.delete(lineToScanIdxs, nextIndex, 0)
                 
                 #Perform the measurement, using values from reconstruction 
-                sample.performMeasurements([newIdxs[-1]], simulationFlag, True)
+                sample.performMeasurements(newIdxs[-1], percToScan, simulationFlag, True, bestCFlag, neighborCalcFlag)
                 
                 #When enough new locations have been determined, break from loop
                 if (len(newIdxs)/len(sample.linesToScan[lineToScanIdx]))*100 >= stopPerc: break
@@ -1069,7 +1137,7 @@ def findNewMeasurementIdxs(sample, result, model, scanMethod, cValue, simulation
         #PARTIAL LINE BY START/END POINTS
         #==========================================
         #Choose segment to scan on line which contains at least stopPerc locations with maximal ERD
-        elif lineMethod == 'startEndPoints':
+        elif lineMethod == 'segLine':
             newIdxs = lineToScanIdxs.copy()
             newIdxs = np.asarray(newIdxs)[np.argsort(lineERDValues)][::-1][:int((stopPerc/100)*len(lineERDValues))]
             orderedNewIdxs = newIdxs[np.argsort(newIdxs[:,0]*newIdxs[:,1])]
@@ -1095,13 +1163,13 @@ def findNewMeasurementIdxs(sample, result, model, scanMethod, cValue, simulation
         else: sample.delLine(lineToScanIdx)
         #==========================================
 
-    return newIdxs
+    return np.asarray(newIdxs)
 
 def findNeighbors(measuredIdxs, unMeasuredIdxs):
 
     #Calculate knn
-    neigh = NearestNeighbors(n_neighbors=numNeighbors)
-    neigh.fit(measuredIdxs)
+    neigh = NearestNeighbors(n_neighbors=numNeighbors).fit(measuredIdxs)
+    #neigh.fit(measuredIdxs)
     neighborDistances, neighborIndices = neigh.kneighbors(unMeasuredIdxs)
 
     #Determine inverse distance weights
@@ -1117,54 +1185,16 @@ def computeRecon(inputImage, sample):
     reconImage = np.zeros(sample.squareDim)
 
     #Retreive measured values
-    #idxsX, idxsY = map(list, zip(*[tuple(idx) for idx in sample.squareMeasuredIdxs]))
-    #measuredValues = inputImage[np.asarray(idxsX), np.asarray(idxsY)]
     measuredValues = inputImage[tuple(sample.squareMeasuredIdxs.T)]
     
     #Compute reconstruction values using IDW (inverse distance weighting)
     reconImage[tuple(sample.squareUnMeasuredIdxs.T)] = np.sum(measuredValues[sample.neighborIndices]*sample.neighborWeights, axis=1)
-    #reconImage[sample.squareUnMeasuredIdxs[:,0], sample.squareUnMeasuredIdxs[:,1]] = np.sum(measuredValues[sample.neighborIndices]*sample.neighborWeights, axis=1)
 
     #Combine measured values back into the reconstruction image
     reconImage[tuple(sample.squareMeasuredIdxs.T)] = measuredValues
     reconImage[sample.squareMeasuredIdxs[:,0], sample.squareMeasuredIdxs[:,1]] = measuredValues
 
     return reconImage
-
-#Perform the reconstruction with 0-padding around edges; removes reconstruction stretching to edges in initial measurements
-#def computeRecon(inputImage, maskObject):
-#
-#    #Pad input image with a 0-border (known 0 values around the image)
-#    inputImage = np.pad(inputImage, [(1, 1), (1, 1)], mode='constant', constant_values=0)
-#
-#    #Duplicate the mask object, pad a 1-border (scanned idxs) around the mask, account for the padding in internal variables
-#    tempMaskObject = copy.deepcopy(maskObject)
-#    tempMaskObject.mask = np.pad(tempMaskObject.mask, [(1, 1), (1, 1)], mode='constant', constant_values=1)
-#    tempMaskObject.imageHeight+=2
-#    tempMaskObject.imageWidth+=2
-#    tempMaskObject.measuredIdxs = np.transpose(np.where(tempMaskObject.mask == 1))
-#    tempMaskObject.unMeasuredIdxs = np.transpose(np.where(tempMaskObject.mask == 0))
-#
-#    #Find neighbor information
-#    neighborIndices, neighborWeights, neighborDistances = findNeighbors(tempMaskObject)
-#
-#    #Create a blank image for the reconstruction
-#    reconImage = np.zeros((tempMaskObject.imageHeight, tempMaskObject.imageWidth))
-#
-#    #Retreive measured values
-#    idxsX, idxsY = map(list, zip(*[tuple(idx) for idx in tempMaskObject.measuredIdxs]))
-#    measuredValues = inputImage[np.asarray(idxsX), np.asarray(idxsY)]
-#
-#    #Compute reconstruction values using IDW (inverse distance weighting)
-#    reconImage[tempMaskObject.unMeasuredIdxs[:,0], tempMaskObject.unMeasuredIdxs[:,1]] = np.sum(measuredValues[neighborIndices]*neighborWeights, axis=1)
-#
-#    #Combine measured values back into the reconstruction image
-#    reconImage[tempMaskObject.measuredIdxs[:,0], tempMaskObject.measuredIdxs[:,1]] = measuredValues
-#
-#    #Remove 0-padding
-#    reconImage = reconImage[1:maskObject.imageHeight+1, 1:maskObject.imageWidth+1]
-#
-#    return reconImage
 
 #CNN
 def cnn(numFilters, numChannels):
@@ -1199,7 +1229,7 @@ def mlp(numFilters, numChannels):
 
     return tf.keras.Model(inputs=inputs, outputs=output)
 
-def unet(numFilters, numChannels):
+def flatunet(numFilters, numChannels):
 
     inputs = Input(shape=(None,None,numChannels))
     
@@ -1246,6 +1276,54 @@ def unet(numFilters, numChannels):
     
     return tf.keras.Model(inputs=inputs, outputs=output)
     
+    
+def unet(numFilters, numChannels):
+
+    inputs = Input(shape=(None,None,numChannels))
+    
+    conv1 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
+    conv1 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv1)
+    conv1 = LayerNormalization()(conv1)
+    down1 = Conv2D(numFilters, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv1)
+    
+    conv2 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down1)
+    conv2 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv2)
+    conv2 = LayerNormalization()(conv2)
+    down2 = Conv2D(numFilters*2, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv2)
+    
+    conv3 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down2)
+    conv3 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv3)
+    conv3 = LayerNormalization()(conv3)
+    conv3 = Dropout(rate=0.5)(conv3)
+    down3 = Conv2D(numFilters*4, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv3)
+    
+    conv4 = Conv2D(numFilters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down3)
+    conv4 = Conv2D(numFilters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv4)
+    conv4 = LayerNormalization()(conv4)
+    conv4 = Dropout(rate=0.5)(conv4)
+
+    up7 = Conv2D(numFilters*8, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv4))
+    merge7 = concatenate([conv3,up7], axis = 3)
+    conv7 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge7)
+    conv7 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv7)
+    conv7 = LayerNormalization()(conv7)
+
+    up8 = Conv2D(numFilters*4, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv7))
+    merge8 = concatenate([conv2,up8], axis = 3)
+    conv8 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge8)
+    conv8 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv8)
+    conv8 = LayerNormalization()(conv8)
+
+    up9 = Conv2D(numFilters*2, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv8))
+    merge9 = concatenate([conv1,up9], axis = 3)
+    conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge9)
+    conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
+    conv9 = LayerNormalization()(conv9)
+    
+    output = Conv2D(1, (1,1), activation='linear', padding='same')(conv9)
+    
+    return tf.keras.Model(inputs=inputs, outputs=output)
+    
 #Extract features of interest from a reconstruction for propogation through network
 def featureExtractor(sample, measuredImage, reconImage):
 
@@ -1259,19 +1337,18 @@ def featureExtractor(sample, measuredImage, reconImage):
 #Convert image into TF model compatible shapes/tensors
 def makeCompatible(image):
     
-    #Save the original image dimensions
-    originalShape = image.shape[:2]
+    topBottomPad = int(np.ceil(image.shape[0]/depthFactor)*depthFactor)-image.shape[0]
+    leftRightPad = int(np.ceil(image.shape[1]/depthFactor)*depthFactor)-image.shape[1]
     
-    #Resize with nearest neighbor for the network architecture
-    image = resize(image, (int(np.ceil(image.shape[0]/depthFactor)*depthFactor), int(np.ceil(image.shape[1]/depthFactor)*depthFactor)), order=0)
-
     #Reshape for tensor transition, as needed by number of channels
-    try:
+    if len(image.shape) > 2: 
+        image = np.pad(image, [(topBottomPad, 0), (leftRightPad, 0), (0,0) ], mode='constant', constant_values=0)
         image = image.reshape((1,image.shape[0],image.shape[1],image.shape[2]))
-    except:
+    else: 
+        image = np.pad(image, [(topBottomPad, 0), (leftRightPad, 0)], mode='constant', constant_values=0)
         image = image.reshape((1,image.shape[0],image.shape[1],1))
 
-    return image, originalShape
+    return image, topBottomPad, leftRightPad
 
 #Interpolate results to a given precision for averaging results
 def percResults(results, perc_testingResults, precision):

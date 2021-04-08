@@ -63,10 +63,10 @@ stopPerc = 40
 initialPercToScan = 1
 
 #If group-wise, what percentage of points should be acquired; otherwise set to None
-percToScan = 1
+percToScan = None
 
 #What percentage of points should be acquired between visualization steps; if all steps should be, then set to None
-percToViz = None
+percToViz = 1
 
 #==================================================================
 
@@ -125,8 +125,8 @@ featDistCutoff = 0.25
 #DLADS MODEL PARAMETERS (disregard if using SLADS-LS or SLADS-Net)
 #==================================================================
 
-#Which model should be used for training: cnn, or unet
-modelDef = 'unet'
+#Which model should be used for training: cnn, unet, or flatunet
+modelDef = 'flatunet'
 
 #How many filters should be used
 numStartFilters = 32

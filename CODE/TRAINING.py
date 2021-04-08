@@ -104,11 +104,12 @@ class EpochEnd(keras.callbacks.Callback):
                 
                 #Show a validation sample result at min and max sampling percentages (variables provided through callback initialization)
                 for imageNum in range(0, len(self.vizOutputValImages)):
-                    predictionTensor = self.model.predict(self.vizInputValTensors[imageNum], steps=1)
-                    ERD_PSNR = PSNR(self.vizOutputValTensors[imageNum], predictionTensor).numpy()
-                    imagePred = tf.divide(tf.subtract(predictionTensor,tf.reduce_min(predictionTensor)), tf.subtract(tf.reduce_max(predictionTensor),tf.reduce_min(predictionTensor)))
-                    ERD = resize(imagePred[0,:,:,0], (self.vizValShapes[imageNum]), order=0)
-                    #ERD_PSNR = compare_psnr(self.vizOutputValImages[imageNum], ERD, data_range=1)
+                    
+                    ERD = self.model(self.vizInputValTensors[imageNum], training=False)[0,:,:,0].numpy()
+                    ERD = ERD[self.vizValShapes[imageNum][0]:, self.vizValShapes[imageNum][1]:]
+                    ERD = (ERD-np.min(ERD))/(np.max(ERD)-np.min(ERD))
+                    
+                    ERD_PSNR = compare_psnr(self.vizOutputValImages[imageNum], ERD, data_range=1)
                     
                     if averageReconInput:
                         ax = plt.subplot2grid((3,4), (imageNum+1,0))
@@ -196,7 +197,7 @@ def runSLADS_parhelper(sample, model, scanMethod, cValue, percToScan, percToViz,
 def optimizeC(trainingSamples):
 
     #If there are more than one c value, determine which minimizes the total distortion in the samples, force this optimization to be performed with pointwise scanning
-    if len(cValues)>1:
+    if len(cValues)>0:
         
         if parallelization:
             futures = []
@@ -208,10 +209,32 @@ def optimizeC(trainingSamples):
             results = []
             for cNum in tqdm(range(0, len(cValues)), desc='c Values', leave=True, ascii=True):
                 results.append([runSLADS(trainingSamples[sampleNum], None, 'pointwise', cValues[cNum], 1, None, stopPerc, simulationFlag=True, trainPlotFlag=True, animationFlag=False, tqdmHide=True, oracleFlag=True, bestCFlag=True) for sampleNum in tqdm(range(0, len(trainingSamples)), desc='Samples', leave=False, ascii=True)])
-        
+                
         areaUnderCurveList = []
         for cNum in range(0, len(cValues)):
             
+            if RDMethod == 'max':
+                mzTotalData = []
+                for result in results[cNum]:
+                
+                    #Setup a colormap for mz ranges
+                    mz_cmap = matplotlib.cm.viridis
+                    mz_norm = matplotlib.colors.BoundaryNorm(result.sample.mzAverageRanges, mz_cmap.N, extend='both')
+
+                    #Plot and save distribution of which mz were used for RD determination
+                    plt.imshow(np.nan_to_num(result.mzMap), aspect='auto')
+                    plt.colorbar(matplotlib.cm.ScalarMappable(norm=mz_norm, cmap=mz_cmap), orientation='vertical', pad=0.01, label='Average of mz Range')
+                    plt.savefig(dir_TrainingResultsImages+'mzMap_c_' + str(cValues[cNum]) + '_sample_' + result.sample.name + '.png')
+                    plt.close()
+
+                    #Add mz values to list for later tabulation
+                    mzTotalData +=result.mzMap[~np.isnan(result.mzMap)].tolist()
+
+                #Get/Save unique mz and counts
+                mzData = np.transpose(np.unique(mzTotalData, return_counts=True))
+                mzData = mzData[np.argsort(mzData[:,1])][::-1]
+                np.savetxt(dir_TrainingResultsImages+'mzData_c_' + str(cValues[cNum]) + '.csv', mzData, delimiter=',', fmt='%f')
+
             #Extract percentage results at the specified precision
             percents, trainingmzPSNR_mean = percResults([result.avgmzImagePSNRList for result in results[cNum]], [result.percMeasuredList  for result in results[cNum]], precision)
 
@@ -270,11 +293,11 @@ def generateTrainingData(samples, optimalC):
                 while (round(newSample.percMeasured) < measurementPerc):
                     
                     #If this isn't the first iteration, then scan pointwise randomly in a new sample instance
-                    if not firstIteration: newIdxs = findNewMeasurementIdxs(newSample, None, None, 'random', optimalC, True, False, False, measurementPerc-newSample.percMeasured)
+                    if not firstIteration: newIdxs = findNewMeasurementIdxs(newSample, None, None, 'random', optimalC, True, False, False, True, measurementPerc-newSample.percMeasured)
                     else: firstIteration = False
                     
                     #Perform measurements
-                    newSample.performMeasurements(newIdxs, True, False)
+                    newSample.performMeasurements(newIdxs, percToScan, True, False, False, True)
                     
                     #Calculate the reconstruction(s)
                     newSample.avgSquareReconImage = computeRecon(newSample.avgSquareMeasuredImage, newSample)
@@ -333,7 +356,7 @@ def generateTrainingData(samples, optimalC):
                     plt.axis('off')
                     plt.imshow(newSample.mask, aspect='auto', cmap='gray')
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ newSample.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(newSample.percMeasured, 4)) + '.png', bbox_inches=extent)
                     plt.close()
                     
                     fig=plt.figure()
@@ -341,7 +364,7 @@ def generateTrainingData(samples, optimalC):
                     plt.axis('off')
                     plt.imshow(resize(newSample.RDImage, tuple(newSample.finalDim), order=0), aspect='auto')
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ newSample.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(newSample.percMeasured, 4)) + '.png', bbox_inches=extent)
                     plt.close()
                     
                     fig=plt.figure()
@@ -349,7 +372,7 @@ def generateTrainingData(samples, optimalC):
                     plt.axis('off')
                     plt.imshow(newSample.avgMeasuredImage, aspect='auto', cmap='hot')
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ newSample.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(newSample.percMeasured, 4)) + '.png', bbox_inches=extent)
                     plt.close()
                     
                     fig=plt.figure()
@@ -357,9 +380,41 @@ def generateTrainingData(samples, optimalC):
                     plt.axis('off')
                     plt.imshow(newSample.avgReconImage, aspect='auto', cmap='hot')
                     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ newSample.name + '_percentage_' + str(round(newSample.percMeasured, 4)) + '_variation_' + str(maskNum) + '.png', bbox_inches=extent)
+                    plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ newSample.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(newSample.percMeasured, 4)) + '.png', bbox_inches=extent)
                     plt.close()
             
+            #Save mz images in grid; assumes 35 for now
+            totalNumColumns = 5
+            f = plt.figure(figsize=(18,20))
+            f.patch.set_facecolor('#FFFFFF')
+            f.subplots_adjust(top = 0.95, bottom = 0.05, left=0.05, right=0.95)
+            f.subplots_adjust(wspace=0.1, hspace=0.3)
+        
+            numRow, numColumn = 0, 0
+            for mzNum in range(0, len(newSample.mzImages)):
+
+                ax = plt.subplot2grid((round(len(newSample.mzImages)/totalNumColumns),totalNumColumns), (numRow,numColumn))
+                ax.imshow(newSample.mzImages[mzNum], aspect='auto', cmap='hot')
+                ax.set_title(str(newSample.mzRanges[mzNum]))
+
+                numColumn+=1
+                if numColumn >= totalNumColumns:
+                    numColumn=0
+                    numRow+=1
+                    
+            plt.suptitle(newSample.name, fontsize=15, fontweight='bold')
+            plt.savefig(dir_TrainingResultsImages + 'mzImages_'+ newSample.name +'.png')
+            plt.close()
+        
+            #Save each mz image individually
+            for mzNum in range(0, len(newSample.mzImages)):
+                ax=fig.add_subplot(1,1,1)
+                plt.axis('off')
+                plt.imshow(newSample.mzImages[mzNum], aspect='auto', cmap='hot')
+                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_fullmz_ '+ newSample.name  + '_variation_' + str(maskNum) + '_mz_' + str(newSample.mzRanges[mzNum][0]) + '-' + str(newSample.mzRanges[mzNum][1]) + '.png', bbox_inches=extent)
+                plt.close()
+    
     #Save the complete databases
     pickle.dump(trainingDatabase, open(dir_TrainingResults + 'trainingDatabase.p', 'wb'))
 
@@ -403,16 +458,17 @@ def trainModel(trainingDatabase, optimalC):
         inputImages, outputImages, imagesShapes = [], [], []
         for trainingSample in tqdm(trainingDatabase, desc = 'Setup', leave=True, ascii=True):
             
-            #Compute feature image for network input
-            if averageReconInput: inputImage, originalShape = makeCompatible(featureExtractor(trainingSample, trainingSample.avgSquareMeasuredImage, trainingSample.avgSquareReconImage))
-            else: inputImage, originalShape = makeCompatible(np.stack(trainingSample.squareMeasuredmzImages, axis=-1))
+            #Make input and output compatible with network (output pre-normalized)
+            if averageReconInput: inputImage = featureExtractor(trainingSample, trainingSample.avgSquareMeasuredImage, trainingSample.avgSquareReconImage)
+            else: inputImage = np.stack(trainingSample.squareMeasuredmzImages, axis=-1)
             inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
-            outputImage, originalShape = makeCompatible(trainingSample.RDImage)
+            inputImage, topBottomPad, leftRightPad = makeCompatible(inputImage)
+            outputImage, topBottomPad, leftRightPad = makeCompatible(trainingSample.RDImage)
             
-            #Add to lists
+            #Add inputs and padding information to lists
             inputImages.append(inputImage)
             outputImages.append(outputImage)
-            imagesShapes.append(originalShape)
+            imagesShapes.append([topBottomPad, leftRightPad])
 
         #If there is a validation set, then split it from the training set, else indicate such with a flag
         noValFlag = False
@@ -421,20 +477,19 @@ def trainModel(trainingDatabase, optimalC):
         else:
             trainInputImages = inputImages[:numTraining]
             trainOutputImages = outputImages[:numTraining]
-            trainingShapes = imagesShapes[:numTraining]
+            #trainingShapes = imagesShapes[:numTraining]
             valInputImages = inputImages[numTraining:]
             valOutputImages = outputImages[numTraining:]
             valShapes = imagesShapes[numTraining:]
         
         #Determine the number of channels in the input images
-        try:
-            numChannels = trainInputImages[0].shape[3]
-        except:
-            numChannels = 1
-
+        if len(trainInputImages[0].shape) > 2: numChannels = trainInputImages[0].shape[3]
+        else: numChannels = 1
+        
         #Create and compile the chosen model/optimizer
         if modelDef == 'cnn': model = cnn(numStartFilters, numChannels)
         if modelDef == 'unet': model = unet(numStartFilters, numChannels)
+        if modelDef == 'flatunet': model = flatunet(numStartFilters, numChannels)
         if modelDef == 'mlp': model = mlp(numStartFilters, numChannels)
         trainOptimizer = tf.keras.optimizers.Nadam(learning_rate=learningRate)
         model.compile(optimizer=trainOptimizer, loss='mean_squared_error', metrics=[PSNR])
@@ -450,9 +505,9 @@ def trainModel(trainingDatabase, optimalC):
             for sampleLocation in sampleLocations:
                 vizInputValTensors.append(valInputImages[sampleLocation])
                 vizOutputValTensors.append(valOutputImages[sampleLocation])
-                if averageReconInput: vizInputValImages.append(resize(valInputImages[sampleLocation][0,:,:,:], (valShapes[sampleLocation]), order=0))
+                if averageReconInput: vizInputValImages.append(valInputImages[sampleLocation][0,valShapes[sampleLocation][0]:,valShapes[sampleLocation][1]:,:])
                 vizValShapes.append(valShapes[sampleLocation])
-                vizOutputValImages.append(resize(valOutputImages[sampleLocation][0,:,:,0], (valShapes[sampleLocation]), order=0))
+                vizOutputValImages.append(valOutputImages[sampleLocation][0, valShapes[sampleLocation][0]:, valShapes[sampleLocation][1]:,0])
                 
         #Perform training
         t0 = time.time()
