@@ -22,7 +22,7 @@ def performImplementation(model, optimalC):
     equipWait()
     
     #Create a sample object and read the first sets of information
-    sample = Sample(dir_ImpDataFinal, initialPercToScan, scanMethod)
+    sample = Sample(dir_ImpDataFinal, initialPercToScan, scanMethod, False)
     
     #Indicate where resulting data should be stored
     sample.resultsPath = dir_ImpResults

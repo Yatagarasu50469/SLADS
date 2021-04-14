@@ -154,7 +154,7 @@ def importInitialData(sortedTrainingSampleFolders):
     for trainingSampleFolder in tqdm(sortedTrainingSampleFolders, desc = 'Training Samples', ascii=True):
         
         #Read all available scan data into a sample object
-        sample = Sample(trainingSampleFolder, initialPercToScan, scanMethod, ignoreMissingLines=True)
+        sample = Sample(trainingSampleFolder, initialPercToScan, scanMethod, True, ignoreMissingLines=True)
         sample.readScanData(lineRevistMethod)
         
         #Save a visual of the averaged ground-truth
@@ -284,7 +284,7 @@ def generateTrainingData(samples, optimalC):
                 
                 #If this is the first iteration, then create a new sample
                 if firstIteration: 
-                    newSample = Sample(sample.sampleFolder, initialPercToScan, 'pointwise', ignoreMissingLines=True)
+                    newSample = Sample(sample.sampleFolder, initialPercToScan, 'pointwise', True, ignoreMissingLines=True)
                     newSample.readScanData(lineRevistMethod)
                     newIdxs = np.transpose(np.where(newSample.initialMask == 1))
                 
@@ -462,6 +462,9 @@ def trainModel(trainingDatabase, optimalC):
             else: inputImage = np.moveaxis(trainingSample.squareMeasuredmzImages, 0, -1)
             
             inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
+            
+            #Add the mask as an input...
+            inputImage = np.dstack((inputImage, trainingSample.squareMask))
             
             #Add inputs to lists
             inputImages.append(makeCompatible(inputImage))

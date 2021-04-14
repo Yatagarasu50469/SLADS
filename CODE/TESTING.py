@@ -14,7 +14,7 @@ def testSLADS(sortedTestingSampleFolders, model, optimalC):
         dataSampleName = os.path.basename(testingSampleFolder)
         
         #Read all available scan data into a sample object
-        sample = Sample(testingSampleFolder, initialPercToScan, scanMethod, ignoreMissingLines=True)
+        sample = Sample(testingSampleFolder, initialPercToScan, scanMethod, True, ignoreMissingLines=True)
         sample.readScanData(lineRevistMethod)
 
         #Indicate where resulting data should be stored

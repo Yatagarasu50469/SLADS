@@ -193,7 +193,7 @@ def visualize_serial(sample, simulationFlag, dir_avgProgression, dir_mzProgressi
 
 #All information pertaining to a sample
 class Sample:
-    def __init__(self, sampleFolder, initialPercToScan, scanMethod, ignoreMissingLines=False):
+    def __init__(self, sampleFolder, initialPercToScan, scanMethod, simulationFlag, ignoreMissingLines=False):
     
         #Should missing lines be ignored (to only be used in training and testing)
         self.ignoreMissingLines = ignoreMissingLines
@@ -281,8 +281,16 @@ class Sample:
         #Store final dimensions for physical domain, determining the number of columns for row-alignment interpolations
         self.finalDim = [numLines, int(round((self.sampleWidth*1e3)/self.scanRate))]
         
+        #Get the MSI file extension automatically if it isn't already known
+        if simulationFlag and self.lineExt == None:
+            extensions = list(map(lambda x:x.lower(), np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
+            if 'd' in extensions: self.lineExt = '.d'
+            elif 'raw' in extensions: self.lineExt = '.raw'
+            else: sys.exit('Error! - Either no MSI files are present, or an unknown MSI filetype being used for sample: ' + self.name)
+        
         #If missing lines are to be ignored, then setup to do so (only possible to perform in simulated operation)
         if self.ignoreMissingLines: 
+        
             scanFiles = natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'+self.lineExt), reverse=False)
             self.missingLines = list(set(np.arange(1, self.finalDim[0]).tolist()) - set([int(scanFile.split('line')[1].split('.')[0]) for scanFile in scanFiles]))
             self.missingLines = [missingLine-1 for missingLine in self.missingLines]
@@ -908,6 +916,10 @@ def computeERD(sample, model):
         if averageReconInput: inputImage = featureExtractor(sample, sample.avgSquareMeasuredImage, sample.avgSquareReconImage)
         else: inputImage = np.moveaxis(sample.squareMeasuredmzImages, 0, -1)
         inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
+        
+        #Add the mask as an input...
+        inputImage = np.dstack((inputImage, trainingSample.squareMask))
+        
         inputImage = makeCompatible(inputImage)
         #print('Compatability: ' + str(time.time()-t0))
         
