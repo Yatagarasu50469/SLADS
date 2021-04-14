@@ -918,7 +918,7 @@ def computeERD(sample, model):
         inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
         
         #Add the mask as an input...
-        inputImage = np.dstack((inputImage, trainingSample.squareMask))
+        #inputImage = np.dstack((inputImage, trainingSample.squareMask))
         
         inputImage = makeCompatible(inputImage)
         #print('Compatability: ' + str(time.time()-t0))

@@ -464,7 +464,7 @@ def trainModel(trainingDatabase, optimalC):
             inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
             
             #Add the mask as an input...
-            inputImage = np.dstack((inputImage, trainingSample.squareMask))
+            #inputImage = np.dstack((inputImage, trainingSample.squareMask))
             
             #Add inputs to lists
             inputImages.append(makeCompatible(inputImage))
