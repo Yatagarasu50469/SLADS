@@ -53,7 +53,8 @@ if not erdModel in ['SLADS-LS', 'SLADS-Net', 'DLADS']: sys.exit('Error - Specifi
 dir_InputData = '.' + os.path.sep + 'INPUT' + os.path.sep
 dir_TrainingData = dir_InputData + 'TRAIN' + os.path.sep
 dir_TestingData = dir_InputData + 'TEST' + os.path.sep
-dir_ImpData = dir_InputData + 'IMP' + os.path.sep
+if impInputDir == None:  dir_ImpData = dir_InputData + 'IMP' + os.path.sep
+else: dir_ImpData = impResultsDir
 
 #Results directories
 dir_Results = '.' + os.path.sep + 'RESULTS' + os.path.sep
@@ -62,11 +63,7 @@ dir_TrainingModelResults = dir_TrainingResults + 'Model Training Images' + os.pa
 dir_TrainingResultsImages = dir_TrainingResults + 'Training Data Images' + os.path.sep
 dir_TestingResults = dir_Results + 'TEST' + os.path.sep
 dir_TestingResultsImages = dir_TestingResults + 'Images' + os.path.sep
-
-if impResultsDir == None: dir_ImpResults = dir_Results + 'IMP'+ os.path.sep
-else: dir_ImpResults = impResultsDir
-
-dir_ImpResultsImages = dir_ImpResults + 'Images' + os.path.sep
+dir_ImpResults = dir_Results + 'IMP'+ os.path.sep
 
 #Check that the result directory exists for cases where existing training data/model are to be used
 if (not os.path.exists(dir_Results)) and (not trainingModel): 
@@ -96,8 +93,6 @@ if testingModel:
     os.makedirs(dir_TestingResults)
 
 if impModel:
-    if os.path.exists(dir_ImpResults): shutil.rmtree(dir_ImpResults)
-    os.makedirs(dir_ImpResults)
     dir_ImpDataFinal = dir_ImpData + impSampleName + os.path.sep
     if os.path.exists(dir_ImpDataFinal): shutil.rmtree(dir_ImpDataFinal)
     os.makedirs(dir_ImpDataFinal)

@@ -16,7 +16,7 @@
 
 
     NAME: 		SLADS
-    VERSION NUM:	0.8.3
+    VERSION NUM:	0.8.4
     LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
@@ -58,6 +58,7 @@
                     0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
                     0.8.2   Multichannel, fixed groupwise, square pixels, accelerated RD, altered visuals/metrics
                     0.8.3   Mask seed fix, normalization for sim. fix, non-Ray option, pad instead of resize
+                    0.8.4   Parallel c value selection fix, remove network resizing requirement, fix experimental
                     ~0.8.4  Static window option, global mz selection
                     ~0.8.5  GAN
                     ~0.8.6  Custom adversarial network
@@ -196,7 +197,7 @@ Note that the actual location of the specified file may vary depending on potent
 Navigate inside the command prompt to the SLADS base directory then enter the following commands:
 
 	$ python3 -m pip install --upgrade pip
-	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib numba pillow ray scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tqdm numpy opencv-python pydot graphviz
+	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib numba pillow ray scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tensorflow-addons tqdm numpy opencv-python pydot graphviz
 	$ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
 
 	$ python

@@ -7,12 +7,6 @@
 def indexMask(mask):
     return np.transpose(np.vstack(np.where(mask==1))), np.transpose(np.vstack(np.where(mask==0)))
 
-#Iterate object ids in ray, so as to provide progress feedback
-def rayIterator(ids):
-        while ids:
-            done, ids = ray.wait(ids)
-            yield ray.get(done[0])
-
 #Perform summation and alignment over an mz range for a given line; mzFile cannot be pickled and passed into function
 @ray.remote
 def mzrange_parhelper(mzRange, scanFileName, mzMethod, ignoreMissingLines, missingLines):
@@ -282,13 +276,8 @@ class Sample:
         self.mzReconImages = []
         self.mzImagePSNRList = None
         self.avgmzImagePSNR = None
-        
-        #Get the MSI file extension automatically      
-        extensions = list(map(lambda x:x.lower(), np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
-        if 'd' in extensions: self.lineExt = '.d'
-        elif 'raw' in extensions: self.lineExt = '.raw'
-        else: sys.exit('Error! - Unknown MSI filetype being used for sample: ' + self.name)
-        
+        self.lineExt = None
+            
         #Store final dimensions for physical domain, determining the number of columns for row-alignment interpolations
         self.finalDim = [numLines, int(round((self.sampleWidth*1e3)/self.scanRate))]
         
@@ -393,11 +382,15 @@ class Sample:
         self.squareMeasuredIdxs = np.transpose(np.where(self.squareMask==1))
         self.squareUnMeasuredIdxs = np.transpose(np.where(self.squareMask==0))
         
-        #Find neighbor information if neccessary
-        #self.neighborIndices, self.neighborWeights, self.neighborDistances = findNeighbors(self.squareMeasuredIdxs, self.squareUnMeasuredIdxs)
-        
     #Update mzImages, TIC, origTIC, and origTimes by information in the present line files
     def readScanData(self, lineRevistMethod):
+
+        #Get the MSI file extension automatically if it isn't already known
+        if self.lineExt == None:
+            extensions = list(map(lambda x:x.lower(), np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
+            if 'd' in extensions: self.lineExt = '.d'
+            elif 'raw' in extensions: self.lineExt = '.raw'
+            else: sys.exit('Error! - Either no MSI files are present, or an unknown MSI filetype being used for sample: ' + self.name)
 
         #Obtain and sort the available line files pertaining to the current scan
         scanFiles = natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'+self.lineExt), reverse=False)
@@ -445,7 +438,7 @@ class Sample:
             sys.exit('Error! - Unknown normalization method: ' + self.normMethod + ' specified for sample: ' + self.name)
 
         #Align the normalization array for visualization
-        self.normArray = np.asarray([np.interp(self.newTimes, self.origTimes[lineNum], self.origNormArray[lineNum]) for lineNum in range(0, self.finalDim[0])])
+        self.normArray = np.asarray([np.interp(self.newTimes, self.origTimes[lineNum], self.origNormArray[lineNum]) if len(self.origTimes[lineNum]) > 0 else [] for lineNum in range(0, self.finalDim[0])])
 
         #For each mzRange generate a visualization, performing normalization as specified
         for mzRangeNum in range(0, len(self.mzRanges)): 
@@ -460,8 +453,11 @@ class Sample:
                 else:
                     self.mzImages[mzRangeNum][result[0]] = np.interp(self.newTimes, self.origTimes[result[0]], result[1])
         
+        #Convert list of mz images into an array
+        self.mzImages = np.asarray(self.mzImages)
+        
         #Determine ground-truth average
-        self.avgGroundTruthImage = np.average(np.asarray(self.mzImages), axis=0, weights=self.mzWeights)
+        self.avgGroundTruthImage = np.average(self.mzImages, axis=0, weights=self.mzWeights)
         self.avgSquareGroundTruthImage = resize(self.avgGroundTruthImage, (self.squareDim[0], self.squareDim[1]), order=0)
         
         #Create corresponding square variable to mzImages
@@ -485,12 +481,13 @@ class Sample:
         if not fromRecon:
             #If this is not a simulation then inform equipment, wait/read/update; otherwise used stored information
             if not simulationFlag:
-                with open(dir_ImpResults + 'UNLOCK', 'w') as filehandle: filehandle.writelines(str(sample.initialSets[setNum][0]) + ', ' + str(sample.initialSets[setNum][1]))
+                print('\nWriting UNLOCK')
+                with open(dir_ImpDataFinal + 'UNLOCK', 'w') as filehandle: _ = [filehandle.writelines(str(tuple([pos[0]+1, pos[1]]))+'\n') for pos in newIdxs.tolist()]
                 equipWait()
-                self.readScanData()
-                self.measuredmzImages = np.asarray(self.mzImages)
-            else:
-                self.measuredmzImages[:, newIdxs[:,0], newIdxs[:,1]] = np.asarray(self.mzImages)[:, newIdxs[:,0], newIdxs[:,1]]
+                self.readScanData(lineRevistMethod)
+                #self.measuredmzImages = np.asarray(self.mzImages)
+            #else:
+            self.measuredmzImages[:, newIdxs[:,0], newIdxs[:,1]] = self.mzImages[:, newIdxs[:,0], newIdxs[:,1]]
                 
             #t0 = time.time()
             #Update the square mz images
@@ -590,13 +587,14 @@ class Result():
     #Generate visualiations/metrics as needed at the end of scanning
     def complete(self, optimalC): 
         
+        #If neighbor information was not calculated live, then calculate it now for computation of comparative RD
+        if not self.neighborCalcFlag: 
+            for sample in tqdm(self.samples, desc='Neighbor Info', leave=False, ascii=True): 
+                sample.neighborIndices, sample.neighborWeights, sample.neighborDistances = findNeighbors(sample.squareMeasuredIdxs, sample.squareUnMeasuredIdxs)
+         
+        
         #If a simulation, then can do 
         if self.simulationFlag:
-            
-            #If neighbor information was not calculated live, then calculate it now for computation of comparative RD
-            if not self.neighborCalcFlag: 
-                for sample in tqdm(self.samples, desc='Neighbor Info', leave=False, ascii=True): 
-                    sample.neighborIndices, sample.neighborWeights, sample.neighborDistances = findNeighbors(sample.squareMeasuredIdxs, sample.squareUnMeasuredIdxs)
             
             #Some pre-computation of values for normalization of mz Images/reconstructions
             minMzImageValue, maxMzImageValue = np.min(self.samples[-1].mzImages), np.max(self.samples[-1].mzImages)
@@ -641,14 +639,15 @@ class Result():
             #if self.simulationFlag: self.samples[resultNum].avgImageTD = np.sum(computeDifference(self.samples[resultNum].avgGroundTruthImage, self.samples[resultNum].avgReconImage))/self.samples[resultNum].maskObject.area
 
         #Calculate the actual RD Image for each percent; bestCFlag data should be returned before this
-        for sample in tqdm(self.samples, desc='RD Calc', leave = False, ascii=True):
-            sample.RDImage = computeRD(sample, optimalC, True, self.bestCFlag)
-            sample.ERDPSNR = compare_psnr(sample.RDImage, sample.ERD, data_range=1)
-        
-        #For testing printout
-        self.mzAvgPSNRList = [sample.avgmzImagePSNR for sample in self.samples]
-        self.avgPSNRList = [sample.avgImagePSNR for sample in self.samples]
-        self.ERDPSNRList = [sample.ERDPSNR for sample in self.samples]
+        if self.simulationFlag:
+            for sample in tqdm(self.samples, desc='RD Calc', leave = False, ascii=True):
+                sample.RDImage = computeRD(sample, optimalC, True, self.bestCFlag)
+                sample.ERDPSNR = compare_psnr(sample.RDImage, sample.ERD, data_range=1)
+            
+            #For testing printout
+            self.mzAvgPSNRList = [sample.avgmzImagePSNR for sample in self.samples]
+            self.avgPSNRList = [sample.avgImagePSNR for sample in self.samples]
+            self.ERDPSNRList = [sample.ERDPSNR for sample in self.samples]
         
         #If an animation will be produced and the run has completed
         if self.animationFlag:
@@ -671,7 +670,7 @@ class Result():
             #Perform visualizations in parallel
             if parallelization:
                 futures = [visualize_parhelper.remote(sample, self.simulationFlag, dir_avgProgression, dir_mzProgressions) for sample in self.samples]
-                results = [x for x in tqdm(rayIterator(futures), total=len(futures), desc='Visualizations', leave=False, ascii=True)]
+                results = [x for x in tqdm(ray.get(futures), total=len(futures), desc='Visualizations', leave=False, ascii=True)]
             else:
                 results = [visualize_serial(sample, self.simulationFlag, dir_avgProgression, dir_mzProgressions) for sample in tqdm(self.samples, desc='Visualizations', leave=False, ascii=True)]
 
@@ -804,13 +803,9 @@ def computeRD(sample, cValue, finalDimRD, bestCFlag, update=False, RDImage=None)
         
         #For novel variations, collapse mz difference stack, for original compute difference of collapsed mz stack
         if RDMethod == 'var': sample.RDPP = np.var(abs(sample.squaremzImages-sample.squaremzReconImages), axis=0)
-        elif RDMethod == 'max': 
-            sample.RDPP = np.max(abs(sample.squaremzImages-sample.squaremzReconImages), axis=0)
-            
-            #If optimizing c/mz then identify which mz ranges were used for each pixel (in the physical domain)
-            #if bestCFlag: sample.mzRDPPMap = np.argmax(resize(abs(sample.squaremzImages-sample.squaremzReconImages), (len(sample.mzRanges), sample.finalDim[0], sample.finalDim[1]), order=0), axis=0)
-            
+        elif RDMethod == 'max': sample.RDPP = np.max(abs(sample.squaremzImages-sample.squaremzReconImages), axis=0)
         elif RDMethod == 'avg': sample.RDPP = np.mean(abs(sample.squaremzImages-sample.squaremzReconImages), axis=0)
+        elif RDMethod == 'sum': sample.RDPP = np.sum(abs(sample.squaremzImages-sample.squaremzReconImages), axis=0)
         elif RDMethod == 'original': sample.RDPP = computeDifference(sample.avgSquareGroundTruthImage, sample.avgSquareReconImage)
         else: sys.exit('Error! - Unknown RD Method specified in configuration: ' + RDMethod)
         
@@ -911,9 +906,9 @@ def computeERD(sample, model):
         #t0=time.time()
         #Get and normalize input data
         if averageReconInput: inputImage = featureExtractor(sample, sample.avgSquareMeasuredImage, sample.avgSquareReconImage)
-        else: inputImage = np.stack(sample.squareMeasuredmzImages, axis=-1)
+        else: inputImage = np.moveaxis(sample.squareMeasuredmzImages, 0, -1)
         inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
-        inputImage, topBottomPad, leftRightPad = makeCompatible(inputImage)
+        inputImage = makeCompatible(inputImage)
         #print('Compatability: ' + str(time.time()-t0))
         
         #Send input through trained model
@@ -922,7 +917,6 @@ def computeERD(sample, model):
         #print('Model ERD (GPU): ' + str(time.time()-t0))
         
         #t0=time.time()
-        ERD = ERD[topBottomPad:, leftRightPad:]
         ERD = (ERD-np.min(ERD))/(np.max(ERD)-np.min(ERD))
         ERD = resize(ERD, tuple(sample.finalDim), order=0)
         #print('Normalize/Resize Output: ' + str(time.time()-t0))
@@ -957,6 +951,12 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
     
     #Perform the initial measurements
     if simulationFlag: sample.performMeasurements(np.transpose(np.where(sample.initialMask == 1)), percToScan, simulationFlag, False, bestCFlag, neighborCalcFlag)
+
+    #If not a simulation, then perform updates to sample data that would have been performed in a simulation
+    if not simulationFlag: 
+        sample.avgMeasuredImage = np.average(np.asarray(sample.measuredmzImages), axis=0, weights=sample.mzWeights)
+        sample.avgSquareMeasuredImage = resize(sample.avgMeasuredImage, (sample.squareDim), order=0)
+        sample.percMeasured = (np.sum(sample.mask)/sample.area)*100
 
     #Calculate the reconstruction(s)
     if avgReconstructionFlag: 
@@ -1030,7 +1030,7 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
             
             #t0 = time.time()
             #If viz limit, only update when percToViz has been met; otherwise update every iteration
-            if ((scanMethod =='pointwise') and (percToViz != None) and ((sample.percMeasured - result.percMeasuredList[-1]) >= percToViz)) or (percToViz == None) or completedRunFlag: result.update(sample, completedRunFlag)
+            if ((percToViz != None) and ((sample.percMeasured - result.percMeasuredList[-1]) >= percToViz)) or (percToViz == None) or completedRunFlag: result.update(sample, completedRunFlag)
             #print('Result Update: ' + str(time.time()-t0))
 
             #t0 = time.time()
@@ -1139,7 +1139,7 @@ def findNewMeasurementIdxs(sample, result, model, scanMethod, cValue, simulation
             startLocation, endLocation = orderedNewIdxs[0], orderedNewIdxs[len(orderedNewIdxs)-1]
             newIdxs = np.asarray(lineToScanIdxs[lineToScanIdxs.index(startLocation.tolist()):lineToScanIdxs.index(endLocation.tolist())])
         else:
-            sys.error('Error! - Unknown line method specified in configuation: ' + lineMethod)
+            sys.exit('Error! - Unknown line method specified in configuation: ' + lineMethod)
             
         #==========================================
         
@@ -1164,7 +1164,6 @@ def findNeighbors(measuredIdxs, unMeasuredIdxs):
 
     #Calculate knn
     neigh = NearestNeighbors(n_neighbors=numNeighbors).fit(measuredIdxs)
-    #neigh.fit(measuredIdxs)
     neighborDistances, neighborIndices = neigh.kneighbors(unMeasuredIdxs)
 
     #Determine inverse distance weights
@@ -1208,7 +1207,6 @@ def cnn(numFilters, numChannels):
     conv = LeakyReLU()(conv)
     
     output = Conv2D(1, (1,1), activation='linear', padding='same', kernel_initializer='he_normal')(conv)
-    #output = tfp.math.clip_by_value_preserve_gradient(output, 0, 1)
 
     return tf.keras.Model(inputs=inputs, outputs=output)
 
@@ -1220,7 +1218,6 @@ def mlp(numFilters, numChannels):
     dense_4 = Dense(numFilters, activation='relu', kernel_initializer='he_normal')(dense_3)
     dense_5 = Dense(numFilters, activation='relu', kernel_initializer='he_normal')(dense_4)
     output = Dense(1, activation='linear', kernel_initializer='he_normal')(dense_5)
-    #output = tfp.math.clip_by_value_preserve_gradient(output, 0, 1)
 
     return tf.keras.Model(inputs=inputs, outputs=output)
 
@@ -1249,19 +1246,22 @@ def flatunet(numFilters, numChannels):
     conv4 = LayerNormalization()(conv4)
     conv4 = Dropout(rate=0.5)(conv4)
 
-    up7 = Conv2D(numFilters, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv4))
+    up7 = customResize(conv4, conv1)
+    up7 = Conv2D(numFilters, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up7)
     merge7 = concatenate([conv3,up7], axis = 3)
     conv7 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge7)
     conv7 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv7)
     conv7 = LayerNormalization()(conv7)
 
-    up8 = Conv2D(numFilters, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv7))
+    up8 = customResize(conv7, conv2)
+    up8 = Conv2D(numFilters, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up8)
     merge8 = concatenate([conv2,up8], axis = 3)
     conv8 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge8)
     conv8 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv8)
     conv8 = LayerNormalization()(conv8)
 
-    up9 = Conv2D(numFilters, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv8))
+    up9 = customResize(conv8, conv1)
+    up9 = Conv2D(numFilters, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up9)
     merge9 = concatenate([conv1,up9], axis = 3)
     conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge9)
     conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
@@ -1271,7 +1271,108 @@ def flatunet(numFilters, numChannels):
     
     return tf.keras.Model(inputs=inputs, outputs=output)
     
+# def unet(numFilters, numChannels):
+
+    # inputs = Input(shape=(None,None,numChannels))
     
+    # conv1 = tfa.layers.WeightNormalization(Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(inputs)
+    # conv1 = tfa.layers.WeightNormalization(Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(conv1)
+    # conv1 = tfa.layers.GroupNormalization(groups=4)(conv1)
+    # down1 = tfa.layers.WeightNormalization(Conv2D(numFilters, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal'))(conv1)
+    
+    # conv2 = tfa.layers.WeightNormalization(Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(down1)
+    # conv2 = tfa.layers.WeightNormalization(Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(conv2)
+    # conv2 = tfa.layers.GroupNormalization(groups=4)(conv2)
+    # down2 = tfa.layers.WeightNormalization(Conv2D(numFilters*2, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal'))(conv2)
+    
+    # conv3 = tfa.layers.WeightNormalization(Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(down2)
+    # conv3 = tfa.layers.WeightNormalization(Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(conv3)
+    # conv3 = tfa.layers.GroupNormalization(groups=4)(conv3)
+    # conv3 = Dropout(rate=0.5)(conv3)
+    # down3 = tfa.layers.WeightNormalization(Conv2D(numFilters*4, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal'))(conv3)
+    
+    # conv4 = tfa.layers.WeightNormalization(Conv2D(numFilters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(down3)
+    # conv4 = tfa.layers.WeightNormalization(Conv2D(numFilters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(conv4)
+    # conv4 = tfa.layers.GroupNormalization(groups=4)(conv4)
+    # conv4 = Dropout(rate=0.5)(conv4)
+
+    # up7 = customResize(conv4, conv3)
+    # up7 = tfa.layers.WeightNormalization(Conv2D(numFilters*8, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(up7)
+    # merge7 = concatenate([up7, conv3], axis = 3)
+    # conv7 = tfa.layers.WeightNormalization(Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(merge7)
+    # conv7 = tfa.layers.WeightNormalization(Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(conv7)
+    # conv7 = tfa.layers.GroupNormalization(groups=4)(conv7)
+
+    # up8 = customResize(conv7, conv2)
+    # up8 = tfa.layers.WeightNormalization(Conv2D(numFilters*4, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(up8)
+    # merge8 = concatenate([up8, conv2], axis = 3)
+    # conv8 = tfa.layers.WeightNormalization(Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(merge8)
+    # conv8 = tfa.layers.WeightNormalization(Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(conv8)
+    # conv8 = tfa.layers.GroupNormalization(groups=4)(conv8)
+
+    # up9 = customResize(conv8, conv1)
+    # up9 = tfa.layers.WeightNormalization(Conv2D(numFilters*2, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(up9)
+    # merge9 = concatenate([up9, conv1], axis = 3)
+    # conv9 = tfa.layers.WeightNormalization(Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(merge9)
+    # conv9 = tfa.layers.WeightNormalization(Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal'))(conv9)
+    # conv9 = tfa.layers.GroupNormalization(groups=4)(conv9)
+    
+    # output = tfa.layers.WeightNormalization(Conv2D(1, (1,1), activation='linear', padding='same'))(conv9)
+    
+    # return tf.keras.Model(inputs=inputs, outputs=output)
+    
+    
+# def unet(numFilters, numChannels):
+
+    # inputs = Input(shape=(None,None,numChannels))
+    
+    # conv1 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
+    # conv1 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv1)
+    # conv1 = tfa.layers.GroupNormalization(groups=32)(conv1)
+    # down1 = Conv2D(numFilters, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv1)
+    
+    # conv2 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down1)
+    # conv2 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv2)
+    # conv2 = tfa.layers.GroupNormalization(groups=32)(conv2)
+    # down2 = Conv2D(numFilters*2, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv2)
+    
+    # conv3 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down2)
+    # conv3 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv3)
+    # conv3 = tfa.layers.GroupNormalization(groups=32)(conv3)
+    # conv3 = Dropout(rate=0.5)(conv3)
+    # down3 = Conv2D(numFilters*4, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv3)
+    
+    # conv4 = Conv2D(numFilters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down3)
+    # conv4 = Conv2D(numFilters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv4)
+    # conv4 = tfa.layers.GroupNormalization(groups=32)(conv4)
+    # conv4 = Dropout(rate=0.5)(conv4)
+
+    # up7 = customResize(conv4, conv3)
+    # up7 = Conv2D(numFilters*8, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up7)
+    # merge7 = concatenate([up7, conv3], axis = 3)
+    # conv7 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge7)
+    # conv7 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv7)
+    # conv7 = tfa.layers.GroupNormalization(groups=32)(conv7)
+
+    # up8 = customResize(conv7, conv2)
+    # up8 = Conv2D(numFilters*4, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up8)
+    # merge8 = concatenate([up8, conv2], axis = 3)
+    # conv8 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge8)
+    # conv8 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv8)
+    # conv8 = tfa.layers.GroupNormalization(groups=32)(conv8)
+
+    # up9 = customResize(conv8, conv1)
+    # up9 = Conv2D(numFilters*2, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up9)
+    # merge9 = concatenate([up9, conv1], axis = 3)
+    # conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge9)
+    # conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
+    # conv9 = tfa.layers.GroupNormalization(groups=32)(conv9)
+    
+    # output = Conv2D(1, (1,1), activation='linear', padding='same')(conv9)
+    
+#     return tf.keras.Model(inputs=inputs, outputs=output)
+
+
 def unet(numFilters, numChannels):
 
     inputs = Input(shape=(None,None,numChannels))
@@ -1297,20 +1398,23 @@ def unet(numFilters, numChannels):
     conv4 = LayerNormalization()(conv4)
     conv4 = Dropout(rate=0.5)(conv4)
 
-    up7 = Conv2D(numFilters*8, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv4))
-    merge7 = concatenate([conv3,up7], axis = 3)
+    up7 = customResize(conv4, conv3)
+    up7 = Conv2D(numFilters*8, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up7)
+    merge7 = concatenate([up7, conv3], axis = 3)
     conv7 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge7)
     conv7 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv7)
     conv7 = LayerNormalization()(conv7)
 
-    up8 = Conv2D(numFilters*4, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv7))
-    merge8 = concatenate([conv2,up8], axis = 3)
+    up8 = customResize(conv7, conv2)
+    up8 = Conv2D(numFilters*4, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up8)
+    merge8 = concatenate([up8, conv2], axis = 3)
     conv8 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge8)
     conv8 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv8)
     conv8 = LayerNormalization()(conv8)
 
-    up9 = Conv2D(numFilters*2, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(UpSampling2D(size = (2,2))(conv8))
-    merge9 = concatenate([conv1,up9], axis = 3)
+    up9 = customResize(conv8, conv1)
+    up9 = Conv2D(numFilters*2, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up9)
+    merge9 = concatenate([up9, conv1], axis = 3)
     conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge9)
     conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
     conv9 = LayerNormalization()(conv9)
@@ -1318,7 +1422,13 @@ def unet(numFilters, numChannels):
     output = Conv2D(1, (1,1), activation='linear', padding='same')(conv9)
     
     return tf.keras.Model(inputs=inputs, outputs=output)
-    
+
+def customResize(x, y):
+    x = image_ops.resize_images_v2(x, array_ops.shape(y)[1:3], method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
+    nshape = tuple(y.shape.as_list())
+    x.set_shape((None, nshape[1], nshape[2], None))
+    return x
+
 #Extract features of interest from a reconstruction for propogation through network
 def featureExtractor(sample, measuredImage, reconImage):
 
@@ -1331,19 +1441,12 @@ def featureExtractor(sample, measuredImage, reconImage):
 
 #Convert image into TF model compatible shapes/tensors
 def makeCompatible(image):
-    
-    topBottomPad = int(np.ceil(image.shape[0]/depthFactor)*depthFactor)-image.shape[0]
-    leftRightPad = int(np.ceil(image.shape[1]/depthFactor)*depthFactor)-image.shape[1]
-    
-    #Reshape for tensor transition, as needed by number of channels
-    if len(image.shape) > 2: 
-        image = np.pad(image, [(topBottomPad, 0), (leftRightPad, 0), (0,0) ], mode='constant', constant_values=0)
-        image = image.reshape((1,image.shape[0],image.shape[1],image.shape[2]))
-    else: 
-        image = np.pad(image, [(topBottomPad, 0), (leftRightPad, 0)], mode='constant', constant_values=0)
-        image = image.reshape((1,image.shape[0],image.shape[1],1))
 
-    return image, topBottomPad, leftRightPad
+    #Reshape for tensor transition, as needed by number of channels
+    if len(image.shape) > 2: image = image.reshape((1,image.shape[0],image.shape[1],image.shape[2]))
+    else: image = image.reshape((1,image.shape[0],image.shape[1],1))
+
+    return image
 
 #Interpolate results to a given precision for averaging results
 def percResults(results, perc_testingResults, precision):

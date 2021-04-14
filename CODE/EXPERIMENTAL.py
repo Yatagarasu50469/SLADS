@@ -6,46 +6,43 @@
 def equipWait():
     
     #Signal the equipment by removing the LOCK file if it exists
-    if os.path.isfile(dir_ImpResults + 'LOCK'): os.remove(dir_ImpResults + 'LOCK')
+    if os.path.isfile(dir_ImpDataFinal + 'LOCK'): os.remove(dir_ImpDataFinal + 'LOCK')
+    print('Waiting for LOCK')
     while True:
-        if not os.path.isfile(dir_ImpResults + 'LOCK'):
+        if not os.path.isfile(dir_ImpDataFinal + 'LOCK'):
             time.sleep(0.1)
         else:
             break
+    print('Received LOCK')
 
 #Perform SLADS with external equipment
 def performImplementation(model, optimalC):
 
-    #Clean up files from previous runs if they exist
-    if os.path.isfile(dir_ImpResults + 'DONE'): os.remove(dir_ImpResults + 'DONE')
-    if os.path.isfile(dir_ImpResults + 'UNLOCK'): os.remove(dir_ImpResults + 'UNLOCK')
-    
     #Wait for equipment to initialize scan
     equipWait()
     
-    sample = Sample(dir_ImpResults, initialPercToScan, scanMethod)
-    sample.readScanData(lineRevistMethod)
+    #Create a sample object and read the first sets of information
+    sample = Sample(dir_ImpDataFinal, initialPercToScan, scanMethod)
     
-    #For each of the initial sets that must be obtained
+    #Indicate where resulting data should be stored
+    sample.resultsPath = dir_ImpResults
+    
+    #For each of the initial sets that must be obtained, print out the infomration to UNLOCK and wait for equipment
     for setNum in range(0, len(sample.initialSets)):
-
-        #Export the set to a file UNLOCK
-        with open(dir_ImpResults + 'UNLOCK', 'w') as filehandle: filehandle.writelines(str(sample.initialSets[setNum][0]) + ', ' + str(sample.initialSets[setNum][1]))
-        
-        #Wait for equipment to finish scan
+        print('Writing UNLOCK')
+        with open(dir_ImpDataFinal + 'UNLOCK', 'w') as filehandle: _ = [filehandle.writelines(str(tuple([pos[0]+1, pos[1]]))+'\n') for pos in sample.initialSets[setNum]]
         equipWait()
 
-    #Update internal sample data with the acquired informationssss
+    #Update internal sample data with the acquired informations
     sample.readScanData(lineRevistMethod)
 
     #Run SLADS
-    result = runSLADS(sample, bestModel, scanMethod, optimalC, percToScan, percToViz, stopPerc, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
+    result = runSLADS(sample, model, scanMethod, optimalC, percToScan, percToViz, stopPerc, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
     
     #Indicate to equipment that the sample scan has concluded
-    with open(dir_ImpResults + 'DONE', 'w') as filehandle: filehandle.writelines('')
+    print('Writing DONE')
+    with open(dir_ImpDataFinal + 'DONE', 'w') as filehandle: filehandle.writelines('')
 
     #Call completion/printout function
+    print('Generating Visualizations')
     result.complete(None)
-
-    #Move all of the files to finalized directory
-    for fileName in glob.glob(dir_ImpResults + '*'): shutil.move(fileName, dir_ImpDataFinal)

@@ -24,13 +24,13 @@ impModel = False
 impSampleName = 'SAMPLE_1'
 
 #If an implementation run, where will the MSI files be located (location will be emptied on run); None equivalent to './RESULTS/IMP/'
-impResultsDir = None
+impInputDir = None
 
 #Should parallelization calls be used (True); if memory overflow issues develop, set to False
 parallelization = True
 
 #var, max, avg, original (original collapses before difference between recon and ground-truth mz)
-RDMethod = 'max'
+RDMethod = 'original'
 
 #Use averaged reconstruction as network input
 averageReconInput = False
@@ -126,7 +126,7 @@ featDistCutoff = 0.25
 #==================================================================
 
 #Which model should be used for training: cnn, unet, or flatunet
-modelDef = 'flatunet'
+modelDef = 'unet'
 
 #How many filters should be used
 numStartFilters = 32

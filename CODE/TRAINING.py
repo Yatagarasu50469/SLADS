@@ -4,7 +4,7 @@
 
 #Tensorflow callback object to check early stopping criteria and visualize the network's current training progression/status
 class EpochEnd(keras.callbacks.Callback):
-    def __init__(self, maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizInputValTensors, vizInputValImages, vizOutputValTensors, vizOutputValImages, vizValShapes, dir_TrainingModelResults):
+    def __init__(self, maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizInputValTensors, vizInputValImages, vizOutputValTensors, vizOutputValImages, dir_TrainingModelResults):
         self.maxPatience = maxPatience
         self.patience = 0
         self.bestWeights = None
@@ -21,7 +21,6 @@ class EpochEnd(keras.callbacks.Callback):
         self.vizInputValImages = vizInputValImages
         self.vizOutputValTensors = vizOutputValTensors
         self.vizOutputValImages = vizOutputValImages
-        self.vizValShapes = vizValShapes
         self.dir_TrainingModelResults = dir_TrainingModelResults
         if not self.noValFlag:
             self.val_lossList = []
@@ -106,9 +105,7 @@ class EpochEnd(keras.callbacks.Callback):
                 for imageNum in range(0, len(self.vizOutputValImages)):
                     
                     ERD = self.model(self.vizInputValTensors[imageNum], training=False)[0,:,:,0].numpy()
-                    ERD = ERD[self.vizValShapes[imageNum][0]:, self.vizValShapes[imageNum][1]:]
                     ERD = (ERD-np.min(ERD))/(np.max(ERD)-np.min(ERD))
-                    
                     ERD_PSNR = compare_psnr(self.vizOutputValImages[imageNum], ERD, data_range=1)
                     
                     if averageReconInput:
@@ -197,14 +194,14 @@ def runSLADS_parhelper(sample, model, scanMethod, cValue, percToScan, percToViz,
 def optimizeC(trainingSamples):
 
     #If there are more than one c value, determine which minimizes the total distortion in the samples, force this optimization to be performed with pointwise scanning
-    if len(cValues)>0:
+    if len(cValues)>1:
         
         if parallelization:
             futures = []
             for cNum in range(0, len(cValues)):
                 for sampleNum in range(0, len(trainingSamples)):
                     futures.append(runSLADS_parhelper.remote(trainingSamples[sampleNum], None, 'pointwise', cValues[cNum], 1, None, stopPerc, simulationFlag=True, trainPlotFlag=True, animationFlag=False, tqdmHide=True, oracleFlag=True, bestCFlag=True))
-            results = np.split(np.asarray([x for x in tqdm(rayIterator(futures), total=len(futures), desc='Generation', leave=True, ascii=True)]), len(cValues))
+            results = np.split(np.asarray([x for x in tqdm(ray.get(futures), total=len(futures), desc='Generation', leave=True, ascii=True)]), len(cValues))
         else:
             results = []
             for cNum in tqdm(range(0, len(cValues)), desc='c Values', leave=True, ascii=True):
@@ -217,6 +214,8 @@ def optimizeC(trainingSamples):
                 mzTotalData = []
                 for result in results[cNum]:
                 
+                    if result.cValue != cValues[cNum]: Tracer()()
+                    
                     #Setup a colormap for mz ranges
                     mz_cmap = matplotlib.cm.viridis
                     mz_norm = matplotlib.colors.BoundaryNorm(result.sample.mzAverageRanges, mz_cmap.N, extend='both')
@@ -236,7 +235,7 @@ def optimizeC(trainingSamples):
                 np.savetxt(dir_TrainingResultsImages+'mzData_c_' + str(cValues[cNum]) + '.csv', mzData, delimiter=',', fmt='%f')
 
             #Extract percentage results at the specified precision
-            percents, trainingmzPSNR_mean = percResults([result.avgmzImagePSNRList for result in results[cNum]], [result.percMeasuredList  for result in results[cNum]], precision)
+            percents, trainingmzPSNR_mean = percResults([result.avgmzImagePSNRList for result in results[cNum]], [result.percMeasuredList for result in results[cNum]], precision)
 
             #Compute and save area under the PSNR curve
             areaUnderCurveList.append(np.trapz(trainingmzPSNR_mean, percents))
@@ -460,15 +459,13 @@ def trainModel(trainingDatabase, optimalC):
             
             #Make input and output compatible with network (output pre-normalized)
             if averageReconInput: inputImage = featureExtractor(trainingSample, trainingSample.avgSquareMeasuredImage, trainingSample.avgSquareReconImage)
-            else: inputImage = np.stack(trainingSample.squareMeasuredmzImages, axis=-1)
-            inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
-            inputImage, topBottomPad, leftRightPad = makeCompatible(inputImage)
-            outputImage, topBottomPad, leftRightPad = makeCompatible(trainingSample.RDImage)
+            else: inputImage = np.moveaxis(trainingSample.squareMeasuredmzImages, 0, -1)
             
-            #Add inputs and padding information to lists
-            inputImages.append(inputImage)
-            outputImages.append(outputImage)
-            imagesShapes.append([topBottomPad, leftRightPad])
+            inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
+            
+            #Add inputs to lists
+            inputImages.append(makeCompatible(inputImage))
+            outputImages.append(makeCompatible(trainingSample.RDImage))
 
         #If there is a validation set, then split it from the training set, else indicate such with a flag
         noValFlag = False
@@ -477,14 +474,16 @@ def trainModel(trainingDatabase, optimalC):
         else:
             trainInputImages = inputImages[:numTraining]
             trainOutputImages = outputImages[:numTraining]
-            #trainingShapes = imagesShapes[:numTraining]
             valInputImages = inputImages[numTraining:]
             valOutputImages = outputImages[numTraining:]
-            valShapes = imagesShapes[numTraining:]
         
         #Determine the number of channels in the input images
         if len(trainInputImages[0].shape) > 2: numChannels = trainInputImages[0].shape[3]
         else: numChannels = 1
+        
+        #Transform image sets into tensorflow datasets
+        trainData = tf.data.Dataset.from_generator(lambda: iter(zip(trainInputImages, trainOutputImages)), output_types=(tf.float32, tf.float32), output_shapes=([1,None,None,numChannels], [1,None,None,1]))
+        if not noValFlag: valData = tf.data.Dataset.from_generator(lambda: iter(zip(valInputImages, valOutputImages)), output_types=(tf.float32, tf.float32), output_shapes=([1,None,None,numChannels], [1,None,None,1]))
         
         #Create and compile the chosen model/optimizer
         if modelDef == 'cnn': model = cnn(numStartFilters, numChannels)
@@ -494,27 +493,22 @@ def trainModel(trainingDatabase, optimalC):
         trainOptimizer = tf.keras.optimizers.Nadam(learning_rate=learningRate)
         model.compile(optimizer=trainOptimizer, loss='mean_squared_error', metrics=[PSNR])
         
-        #Transform image sets into tensorflow datasets
-        trainData = tf.data.Dataset.from_generator(lambda: iter(zip(trainInputImages, trainOutputImages)), output_types=(tf.float32, tf.float32), output_shapes=([1,None,None,numChannels], [1,None,None,1]))
-        if not noValFlag: valData = tf.data.Dataset.from_generator(lambda: iter(zip(valInputImages, valOutputImages)), output_types=(tf.float32, tf.float32), output_shapes=([1,None,None,numChannels], [1,None,None,1]))
-        
         #Extract validation input/output images desired for visualization
-        vizInputValTensors, vizOutputValTensors, vizInputValImages, vizOutputValImages, vizValShapes = [], [], [], [], []
+        vizInputValTensors, vizOutputValTensors, vizInputValImages, vizOutputValImages = [], [], [], []
         if not noValFlag:
             sampleLocations = [0, numMasks+len(measurementPercs)-2]
             for sampleLocation in sampleLocations:
                 vizInputValTensors.append(valInputImages[sampleLocation])
                 vizOutputValTensors.append(valOutputImages[sampleLocation])
-                if averageReconInput: vizInputValImages.append(valInputImages[sampleLocation][0,valShapes[sampleLocation][0]:,valShapes[sampleLocation][1]:,:])
-                vizValShapes.append(valShapes[sampleLocation])
-                vizOutputValImages.append(valOutputImages[sampleLocation][0, valShapes[sampleLocation][0]:, valShapes[sampleLocation][1]:,0])
+                if averageReconInput: vizInputValImages.append(valInputImages[sampleLocation][0,:,:,:])
+                vizOutputValImages.append(valOutputImages[sampleLocation][0,:,:,0])
                 
         #Perform training
         t0 = time.time()
         if not noValFlag: 
-            history = model.fit(trainData, epochs=numEpochs, callbacks=[EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizInputValTensors, vizInputValImages, vizOutputValTensors, vizOutputValImages, vizValShapes, dir_TrainingModelResults)], validation_data=valData, validation_freq=1, verbose=1, shuffle=True)
+            history = model.fit(trainData, epochs=numEpochs, callbacks=[EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizInputValTensors, vizInputValImages, vizOutputValTensors, vizOutputValImages, dir_TrainingModelResults)], validation_data=valData, validation_freq=1, verbose=1, shuffle=True)
         else:
-            history = model.fit(trainData, epochs=numEpochs, callbacks=[EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizInputValTensors, vizInputValImages, vizOutputValTensors, vizOutputValImages, vizValShapes, dir_TrainingModelResults)], verbose=1, shuffle=True)
+            history = model.fit(trainData, epochs=numEpochs, callbacks=[EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizInputValTensors, vizInputValImages, vizOutputValTensors, vizOutputValImages, dir_TrainingModelResults)], verbose=1, shuffle=True)
         print('Total Training Time: ' + str(datetime.timedelta(seconds=(time.time()-t0))))
 
         #Save the final model and weights
