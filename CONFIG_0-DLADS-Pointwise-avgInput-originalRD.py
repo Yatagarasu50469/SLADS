@@ -29,11 +29,17 @@ impInputDir = None
 #Should parallelization calls be used (True); if memory overflow issues develop, set to False
 parallelization = True
 
-#var, max, avg, original (original collapses before difference between recon and ground-truth mz)
+#var, max, avg, sum, original (original collapses before difference between recon and ground-truth mz)
 RDMethod = 'original'
 
 #Use averaged reconstruction as network input
-averageReconInput = False
+averageReconInput = True
+
+#Should a global mz specification be used (True), or should the mz be taken for each sample independently (False)
+mzGlobalSpec = True
+
+#Which loss function should be used for the optimizer ('MAE', or 'MSE')
+lossFunc = 'MAE'
 
 ##################################################################
 
@@ -76,13 +82,13 @@ percToViz = 1
 #==================================================================
 
 #What method should be used for linewise point selection: (segLine, partial line segment) (percLine, Top stopPerc% ERD locations) (none, full line)
-lineMethod = 'percLine'
+lineMethod = 'segLine'
 
 #Should lines be allowed to be revisited
 lineRevistMethod = False
 
 #Should all lines be scanned at least once
-lineVisitAll = True
+lineVisitAll = False
 
 #==================================================================
 

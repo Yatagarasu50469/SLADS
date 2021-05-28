@@ -37,8 +37,10 @@ def visualize_serial(sample, simulationFlag, dir_avgProgression, dir_mzProgressi
     #Re-import libraries inside of thread to set plotting backend as non-interactive
     import matplotlib
     matplotlib.use('agg')
-    import matplotlib.pyplot as plt
-    from matplotlib.pyplot import figure
+    #Re-apply non-interactive plotting constraint in case of use of this fucntion in parallel
+    #plt.ioff()
+    #import matplotlib.pyplot as plt
+    #from matplotlib.pyplot import figure
 
     #Turn percent measured into a string
     percMeasured = "{:.2f}".format(sample.percMeasured)
@@ -243,10 +245,12 @@ class Sample:
         
         #Read in all m/z locations/ranges (.csv)
         if self.mzSpec == 'value':
-            mzLocations = np.loadtxt(self.sampleFolder+os.path.sep+'mz.csv', delimiter=',')
+            if mzGlobalSpec: mzLocations = np.loadtxt('mz.csv', delimiter=',')
+            else: mzLocations = np.loadtxt(self.sampleFolder+os.path.sep+'mz.csv', delimiter=',')
             self.mzRanges = [[mzLocation-self.mzTolerance, mzLocation+self.mzTolerance] for mzLocation in mzLocations]
         elif self.mzSpec == 'range':
-            self.mzRanges = np.loadtxt(self.sampleFolder+os.path.sep+'mz.csv', delimiter=',')
+            if mzGlobalSpec: self.mzRanges = np.loadtxt('mz.csv', delimiter=',')
+            else: self.mzRanges = np.loadtxt(self.sampleFolder+os.path.sep+'mz.csv', delimiter=',')
         
         #Setup averages of the mz ranges for visualizations
         self.mzAverageRanges = np.average(self.mzRanges, axis=1)
@@ -271,6 +275,7 @@ class Sample:
         self.normArray = None
         self.avgMeasuredImage = None
         self.squareRDValues = None
+        self.squareRD = None
         self.origNormArray = None
         self.RDImage = None
         self.mzReconImages = []
@@ -283,11 +288,13 @@ class Sample:
         
         #Get the MSI file extension automatically if it isn't already known
         if simulationFlag and self.lineExt == None:
-            extensions = list(map(lambda x:x.lower(), np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
+            extensions = list(map(lambda x:x, np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
             if 'd' in extensions: self.lineExt = '.d'
+            elif 'D' in extensions: self.lineExt = '.D'
             elif 'raw' in extensions: self.lineExt = '.raw'
+            elif 'RAW' in extensions: self.lineExt = '.RAW'
             else: sys.exit('Error! - Either no MSI files are present, or an unknown MSI filetype being used for sample: ' + self.name)
-        
+
         #If missing lines are to be ignored, then setup to do so (only possible to perform in simulated operation)
         if self.ignoreMissingLines: 
         
@@ -395,9 +402,11 @@ class Sample:
 
         #Get the MSI file extension automatically if it isn't already known
         if self.lineExt == None:
-            extensions = list(map(lambda x:x.lower(), np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
+            extensions = list(map(lambda x:x, np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
             if 'd' in extensions: self.lineExt = '.d'
+            elif 'D' in extensions: self.lineExt = '.D'
             elif 'raw' in extensions: self.lineExt = '.raw'
+            elif 'RAW' in extensions: self.lineExt = '.RAW'
             else: sys.exit('Error! - Either no MSI files are present, or an unknown MSI filetype being used for sample: ' + self.name)
 
         #Obtain and sort the available line files pertaining to the current scan
@@ -582,12 +591,13 @@ class Result():
     #Save the model development
     def update(self, sample, completedRunFlag):
     
-        #If optimizing c, then store mzMap at last step, and save average PSNR of the mz reconstructions, otherwise save duplicate of sample at this step
+        #If optimizing c, then store mzMap at last step, and save average PSNR of the mz reconstructions
         if self.bestCFlag:
             if completedRunFlag: self.mzMap = copy.deepcopy(sample.mzMap)
             self.avgmzImagePSNRList.append(np.average([compare_psnr(sample.mzImages[index], sample.mzReconImages[index], data_range=1) for index in range(0, len(sample.mzReconImages))]))
-        else:
-            self.samples.append(copy.deepcopy(sample))
+        
+        #Save duplicate of sample at this step
+        self.samples.append(copy.deepcopy(sample))
         
         #Update list with percentage measured this step
         self.percMeasuredList.append(copy.deepcopy(sample.percMeasured))
@@ -599,7 +609,6 @@ class Result():
         if not self.neighborCalcFlag: 
             for sample in tqdm(self.samples, desc='Neighbor Info', leave=False, ascii=True): 
                 sample.neighborIndices, sample.neighborWeights, sample.neighborDistances = findNeighbors(sample.squareMeasuredIdxs, sample.squareUnMeasuredIdxs)
-         
         
         #If a simulation, then can do 
         if self.simulationFlag:
@@ -608,13 +617,14 @@ class Result():
             minMzImageValue, maxMzImageValue = np.min(self.samples[-1].mzImages), np.max(self.samples[-1].mzImages)
             diffMzImageValue = maxMzImageValue-minMzImageValue
         
-        #Compute/compare reconstructions for all mz ranges at each step of the progression
+        #Compute/compare reconstructions for all mz ranges at each step of the progression (faster in serial for 35...)
         for sample in self.samples:
             if len(sample.mzReconImages) == 0:
-                if parallelization:
-                    results = list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(sample.squareMeasuredmzImages, sample, indexes) for indexes in np.array_split(np.arange(0, len(sample.squareMeasuredmzImages)), multiprocessing.cpu_count())])))
-                else:
-                    results = [computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages]
+                #if parallelization:
+                #    results = list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(sample.squareMeasuredmzImages, sample, indexes) for indexes in np.array_split(np.arange(0, len(sample.squareMeasuredmzImages)), multiprocessing.cpu_count())])))
+                #else:
+                #    results = [computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages]
+                results = [computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages]
                 sample.squaremzReconImages = np.asarray(results)
                 sample.mzReconImages = np.asarray([resize(result, tuple(self.samples[-1].finalDim), order=0) for result in results])
             
@@ -669,7 +679,7 @@ class Result():
             dir_mzProgression = dir_sampleResults + 'mz' + os.path.sep
             os.makedirs(dir_mzProgression)
             dir_mzProgressions = [dir_mzProgression + str(sample.mzRanges[mzNum][0]) + '-' + str(sample.mzRanges[mzNum][1]) + os.path.sep for mzNum in range(0, len(sample.mzRanges))]
-            for dir_mzProgression in dir_mzProgressions: os.makedirs(dir_mzProgression)
+            for dir_mzProgressionSub in dir_mzProgressions: os.makedirs(dir_mzProgressionSub)
             dir_avgProgression = dir_sampleResults + 'Average' + os.path.sep
             os.makedirs(dir_avgProgression)
             dir_videos= dir_sampleResults + 'Videos' + os.path.sep
@@ -695,8 +705,32 @@ class Result():
                              
             #Ground truth borderless mz images
             if self.simulationFlag:
+                
+                #Save mz images in grid; assumes 35 for now
+                totalNumColumns = 5
+                f = plt.figure(figsize=(18,20))
+                f.patch.set_facecolor('#FFFFFF')
+                f.subplots_adjust(top = 0.95, bottom = 0.05, left=0.05, right=0.95)
+                f.subplots_adjust(wspace=0.1, hspace=0.3)
+            
+                numRow, numColumn = 0, 0
+                for mzNum in range(0, len(sample.mzImages)):
+
+                    ax = plt.subplot2grid((round(len(sample.mzImages)/totalNumColumns),totalNumColumns), (numRow,numColumn))
+                    ax.imshow(sample.mzImages[mzNum], aspect='auto', cmap='hot')
+                    ax.set_title(str(sample.mzRanges[mzNum]))
+
+                    numColumn+=1
+                    if numColumn >= totalNumColumns:
+                        numColumn=0
+                        numRow+=1
+                        
+                plt.suptitle(sample.name, fontsize=15, fontweight='bold')
+                plt.savefig(dir_mzProgression + 'mzImages_'+ sample.name +'.png')
+                plt.close()
+                
                 for mzNum in range(0, len(sample.mzRanges)):
-                    saveLocation = dir_mzProgressions[mzNum] + 'groundTruth.png'
+                    saveLocation = dir_mzProgressions[mzNum] + 'groundTruth_' + str(sample.mzRanges[mzNum]) + '.png'
                     fig=plt.figure()
                     ax=fig.add_subplot(1,1,1)
                     plt.axis('off')
@@ -841,8 +875,13 @@ def computeRD(sample, cValue, finalDimRD, bestCFlag, update=False, RDImage=None)
         sample.preNormRDImage[tuple(unMeasuredLocations.T)] = results
         sample.preNormRDImage[tuple(updateLocations.T)] = 0
         
-    #Normalize and resize if neccessary
+    #Normalize
     RDImage = (sample.preNormRDImage-np.min(sample.preNormRDImage))/(np.max(sample.preNormRDImage)-np.min(sample.preNormRDImage))
+
+    #Save the square RD image to the sample
+    sample.squareRD = copy.deepcopy(RDImage)   
+
+    #Resize if needed
     if finalDimRD: RDImage = resize(RDImage, tuple(sample.finalDim), order=0)
     
     #Update the previous mask, so measurement locations can be isolated in future updates
@@ -917,8 +956,8 @@ def computeERD(sample, model):
         else: inputImage = np.moveaxis(sample.squareMeasuredmzImages, 0, -1)
         inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
         
-        #Add the mask as an input...
-        #inputImage = np.dstack((inputImage, trainingSample.squareMask))
+        #Add the inverted mask as an input...
+        #inputImage = np.dstack((inputImage, sample.squareMask==0))
         
         inputImage = makeCompatible(inputImage)
         #print('Compatability: ' + str(time.time()-t0))
@@ -940,15 +979,15 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
     
     #Setup flags for whether reconstructions need to be performed of averages and/or each mz range
     avgReconstructionFlag, mzReconstructionFlag = False, False
-    if averageReconInput or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net' or RDMethod == 'original': avgReconstructionFlag = True
+    if bestCFlag or averageReconInput or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net' or RDMethod == 'original': avgReconstructionFlag = True
     if bestCFlag or (percToScan != None and erdModel == 'DLADS' and ((lineMethod != 'segLine' and scanMethod=='linewise') or scanMethod=='pointwise')): mzReconstructionFlag = True
     
     #Determine whether neighbor information needs to be calculated each iteration
     if avgReconstructionFlag or mzReconstructionFlag or oracleFlag: neighborCalcFlag = True
     else: neighborCalcFlag = False
 
-    #If bestC (parallel run) then need to make sample writable
-    if bestCFlag: sample = copy.deepcopy(sample)
+    #Ensure (parallel run) sample object is writable
+    sample = copy.deepcopy(sample)
     
     #If not a simulation then sample.mzImages contains the initially measured images, mask is already populated with initial points
     if not simulationFlag: 
@@ -975,8 +1014,9 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
         sample.avgSquareReconImage = computeRecon(sample.avgSquareMeasuredImage, sample)
         sample.avgReconImage = resize(sample.avgSquareReconImage, tuple(sample.finalDim), order=0)
     if mzReconstructionFlag:
-        if not bestCFlag and parallelization: sample.squaremzReconImages = np.asarray(list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(sample.squareMeasuredmzImages, sample, indexes) for indexes in np.array_split(np.arange(0, len(sample.squareMeasuredmzImages)), multiprocessing.cpu_count())]))))
-        else: sample.squaremzReconImages = np.asarray([computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages])
+        #if not bestCFlag and parallelization: sample.squaremzReconImages = np.asarray(list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(sample.squareMeasuredmzImages, sample, indexes) for indexes in np.array_split(np.arange(0, len(sample.squareMeasuredmzImages)), multiprocessing.cpu_count())]))))
+        #else: sample.squaremzReconImages = np.asarray([computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages])
+        sample.squaremzReconImages = np.asarray([computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages])
         sample.mzReconImages = np.asarray([resize(squaremzReconImage, tuple(sample.finalDim), order=0) for squaremzReconImage in sample.squaremzReconImages])
 
     #Determine ERD or use the RD as the ERD if the oracleFlag or bestCFlag is enabled
@@ -987,7 +1027,7 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
     result = Result(sample, sample.avgGroundTruthImage, cValue, bestCFlag, oracleFlag, simulationFlag, animationFlag, neighborCalcFlag)
     
     #Check stopping criteria, just in case of a bad input
-    if (scanMethod == 'pointwise' or not lineVisitAll) and (sample.percMeasured >= stopPerc): completedRunFlag = True
+    if (scanMethod == 'pointwise' or not lineVisitAll) and (round(sample.percMeasured) >= stopPerc): completedRunFlag = True
     if scanMethod == 'linewise' and len(sample.linesToScan) == 0: completedRunFlag = True
     
     #Perform the first update for the result
@@ -1023,8 +1063,9 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
                 sample.avgSquareReconImage = computeRecon(sample.avgSquareMeasuredImage, sample)
                 sample.avgReconImage = resize(sample.avgSquareReconImage, tuple(sample.finalDim), order=0)
             if mzReconstructionFlag:
-                if not bestCFlag and parallelization: sample.squaremzReconImages = np.asarray(list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(sample.squareMeasuredmzImages, sample, indexes) for indexes in np.array_split(np.arange(0, len(sample.squareMeasuredmzImages)), multiprocessing.cpu_count())]))))
-                else: sample.squaremzReconImages = np.asarray([computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages])
+                #if not bestCFlag and parallelization: sample.squaremzReconImages = np.asarray(list(chain.from_iterable(ray.get([computeRecon_parhelper.remote(sample.squareMeasuredmzImages, sample, indexes) for indexes in np.array_split(np.arange(0, len(sample.squareMeasuredmzImages)), multiprocessing.cpu_count())]))))
+                #else: sample.squaremzReconImages = np.asarray([computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages])
+                sample.squaremzReconImages = np.asarray([computeRecon(squareMeasuredmzImage, sample) for squareMeasuredmzImage in sample.squareMeasuredmzImages])
                 sample.mzReconImages = np.asarray([resize(squaremzReconImage, tuple(sample.finalDim), order=0) for squaremzReconImage in sample.squaremzReconImages])
             #print('Reconstructions: ' + str(time.time()-t0))
             
@@ -1036,7 +1077,7 @@ def runSLADS(sample, model, scanMethod, cValue, percToScan, percToViz, stopPerc,
             
             #t0 = time.time()
             #Check stopping conditions
-            if (scanMethod == 'pointwise' or not lineVisitAll) and (sample.percMeasured >= stopPerc): completedRunFlag = True
+            if (scanMethod == 'pointwise' or not lineVisitAll) and (round(sample.percMeasured) >= stopPerc): completedRunFlag = True
             if scanMethod == 'linewise' and len(sample.linesToScan) == 0: completedRunFlag = True
             #print('Stopping Cond: ' + str(time.time()-t0))
             
@@ -1184,7 +1225,7 @@ def findNeighbors(measuredIdxs, unMeasuredIdxs):
 
     return neighborIndices, neighborWeights, neighborDistances
 
-#Perform the reconstruction without 0-padding
+#Perform the reconstruction
 def computeRecon(inputImage, sample):
 
     #Create a blank image for the reconstruction
@@ -1385,25 +1426,25 @@ def flatunet(numFilters, numChannels):
 #     return tf.keras.Model(inputs=inputs, outputs=output)
 
 
-def unet(numFilters, numChannels):
-
-    inputs = Input(shape=(None,None,numChannels))
+def unet(numFilters, numChannels, batchSize):
+    
+    inputs = Input(shape=(None,None,numChannels), batch_size=batchSize)
     
     conv1 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
     conv1 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv1)
     conv1 = LayerNormalization()(conv1)
-    down1 = Conv2D(numFilters, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv1)
+    down1 = Conv2D(numFilters, 3, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv1)
     
     conv2 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down1)
     conv2 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv2)
     conv2 = LayerNormalization()(conv2)
-    down2 = Conv2D(numFilters*2, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv2)
+    down2 = Conv2D(numFilters*2, 3, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv2)
     
     conv3 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down2)
     conv3 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv3)
     conv3 = LayerNormalization()(conv3)
     conv3 = Dropout(rate=0.5)(conv3)
-    down3 = Conv2D(numFilters*4, 2, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv3)
+    down3 = Conv2D(numFilters*4, 3, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv3)
     
     conv4 = Conv2D(numFilters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down3)
     conv4 = Conv2D(numFilters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv4)
@@ -1411,32 +1452,44 @@ def unet(numFilters, numChannels):
     conv4 = Dropout(rate=0.5)(conv4)
 
     up7 = customResize(conv4, conv3)
-    up7 = Conv2D(numFilters*8, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up7)
+    up7 = Conv2D(numFilters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up7)
     merge7 = concatenate([up7, conv3], axis = 3)
     conv7 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge7)
     conv7 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv7)
     conv7 = LayerNormalization()(conv7)
 
     up8 = customResize(conv7, conv2)
-    up8 = Conv2D(numFilters*4, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up8)
+    up8 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up8)
     merge8 = concatenate([up8, conv2], axis = 3)
     conv8 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge8)
     conv8 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv8)
     conv8 = LayerNormalization()(conv8)
 
     up9 = customResize(conv8, conv1)
-    up9 = Conv2D(numFilters*2, 2, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up9)
+    up9 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up9)
     merge9 = concatenate([up9, conv1], axis = 3)
     conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge9)
     conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
     conv9 = LayerNormalization()(conv9)
     
-    output = Conv2D(1, (1,1), activation='linear', padding='same')(conv9)
+    dense = Conv2D(numFilters, (1,1), activation='relu', padding='same', kernel_initializer = 'he_normal')(conv9)
+    dense = Conv2D(numFilters, (1,1), activation='relu', padding='same', kernel_initializer = 'he_normal')(dense)
+    dense = LayerNormalization()(dense)
+    
+    output = Conv2D(1, (1,1), activation='linear', padding='same')(dense)
     
     return tf.keras.Model(inputs=inputs, outputs=output)
 
+class ScaleLayer(tf.keras.layers.Layer):
+    def __init__(self):
+        super(ScaleLayer, self).__init__()
+
+    def call(self, inputs):
+        return tf.divide(tf.subtract(inputs,tf.reduce_min(inputs)), tf.subtract(tf.reduce_max(inputs),tf.reduce_min(inputs)))
+
 def customResize(x, y):
     x = image_ops.resize_images_v2(x, array_ops.shape(y)[1:3], method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
+    #x = image_ops.resize_images_v2(x, array_ops.shape(y)[1:3], method=image_ops.ResizeMethod.BILINEAR)
     nshape = tuple(y.shape.as_list())
     x.set_shape((None, nshape[1], nshape[2], None))
     return x
@@ -1494,3 +1547,15 @@ def PSNR(imageTrue, imagePred):
 #Unused intersection over union metric
 def iou(groundTruth, prediction):
     return np.sum(np.logical_and(groundTruth, prediction)) / np.sum(np.logical_or(groundTruth, prediction))
+
+#Untested in practice; normalized cross correlation, or pearson's correlation coefficient
+def ncc(x, y):
+    x = x.numpy().flatten()
+    y = y.numpy().flatten()
+    return (1.0/(x.size-1)) * np.sum(((x-np.mean(x))/np.std(x))*((y-np.mean(y))/np.std(y)))
+
+#Untested in practice; based on normalized cross correlation, or pearson's correlation coefficient
+def ncc_loss(x, y):
+    x = x.numpy().flatten()
+    y = y.numpy().flatten()
+    return (1/((1.0/(x.size-1)) * np.sum(((x-np.mean(x))/np.std(x))*((y-np.mean(y))/np.std(y)))))-1

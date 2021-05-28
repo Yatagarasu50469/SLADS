@@ -78,7 +78,6 @@ from tqdm.auto import tqdm
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import tensorflow as tf
-import tensorflow_addons as tfa
 tf.get_logger().setLevel('ERROR')
 warnings.filterwarnings("ignore")
 
@@ -94,7 +93,7 @@ from tensorflow.python.util.tf_export import keras_export
 from tensorflow.tools.docs import doc_controls
 from tensorflow.python.ops import array_ops
 from tensorflow.python.framework import constant_op
-import tensorflow_probability as tfp
+#import tensorflow_probability as tfp
 
 
 #==================================================================

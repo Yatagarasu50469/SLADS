@@ -20,9 +20,6 @@ else:
 #INTERNAL OBJECT SETUP
 #==================================================================
 
-#If using DLADS, then numNeighbors should only ever be 1, otherwise numNeighbors affects computePolyFeatures
-if erdModel == 'DLADS': numNeighbors = 1
-
 #Set the multiple for which the input data must be for network compatability
 if modelDef == 'cnn':
     numConvolutionLayers = 1
@@ -41,7 +38,7 @@ if parallelization:
     ray.init(logging_level=logging.ERROR)
 
 #Force tensorflow to use (a) specific GPU(s) if indicated
-if availableGPUs != 'None': os.envirosn["CUDA_VISIBLE_DEVICES"] = availableGPUs
+if availableGPUs != 'None': os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
 
 #Check chosen regression model is available
 if not erdModel in ['SLADS-LS', 'SLADS-Net', 'DLADS']: sys.exit('Error - Specified erdModel is not available')
