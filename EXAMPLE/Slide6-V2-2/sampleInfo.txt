@@ -1,8 +1,0 @@
-63
-2.6
-1.922
-10
-xic
-range
-standard
-20

@@ -20,22 +20,12 @@ else:
 #INTERNAL OBJECT SETUP
 #==================================================================
 
-#Set the multiple for which the input data must be for network compatability
-if modelDef == 'cnn':
-    numConvolutionLayers = 1
-elif modelDef == 'unet':
-    numConvolutionLayers = 3
-elif modelDef =='flatunet':
-    numConvolutionLayers = 3
-elif modelDef == 'mlp':
-    numConvolutionLayers = 1
-
-depthFactor=2**numConvolutionLayers
-
 #Initialize multiprocessing pool server; make sure a pool isn't still running from a ctl+c exit
 if parallelization: 
     ray.shutdown()
-    ray.init(logging_level=logging.ERROR)
+    numberCPUS = multiprocessing.cpu_count()
+    if numberCPUS>2: numberCPUS = numberCPUS-2
+    ray.init(num_cpus=numberCPUS, logging_level=logging.ERROR)
 
 #Force tensorflow to use (a) specific GPU(s) if indicated
 if availableGPUs != 'None': os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
@@ -58,8 +48,9 @@ dir_Results = '.' + os.path.sep + 'RESULTS' + os.path.sep
 dir_TrainingResults = dir_Results + 'TRAIN' + os.path.sep
 dir_TrainingModelResults = dir_TrainingResults + 'Model Training Images' + os.path.sep
 dir_TrainingResultsImages = dir_TrainingResults + 'Training Data Images' + os.path.sep
+dir_ValidationTrainingResultsImages = dir_TrainingResults + 'Validation Data Images' + os.path.sep
+dir_ValidationResults = dir_Results + 'VALIDATION' + os.path.sep
 dir_TestingResults = dir_Results + 'TEST' + os.path.sep
-dir_TestingResultsImages = dir_TestingResults + 'Images' + os.path.sep
 dir_ImpResults = dir_Results + 'IMP'+ os.path.sep
 
 #Check that the result directory exists for cases where existing training data/model are to be used
@@ -74,25 +65,26 @@ if not os.path.exists(dir_TrainingData) and trainingModel: sys.exit('Error - dir
 if not os.path.exists(dir_TestingData) and testingModel: sys.exit('Error - dir_InputData: ./INPUT/TEST/ does not exist')
 if not os.path.exists(dir_ImpData) and impModel: sys.exit('Error - dir_ImpData: ./INPUT/IMP/ does not exist')
 
-#As needed, reset the results' sub-directories
-if trainingModel and not loadTrainingDataset:
+#As needed, reset the training directories
+if trainingModel and not loadTrainValDatasets:
     if os.path.exists(dir_TrainingResults): shutil.rmtree(dir_TrainingResults)
     os.makedirs(dir_TrainingResults)
     os.makedirs(dir_TrainingModelResults)
     os.makedirs(dir_TrainingResultsImages)
+    os.makedirs(dir_ValidationTrainingResultsImages)
 
-if trainingModel and loadTrainingDataset:
+if trainingModel and loadTrainValDatasets:
     if os.path.exists(dir_TrainingModelResults): shutil.rmtree(dir_TrainingModelResults)
     os.makedirs(dir_TrainingModelResults)
-    
-if testingModel:
-    if os.path.exists(dir_TestingResults): shutil.rmtree(dir_TestingResults)
-    os.makedirs(dir_TestingResults)
 
-if impModel:
-    dir_ImpDataFinal = dir_ImpData + impSampleName + os.path.sep
-    if os.path.exists(dir_ImpDataFinal): shutil.rmtree(dir_ImpDataFinal)
-    os.makedirs(dir_ImpDataFinal)
+#Clear validation, testing, and implementation directories 
+if os.path.exists(dir_ValidationResults): shutil.rmtree(dir_ValidationResults)
+os.makedirs(dir_ValidationResults)
+if os.path.exists(dir_TestingResults): shutil.rmtree(dir_TestingResults)
+os.makedirs(dir_TestingResults)
+dir_ImpDataFinal = dir_ImpData + impSampleName + os.path.sep
+if os.path.exists(dir_ImpDataFinal): shutil.rmtree(dir_ImpDataFinal)
+os.makedirs(dir_ImpDataFinal)
 
 #Clear the screen
 os.system('cls' if os.name=='nt' else 'clear')

@@ -15,7 +15,6 @@ import glob
 import logging
 import math
 import matplotlib
-matplotlib.use('agg') #Non-interactive plotting mode
 import matplotlib.pyplot as plt
 import multiplierz
 import multiprocessing
@@ -28,6 +27,7 @@ import pickle
 import PIL
 import PIL.ImageOps
 import platform
+import random
 import ray
 import re
 import sys
@@ -65,10 +65,12 @@ from skimage.util import view_as_windows as viewW
 from skimage import filters
 from skimage.filters import *
 from skimage.metrics import peak_signal_noise_ratio as compare_psnr
-from skimage.metrics import structural_similarity
+from skimage.metrics import structural_similarity as compare_ssim
 from skimage.transform import resize
 from sobol import *
 from tqdm.auto import tqdm
+
+matplotlib.use('agg') #Non-interactive plotting mode
 
 #==================================================================
 #TENSORFLOW IMPORT AND SETUP

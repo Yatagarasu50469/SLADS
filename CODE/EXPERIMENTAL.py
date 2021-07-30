@@ -22,7 +22,7 @@ def performImplementation(model, optimalC):
     equipWait()
     
     #Create a sample object and read the first sets of information
-    sample = Sample(dir_ImpDataFinal, initialPercToScan, scanMethod, False)
+    sampleData = SampleData(dir_ImpDataFinal, initialPercToScan, stopPerc, scanMethod, RDMethod, mzGlobalSpec, False, lineRevist, False)
     
     #Indicate where resulting data should be stored
     sample.resultsPath = dir_ImpResults
@@ -37,7 +37,7 @@ def performImplementation(model, optimalC):
     sample.readScanData(lineRevistMethod)
 
     #Run SLADS
-    result = runSLADS(sample, model, scanMethod, optimalC, percToScan, percToViz, stopPerc, simulationFlag=False, trainPlotFlag=False, animationFlag=animationGen, tqdmHide=False, oracleFlag=False, bestCFlag=False)
+    result = runSLADS(sampleData, optimalC, True, percToScan, percToViz, False, False, lineVisitAll, False)
     
     #Indicate to equipment that the sample scan has concluded
     print('Writing DONE')
@@ -45,4 +45,4 @@ def performImplementation(model, optimalC):
 
     #Call completion/printout function
     print('Generating Visualizations')
-    result.complete(None)
+    result.complete(dir_ImpResults)

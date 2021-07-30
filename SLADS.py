@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    28 May 2021
+#DATE MODIFIED:	    22 July 2021
 #
-#VERSION NUM:	    0.8.5
+#VERSION NUM:	    0.8.6
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -15,8 +15,8 @@
 #                   Algorithm for Dynamic Sampling with additional constraint to
 #                   select groups of points along a single axis.
 #
-#AUTHORS:           David Helminiak	EECE, Marquette University
-#                   Dong Hye Ye		EECE, Marquette University
+#AUTHOR(S):         David Helminiak	EECE, Marquette University
+#ADVISOR(S):        Dong Hye Ye		EECE, Marquette University
 #
 #COLLABORATORS:	    Julia Laskin	CHEM, Purdue University
 #                   Hang Hu		CHEM, Purdue University
@@ -26,7 +26,7 @@
 #
 #GLOBAL
 #CHANGELOG:     0.1.0   Multithreading adjustments to pointwise SLADS
-#               0.1.1    Line constraints, concatenation, pruning, and results organization
+#               0.1.1   Line constraints, concatenation, pruning, and results organization
 #               0.2.0   Line bounded constraints addition
 #               0.3.0   Complete code rewrite, computational improvements
 #               0.4.0   Class/function segmentation
@@ -53,10 +53,8 @@
 #               0.8.3   Mask seed fix, normalization for sim. fix, non-Ray option, pad instead of resize
 #               0.8.4   Parallel c value selection fix, remove network resizing requirement, fix experimental
 #               0.8.5   Model optimization, enable batch processing, SLADS training fix, database acceleration
-#               ~0.8.4  Static window option, global mz selection
-#               ~0.8.5  GAN 
-#               ~0.8.6  Custom adversarial network
-#               ~0.9.0  Multimodal integration
+#               0.8.6   Memory reduction, mz reconstruction vectorization, augmentation, global mz, mz window in ppm
+#               ~0.+.+  Static window option, GAN, Custom adversarial network, Multimodal integration, 
 #               ~1.0.0  Initial release
 #====================================================================
 
@@ -64,7 +62,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum='0.8.5'
+versionNum='0.8.6'
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
@@ -81,8 +79,8 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
     #Setup directories and internal variables
     exec(open("./CODE/INTERNAL.py").read())
 
-    sectionTitle("\n \
-     ▄▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄\n \
+    sectionTitle("\
+      ▄▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄\n \
     ▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌\n \
     ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀\n \
     ▐░▌          ▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌\n \
@@ -93,72 +91,88 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
      ▄▄▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄█░▌ ▄▄▄▄▄▄▄▄▄█░▌\n \
     ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌\n \
      ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀\n \
-    Author(s):\tDavid Helminiak\t\tEECE Marquette University\n \
-    \t\tDong Hye Ye\t\tEECE Marquette University\n \
-    Licence:\tGNU General Public License v3.0\n \
-    Version:\t"+versionNum+"\n \
-    Config:\t"+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0])
+    Author(s):\t\tDavid Helminiak\t\tEECE Marquette University\n \
+    Advisor(s):\tDong Hye Ye\t\tEECE Marquette University\n \
+    Licence:\t\tGNU General Public License v3.0\n \
+    Version:\t\t"+versionNum+"\n \
+    Config:\t\t"+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0])
 
     destResultsFolder = './RESULTS_'+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0]
     
     #If the destination exists, output an error, or delete the folder
-    if preventResultsOverwrite:
-        sys.exit('Error! - The destination results folder already exists')
-    else:
-        if os.path.exists(destResultsFolder): shutil.rmtree(destResultsFolder)
+    if preventResultsOverwrite: sys.exit('Error! - The destination results folder already exists')
+    elif os.path.exists(destResultsFolder): shutil.rmtree(destResultsFolder)
 
+    #Obtain the file paths for the intended training data if needed
+    if trainingModel or validationModel: trainValidationSamplePaths = natsort.natsorted(glob.glob(dir_TrainingData + '/*'), reverse=False)
+    
     #If a SLADS model needs to be trained
     if trainingModel:
         
         #Import any specfic training function and class definitions
         exec(open("./CODE/TRAINING.py").read())
-
-        #Obtain the file paths for the intended training data
-        trainSamplePaths = natsort.natsorted(glob.glob(dir_TrainingData + '/*'), reverse=False)
-
+        
         #If the dataset has not been generated then generate and find the best c for one, otherwise load the best c previously determined
-        if not loadTrainingDataset:
+        if not loadTrainValDatasets:
             
             #Import training/validation data
-            sectionTitle('IMPORTING TRAINING SAMPLES')
-            trainingSamples = importInitialData(trainSamplePaths)
+            sectionTitle('IMPORTING TRAINING/VALIDATION SAMPLES')
             
+            #Perform import and setup for training and validation datasets
+            trainingValidationSampleData = importInitialData(trainValidationSamplePaths)
+            validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
+            trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
+        
             #Optimize the c value
             sectionTitle('OPTIMIZING C VALUE')
-            optimalC = optimizeC(trainingSamples)
+            optimalC = optimizeC(trainingValidationSampleData)
             
             #Generate a training database for the optimal c value and training samples
-            sectionTitle('GENERATING TRAINING DATASET')
-            trainingDatabase = generateTrainingData(trainingSamples, optimalC)
+            sectionTitle('GENERATING TRAINING/VALIDATION DATASETS')
+            trainingDatabase, validationDatabase = generateDatabases(trainingValidationSampleData, optimalC)
             
         else:
+            trainingValidationSampleData = pickle.load(open(dir_TrainingResults + 'trainingValidationSampleData.p', "rb" ))
+            validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
+            trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
             optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
             trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase.p', "rb" ))
-
+            validationDatabase = pickle.load(open(dir_TrainingResults + 'validationDatabase.p', "rb" ))
+        
         #Train model(s) for the given database and c value
         sectionTitle('PERFORMING TRAINING')
-        model = trainModel(trainingDatabase, optimalC)
+        model = trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, optimalC)
 
-    #If a new model shouldn't be generated, then the best c value should have already been selected
-    if not trainingModel:
-        optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
-        if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net':
-            model = np.load(dir_TrainingResults+'model_cValue_'+str(optimalC)+'.npy', allow_pickle=True).item()
-        elif erdModel == 'DLADS':
-            model = tf.keras.models.load_model(dir_TrainingResults+'model_cValue_'+str(optimalC), custom_objects={'PSNR':PSNR})
+    #Load models and c value before testing, or implementation
+    optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
+    
+    #If needed import any specific testing function and class definitions
+    if validationModel or testingModel: exec(open("./CODE/SIMULATION.py").read())
+
+    #If a model needs to be tested with validation data
+    if validationModel:
+        sectionTitle('PERFORMING SIMULATION ON VALIDATION SET')
+        
+        if not trainingModel: 
+            trainingValidationSampleData = pickle.load(open(dir_TrainingResults + 'trainingValidationSampleData.p', "rb" ))
+            validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
+            trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
+        
+        #Obtain the file paths for the intended simulation data
+        validationSamplePaths = [sampleData.sampleFolder for sampleData in validationSampleData]
+        
+        #Perform simulations
+        simulateSLADS(validationSamplePaths, dir_ValidationResults, optimalC)
 
     #If a model needs to be tested
     if testingModel:
-        sectionTitle('PERFORMING TESTING')
-
-        #Import any specific testing function and class definitions
-        exec(open("./CODE/TESTING.py").read())
-
-        #Obtain the file pats for the intended testing data
+        sectionTitle('PERFORMING SIMULATION ON TESTING SET')
+        
+        #Obtain the file paths for the intended simulation data
         testSamplePaths = natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False)
-
-        #Perform testing
-        testSLADS(testSamplePaths, model, optimalC)
+        
+        #Perform simulations
+        simulateSLADS(testSamplePaths, dir_TestingResults, optimalC)
 
     #If Leave-One-Out Cross Validation is to be performed
     if LOOCV:

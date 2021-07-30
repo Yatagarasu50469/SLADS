@@ -16,7 +16,7 @@
 
 
     NAME: 		SLADS
-    VERSION NUM:	0.8.5
+    VERSION NUM:	0.8.6
     LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
@@ -60,10 +60,8 @@
                     0.8.3   Mask seed fix, normalization for sim. fix, non-Ray option, pad instead of resize
                     0.8.4   Parallel c value selection fix, remove network resizing requirement, fix experimental
                     0.8.5   Model optimization, enable batch processing, SLADS training fix, database acceleration
-                    ~0.8.4  Static window option, global mz selection
-                    ~0.8.5  GAN
-                    ~0.8.6  Custom adversarial network
-                    ~0.9.0  Multimodal integration
+                    0.8.6   Memory reduction, mz reconstruction vectorization, augmentation, global mz, mz window in ppm
+                    ~0.+.+  Static window option, GAN, Custom adversarial network, Multimodal integration, Verified phys. imp.
                     ~1.0.0  Initial release
 
 # PROGRAM FILE STRUCTURE
@@ -74,45 +72,41 @@
 
     ------->ROOT_DIR
     	|------->README
-    	|------->CONFIG_0.py
+    	|------->CONFIG_#-description.py
     	|------->SLADS.py
+    	|------->mz.csv
     	|------->CODE
     	|	|------->DEFS.py
     	|	|------->EXPERIMENTAL.py
     	|	|------->EXTERNAL.py
     	|	|------->INTERNAL.py
-    	|	|------->TESTING.py
+    	|	|------->SIMULATION.py
     	|	|------->TRAINING.py
     	|------->INPUT
     	|	|------->TEST
     	|	|	|------->TEST_SAMPLE_1
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->mz.csv
     	|	|	|	|------->sampleName-line1.RAW
     	|	|	|	|------->sampleName-line2.RAW
     	|	|	|	|------->...
     	|	|	|------->TEST_SAMPLE_2
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->mz.csv
     	|	|	|	|------->sampleName-line1.RAW
     	|	|	|	|------->sampleName-line2.RAW
     	|	|	|	|------->...
     	|	|------->TRAIN
     	|	|	|------->TRAIN_SAMPLE_1
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->mz.csv
     	|	|	|	|------->sampleName-line1.RAW
     	|	|	|	|------->sampleName-line2.RAW
     	|	|	|	|------->...
     	|	|	|------->TEST_SAMPLE_2
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->mz.csv
     	|	|	|	|------->sampleName-line1.RAW
     	|	|	|	|------->sampleName-line2.RAW
     	|	|	|	|------->...
     	|	|------->IMP
     	|	|	|------->sampleInfo.txt
-    	|	|	|------->mz.csv
     	|	|	|------->sampleName-line1.RAW
     	|	|	|------->sampleName-line2.RAW
     	|	|	|------->...
@@ -121,18 +115,27 @@
     	|	|	|-------> DONE
     	|------->RESULTS
     	|	|------->TEST
+    	|	|	|-------dataPrintout.csv
+    	|	|	|-------PSNR and SSIM Results (.csv and .png)
     	|	|	|-------TEST_SAMPLE_1
     	|	|	|	|------->Average
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
-    	|	|	|	|-------dataPrintout.csv
-    	|	|	|	|------->...
     	|	|	|-------TEST_SAMPLE_2
     	|	|	|	|------->Average
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
-    	|	|	|	|-------dataPrintout.csv
-    	|	|	|	|------->...
+    	|	|-------VALIDATION
+    	|	|	|-------dataPrintout.csv
+    	|	|	|-------PSNR and SSIM Results (.csv and .png)
+    	|	|	|-------TEST_SAMPLE_1
+    	|	|	|	|------->Average
+    	|	|	|	|------->mz
+    	|	|	|	|------->Videos
+    	|	|	|-------TEST_SAMPLE_2
+    	|	|	|	|------->Average
+    	|	|	|	|------->mz
+    	|	|	|	|------->Videos
     	|	|------->TRAIN
     	|	|	|------->Model Training Images
     	|	|	|	|------->...
@@ -145,7 +148,7 @@
 
 
 # INSTALLATION
-This implementation of SLADS is only functional within Windows 10, given a reliance on vendor provided .dll's, as utilized by the multiplierz package. The package versions do not necessarily need to match with those listed. However, should the program produce unexpected errors, installing a specific version of a package might be able to resolve the issue. Note that the multiplierz pacakage, must be installed from the provided link under the installation commands.
+This implementation of SLADS is generally only functional within Windows 10, given a reliance on vendor provided .dll's, as utilized by the multiplierz package. The package versions do not necessarily need to match with those listed. However, should the program produce unexpected errors, installing a specific version of a package might be able to resolve the issue. Note that the multiplierz pacakage, must be installed from the provided link under the installation commands.
 
 	Operating System
 		Win. 10:		Updated as of Jan 1 2021
@@ -170,7 +173,7 @@ This implementation of SLADS is only functional within Windows 10, given a relia
         scipy           1.5.3
         sobol           0.9
         sobol-seq       0.2.0
-        tensorflow      2.4.1
+        tensorflow      2.5.0
         natsort         7.0.1
         multiprocess    0.70.11.1
         scikit-image    0.17.2
@@ -225,11 +228,11 @@ All critical parameters for SLADS may be altered in a configuration file (Ex. ./
 
 Multiple configuration files in the form of CONFIG_*descriptor*.py, can be generated for which SLADS will be run sequentially. RESULTS_*descriptor* folders will correspond with the numbering of the CONFIG files, with the RESULTS folder without a description, containing results from the last run performed. 
 
-Two files must be included in each of the sample folders (specifically within the subdirectories in TRAIN, TEST, and IMP, as the tasks to be performed may dictate). sampleInfo.txt should include the following ordered information:
+One file must be included in each of the sample folders (specifically within the subdirectories in TRAIN, TEST, and IMP, as the tasks to be performed may dictate). sampleInfo.txt should include the following ordered information:
 
 	- Number of lines in the sample 
 		Not to be confused with the number of line files present in the directory!
-	- Length (mm) 
+	- Width (mm) 
 		Instrument field of view, not of just the sample dimensions
 	- Height (mm)
 		Instrument field of view, not of just the sample dimensions
@@ -237,40 +240,20 @@ Two files must be included in each of the sample folders (specifically within th
 	- Scan Rate (um/s)
 		May be specified differently than instrumentation for finer resolution
 		Output pixel positions are based on this parameter
-	- m/z visualization method
-		Allowable values include: 'sum', or 'xic'
-		'xic' is recommended
-	- m/z specification method
-		Allowable values include: 'range', or 'value'
-		'value' will use the m/z tolerance parameter to determine the final ranges
-		Irregardless of value, the mz.csv file (described below) should be included
-	- Normalization method 
-		Allowable values include: 'tic', 'standard', and 'none'
-		If using standard, the mzStandards.csv file (described below) should also be included
+	- Monoisotopic m/z (-1 indicates None, which will use TIC instead)
+		Used for normalization of the m/z images
+	- Minimum m/z
+		Lower limit of the m/z spectrum expected to be acquired
+	- Maximum m/z
+		Upper limit of the m/z spectrum expected to be acquired
 	- m/z tolerance (ppm)
 		Only specify/include if m/z specification is set to 'value', or if using 'standard' normalization
+	- FT resolution
+		Sets value precision when considering spectrum locations/values
 
 Each piece of information should be on its own line without additional description, as shown in the EXAMPLE sample directory. 
 
-mz.csv can either contain line separated values of m/z locations or comma/line separated values of m/z ranges to be extracted and used for a sample (as specified in sampleInfo.txt). At this time, each m/z should be handpicked to highlight underlying biological structures, as they will be averaged together during SLADS operation to form the ERD. 
-
-If using 'value', then the file should contain:
-
-	central_mz_1
-	central_mz_2
-	...
-Else if using 'range, then the file should contain:
-
-	low_mz_1, high_mz_1
-	low_mz_1, high_mz_1
-	...
-
-
-If the normalization method is specified as standard, then an additional file: mzStandards.csv should also be included. The file should contain line separated values of m/z locations (m/z tolerance will be used to determine the final ranges) to be used for normalization.
-
-	mz_1
-	mz_2
-	...
+Another file mz.csv should be placed in the base directory, which contains line separated values of m/z locations, where the ranges used for visualization are determined through the specified m/z tolerance, to be extracted and used for a sample (as specified in sampleInfo.txt). At this time, each m/z should be handpicked to highlight underlying structures of interest. If using the SLADS variants, or original RD generation method the m/z should be geometrically complementary. 
 
 Each MSI data file (ex. .d, or .raw), must be labeled with the standard convention: 
 
@@ -295,24 +278,25 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 		optimalC.npy: Determined optimal c value determined in training
 		Training Data Images: Training images with/without borders, summary sample images, c value curves 
 		Model Training Images: Visualized training convergence images
-		trainingSamples.p: Database of training sample inputs, suffix indicates intended acquisition method (point/line)
-		trainingDatabase.p: Final training database for each c value, suffix indicates intended acquisition method (point/line)
-		model_cValue_: Trained model corresponding to the indicated c value (.npy for SLADS(-Net))
+		trainingDatabase.p: Database of training samples; random 1% point masks from 1-40%
+		validationDatabase.p: Database of validation samples; random 1% point masks from 1-40%
+		trainingValidationSampleData.p: Database of training and validation sample data
+		model_cValue_: Trained model corresponding to the indicated c value (.npy for SLADS-LS and SLADS-Net)
 
 	TEST: Testing results
-		Animations: Resultant visualizations and multimedia for test samples
-				TEST_SAMPLE_1: Folder of frames for a sample's scan
-				TEST_SAMPLE_2: Folder of frames for a sample's scan
-				Videos: Videos of final scan progression
-					TEST_SAMPLE_1.avi: Video of scan for sample
-					TEST_SAMPLE_2.avi: Video of scan for sample
-		dataPrintout.csv: Averaged final test results
-		*.csv: Metric progressions averaged across testing samples
-		mzResults: Final measurement results at specified mz ranges
-			TEST_SAMPLE_1: Folder of final measurements at mz ranges
-			TEST_SAMPLE_2: Folder of final measurements at mz Ranges
-		testingAverageSSIM_Percentage.csv: Average SSIM progression results
-		testingAverageSSIM_Percentage.png: Visualized average SSIM progression
+		TEST_SAMPLE_1: Folder of frames for a sample's scan
+			Average: Individual and overall images of the progressive scanning for averaged m/z
+			mz: Individual and overall images of the progressive scanning for each specified m/z
+			Videos: Videos of final scan progression
+		avgPSNR_Percentage.csv(.png): Progressive PSNR of the reconstruction for the averaged m/z
+		dataPrintout.csv(.png): Summary of final results
+		ERDPSNR_Percentage.csv(.png): Progressive PSNR of the ERD
+		ERDSSIM_Percentage.csv(.png): Progressive SSIM of the ERD
+		mzAvgPSNR_Percentage.csv(.png) Progressive averaged PSNR for reconstructions of all m/z
+		mzAvgSSIM_Percentage.csv(.png) Progressive averaged SSIM for reconstructions of all m/z
+
+	VALIDATION: Validation results
+		Note: Identical structure to TEST
 
 In the case that multiple configuration files are provided in the form of: CONFIG_*descriptor*.py, the RESULTS folder will be duplicated with the same suffix for ease of testing.  Configuration file will be copied into the results directory at the termination of the program. 
 
@@ -344,11 +328,20 @@ Although the error would suggest there is something wrong with the network conne
 
 As of v0.8.0, SLADS obtains information directly from MSI files, rather than pre-processed .csv m/z visualizations. These operations are reliant on vendor specific .dll files as provided in the multiplierz package. Supperficially it appears as though the multiplierz API might function within Linux. For example, the packages pythonnet and comtypes can be installed, but cannot actually function in a linux environment. An alternative approach, that may work, might be to attempt an installation through wineDocker. 
 
-While it does not currently function, multiplierz may be installed directly on Ubuntu 18.04 with the following commands:
+While it does not currently function for some MSI formats, (verified operational for XCalibur .RAW but not Agilent .d) multiplierz may be installed directly on Ubuntu 18.04 with the following commands:
 
 	wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
 	sudo dpkg -i packages-microsoft-prod.deb
-	sudo apt-get install apt-transport-https clang libglib2.0-dev mono-dev nuget
+	rm packages-microsoft-prod.deb
+	sudo apt-get install apt-transport-https clang libglib2.0-dev nuget
+	sudo apt-get update
+  	sudo apt-get install -y aspnetcore-runtime-5.0
+	sudo apt-get install -y dotnet-sdk-5.0
+	sudo apt-get install -y dotnet-runtime-5.0
+	sudo apt install gnupg ca-certificates
+	sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
+echo "deb https://download.mono-project.com/repo/ubuntu stable-bionic main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
+	sudo apt update
+	sudo apt install mono-devel
 	pip3 install git+https://github.com/pythonnet/pythonnet.git@master
 	pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
-
