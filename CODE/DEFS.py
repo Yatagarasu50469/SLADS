@@ -23,7 +23,8 @@ class SampleData:
         
         #Store location of MSI data and sample name
         self.sampleFolder = sampleFolder
-        self.name = os.path.basename(sampleFolder)
+        self.name = os.path.basename(os.path.dirname(sampleFolder))
+        #self.name = os.path.basename(sampleFolder)
         
         #Note which files have already been read
         self.readScanFiles = []
@@ -180,7 +181,7 @@ class SampleData:
         
         #Identify which files have not yet been scanned, if line revisiting is disabled (update not replace)
         if self.lineRevist == False: scanFiles = list(set(scanFiles)-set(self.readScanFiles))
-    
+        
         #For each of the MSI files identified
         for scanFileName in scanFiles:
             
@@ -205,8 +206,8 @@ class SampleData:
             #Read in specified mz ranges, normalize as specified, and interpolate to new times
             for mzRangeNum in range(0, len(self.mzRanges)): 
                 mzData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1], self.mzRanges[mzRangeNum][0], self.mzRanges[mzRangeNum][1]))[:,1]
-                if self.mzMonoValue == -1: mzData = mzData/TICData
-                else: mzData = mzData/mzMonoData
+                if self.mzMonoValue == -1: mzData = np.nan_to_num(mzData/TICData, nan=0, posinf=0, neginf=0)
+                else: mzData = np.nan_to_num(mzData/mzMonoData, nan=0, posinf=0, neginf=0)
                 self.mzImages[mzRangeNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(mzData, nan=0, posinf=0, neginf=0))
             
             #Interpolate TIC and internal standard (if applicable) to final new times for visualization
@@ -251,8 +252,8 @@ class Sample:
         if not fromRecon:
             #If not simulation, then read from equipment, otherwise mask ground-truth mz images by what should have been scanned
             if not sampleData.simulationFlag:
-                print('\nWriting UNLOCK')
-                with open(dir_ImpDataFinal + 'UNLOCK', 'w') as filehandle: _ = [filehandle.writelines(str(tuple([pos[0]+1, pos[1]]))+'\n') for pos in newIdxs.tolist()]
+                print('Writing UNLOCK')
+                with open(dir_ImpDataFinal + 'UNLOCK', 'w') as filehandle: _ = [filehandle.writelines(str(tuple([pos[0]+1, pos[1]*sampleData.scanRate]))+'\n') for pos in newIdxs.tolist()]
                 equipWait()
                 sampleData.readScanData()
                 self.mzImages = copy.deepcopy(sampleData.mzImages)
@@ -508,13 +509,14 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions,
             mzImageSSIM = "{:.2f}".format(sample.mzImageSSIMList[mzNum])
         
         #Measured mz image
-        f = plt.figure(figsize=(20,5.3865))
+        if sampleData.simulationFlag: f = plt.figure(figsize=(20,5.3865))
+        else:  f = plt.figure(figsize=(15,5.3865))
     
         if sampleData.simulationFlag: plt.suptitle(r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ mz:\ }$" + massRange + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured + '\n' + r"$\bf{PSNR - mz\ Recon:\ }$" + mzImagePSNR + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + avgmzImagePSNR+ '\n' + r"$\bf{SSIM - mz\ Recon:\ }$" + mzImageSSIM + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + avgmzImageSSIM)
         else: plt.suptitle(r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ mz:\ }$" + massRange + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured)
 
         if sampleData.simulationFlag: ax = plt.subplot2grid(shape=(1,3), loc=(0,0))
-        else: ax = plt.subplot2grid(shape=(1,3), loc=(0,0))
+        else: ax = plt.subplot2grid(shape=(1,2), loc=(0,0))
         im = ax.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
         ax.set_title('Sampled Mask')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
@@ -527,7 +529,7 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions,
             cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
         
         if sampleData.simulationFlag: ax = plt.subplot2grid(shape=(1,3), loc=(0,2))
-        else: ax = plt.subplot2grid(shape=(1,3), loc=(0,1))
+        else: ax = plt.subplot2grid(shape=(1,2), loc=(0,1))
         if not sysLogNorm: im = ax.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', vmin=mzMinValue, vmax=mzMaxValue)
         if sysLogNorm: im = ax.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=mzLinThreshValue, base=10, vmin=mzMinValue, vmax=mzMaxValue))
         ax.set_title('Reconstruction')
@@ -553,10 +555,11 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions,
         
     #For the average, generate visual
     avgMinValue, avgMaxValue, avgLinThreshValue = np.min(sampleData.mzAvgImage), np.max(sampleData.mzAvgImage), np.mean(sampleData.mzAvgImage)+3*np.std(sampleData.mzAvgImage)
-    f = plt.figure(figsize=(20,10))
+    if sampleData.simulationFlag: f = plt.figure(figsize=(20,10))
+    else: f = plt.figure(figsize=(20,5.3865))
     
     if sampleData.simulationFlag: plt.suptitle(r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured + '\n' + r"$\bf{PSNR - Average\ Recon: }$" + avgmzImagePSNR + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + mzImageAvgPSNR + r"$\bf{\ \ ERD:\ }$" + erdPSNR + '\n' + r"$\bf{SSIM - Average\ Recon: }$" + avgmzImageSSIM + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + mzImageAvgSSIM + r"$\bf{\ \ ERD:\ }$" + erdSSIM)
-    else:  plt.suptitle(r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured)
+    else: plt.suptitle(r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured)
     
     if sampleData.simulationFlag: 
         ax = plt.subplot2grid(shape=(2,3), loc=(0,0))
@@ -687,15 +690,14 @@ def runSLADS(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFla
     for initialSet in sampleData.initialSets: sample.performMeasurements(sampleData, initialSet, model, cValue, bestCFlag, oracleFlag, False)
     
     #Check stopping criteria, just in case of a bad input
-    if (sampleData.scanMethod == 'pointwise' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
+    if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
     elif sampleData.scanMethod == 'linewise' and sampleData.finalDim[0]-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
     
     #Perform the first update for the result
     result.update(sample)
     
-    #if not lineVisitAll or scanMethod != 'linewise': maxProgress = stopPerc
-    #else: maxProgress = 100
-    maxProgress = stopPerc
+    if not lineVisitAll or scanMethod != 'linewise': maxProgress = stopPerc
+    else: maxProgress = 100
     
     #Until the stopping criteria has been met
     with tqdm(total = float(maxProgress), desc = '% Sampled', leave=False, ascii=True, disable=tqdmHide) as pbar:
@@ -713,8 +715,8 @@ def runSLADS(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFla
             #Perform measurements, reconstructions and ERD/RD computations
             sample.performMeasurements(sampleData, newIdxs, model, cValue, bestCFlag, oracleFlag, False)
             
-            #Check stopping criteria, just in case of a bad input
-            if (sampleData.scanMethod == 'pointwise' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
+            #Check stopping criteria
+            if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
             elif sampleData.scanMethod == 'linewise' and sampleData.finalDim[0]-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
             
             #If viz limit, only update when percToViz has been met; otherwise update every iteration

@@ -5,7 +5,7 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    22 July 2021
+#DATE MODIFIED:	    1 September 2021
 #
 #VERSION NUM:	    0.8.6
 #
@@ -53,7 +53,7 @@
 #               0.8.3   Mask seed fix, normalization for sim. fix, non-Ray option, pad instead of resize
 #               0.8.4   Parallel c value selection fix, remove network resizing requirement, fix experimental
 #               0.8.5   Model optimization, enable batch processing, SLADS training fix, database acceleration
-#               0.8.6   Memory reduction, mz reconstruction vectorization, augmentation, global mz, mz window in ppm
+#               0.8.6   Memory reduction, reconstruction vectorization, augmentation, global mz, mz window in ppm
 #               ~0.+.+  Static window option, GAN, Custom adversarial network, Multimodal integration, 
 #               ~1.0.0  Initial release
 #====================================================================
@@ -187,7 +187,7 @@ for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
         exec(open("./CODE/EXPERIMENTAL.py").read())
 
         #Begin performing an implementation
-        performImplementation(model, optimalC)
+        performImplementation(optimalC)
 
     #Copy the results folder and the config file into it
     resultCopy = shutil.copytree('./RESULTS', destResultsFolder)
