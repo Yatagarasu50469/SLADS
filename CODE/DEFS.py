@@ -184,35 +184,43 @@ class SampleData:
         
         #For each of the MSI files identified
         for scanFileName in scanFiles:
-            
-            #Add file name to those already scanned
-            self.readScanFiles.append(scanFileName)
+
+            #Add a flag to indicate 'good'/'bad' data file (primarily checking for files without data)
+            readErrorFlag = False
 
             #Establish file pointer and line number (1 indexed) for the specific scan
-            data = mzFile(scanFileName)
-            lineNum = int(scanFileName.split('line')[1].split('.')[0])-1
-            self.readLines.append(lineNum)
+            try: data = mzFile(scanFileName)
+            except: readErrorFlag = True
             
-            #If ignoring missing lines, then determine the offset for correct indexing
-            if self.ignoreMissingLines and len(self.missingLines) > 0: lineNum -= int(np.sum(lineNum > self.missingLines))
+            #If the data file is 'good' then continue processing
+            if not readErrorFlag:
             
-            #Obtain the total ion chromatogram and extract original times
-            ticData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
-            origTimes, TICData = ticData[:,0], ticData[:,1]
-            
-            #If normalizing by internal standard, then obtain the relevant data
-            if self.mzMonoValue != -1: mzMonoData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1], self.mzMonoRange[0], self.mzMonoRange[1]))[:,1]
-            
-            #Read in specified mz ranges, normalize as specified, and interpolate to new times
-            for mzRangeNum in range(0, len(self.mzRanges)): 
-                mzData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1], self.mzRanges[mzRangeNum][0], self.mzRanges[mzRangeNum][1]))[:,1]
-                if self.mzMonoValue == -1: mzData = np.nan_to_num(mzData/TICData, nan=0, posinf=0, neginf=0)
-                else: mzData = np.nan_to_num(mzData/mzMonoData, nan=0, posinf=0, neginf=0)
-                self.mzImages[mzRangeNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(mzData, nan=0, posinf=0, neginf=0))
-            
-            #Interpolate TIC and internal standard (if applicable) to final new times for visualization
-            self.TIC[lineNum] = np.interp(self.newTimes, origTimes, TICData) 
-            if self.mzMonoValue != -1: self.mzMono[lineNum] = np.interp(self.newTimes, origTimes, mzMonoData)
+                #Add file name to those already scanned
+                self.readScanFiles.append(scanFileName)
+                    
+                lineNum = int(scanFileName.split('line')[1].split('.')[0])-1
+                self.readLines.append(lineNum)
+                
+                #If ignoring missing lines, then determine the offset for correct indexing
+                if self.ignoreMissingLines and len(self.missingLines) > 0: lineNum -= int(np.sum(lineNum > self.missingLines))
+                
+                #Obtain the total ion chromatogram and extract original times
+                ticData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
+                origTimes, TICData = ticData[:,0], ticData[:,1]
+                
+                #If normalizing by internal standard, then obtain the relevant data
+                if self.mzMonoValue != -1: mzMonoData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1], self.mzMonoRange[0], self.mzMonoRange[1]))[:,1]
+                
+                #Read in specified mz ranges, normalize as specified, and interpolate to new times
+                for mzRangeNum in range(0, len(self.mzRanges)): 
+                    mzData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1], self.mzRanges[mzRangeNum][0], self.mzRanges[mzRangeNum][1]))[:,1]
+                    if self.mzMonoValue == -1: mzData = np.nan_to_num(mzData/TICData, nan=0, posinf=0, neginf=0)
+                    else: mzData = np.nan_to_num(mzData/mzMonoData, nan=0, posinf=0, neginf=0)
+                    self.mzImages[mzRangeNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(mzData, nan=0, posinf=0, neginf=0))
+                
+                #Interpolate TIC and internal standard (if applicable) to final new times for visualization
+                self.TIC[lineNum] = np.interp(self.newTimes, origTimes, TICData) 
+                if self.mzMonoValue != -1: self.mzMono[lineNum] = np.interp(self.newTimes, origTimes, mzMonoData)
             
         #Find the maximum value in each mz image for easy referencing
         self.mzImagesMax = np.max(self.mzImages, axis=(1,2))
