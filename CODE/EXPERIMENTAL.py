@@ -16,6 +16,9 @@ def equipWait():
 
 #Perform SLADS with external equipment
 def performImplementation(optimalC):
+    
+    #Storage location for matching sequentially generated indexes with physical line numbers
+    if unorderedNames: physicalLineNums = {}
 
     #Wait for equipment to initialize scan
     equipWait()

@@ -16,7 +16,7 @@
 
 
     NAME: 		SLADS
-    VERSION NUM:	0.8.6
+    VERSION NUM:	0.8.7
     LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
@@ -61,6 +61,7 @@
                     0.8.4   Parallel c value selection fix, remove network resizing requirement, fix experimental
                     0.8.5   Model optimization, enable batch processing, SLADS training fix, database acceleration
                     0.8.6   Memory reduction, mz reconstruction vectorization, augmentation, global mz, mz window in ppm
+                    0.8.7   Patch for implementation with Agilent hardware
                     ~0.+.+  Static window option, GAN, Custom adversarial network, Multimodal integration, Verified phys. imp.
                     ~1.0.0  Initial release
 
@@ -86,29 +87,29 @@
     	|	|------->TEST
     	|	|	|------->TEST_SAMPLE_1
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->sampleName-line1.RAW
-    	|	|	|	|------->sampleName-line2.RAW
+    	|	|	|	|------->sampleName-line-0001.RAW
+    	|	|	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->...
     	|	|	|------->TEST_SAMPLE_2
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->sampleName-line1.RAW
-    	|	|	|	|------->sampleName-line2.RAW
+    	|	|	|	|------->sampleName-line-0001.RAW
+    	|	|	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->...
     	|	|------->TRAIN
     	|	|	|------->TRAIN_SAMPLE_1
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->sampleName-line1.RAW
-    	|	|	|	|------->sampleName-line2.RAW
+    	|	|	|	|------->sampleName-line-0001.RAW
+    	|	|	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->...
     	|	|	|------->TEST_SAMPLE_2
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->sampleName-line1.RAW
-    	|	|	|	|------->sampleName-line2.RAW
+    	|	|	|	|------->sampleName-line-0001.RAW
+    	|	|	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->...
     	|	|------->IMP
     	|	|	|------->sampleInfo.txt
-    	|	|	|------->sampleName-line1.RAW
-    	|	|	|------->sampleName-line2.RAW
+    	|	|	|------->sampleName-line-0001.RAW
+    	|	|	|------->sampleName-line-0002.RAW
     	|	|	|------->...
     	|	|	|-------> UNLOCK
     	|	|	|-------> LOCK
@@ -257,14 +258,9 @@ Another file mz.csv should be placed in the base directory, which contains line 
 
 Each MSI data file (ex. .d, or .raw), must be labeled with the standard convention: 
 
-	sampleName-line#.extension
+	sampleName-line-000#.extension
 
-While the file name can have multiple dashes in the sample name, 'line' must be immediatedly followed by the line number without zero padding. For example:
-
-	Slide-Wnt-3-line1.raw		#Would function correctly
-	Slide-Wnt-3-line0001.raw	#Would not function correctly
-	WorklistData-0001.raw		#Would not function correctly
-	
+If using Agilent equipment with linewise acquisition modes for an implementation run, then the line numbers are in sequence, rather than according to physical row number. In this case, enable the unorderedNames flag in the configuration file. 
 
 ###  **RUN**
 After configuration, to run the program perform the following command in the root directory:

@@ -175,7 +175,7 @@ class SampleData:
             elif 'raw' in extensions: self.lineExt = '.raw'
             elif 'RAW' in extensions: self.lineExt = '.RAW'
             else: sys.exit('Error! - Either no MSI files are present, or an unknown MSI filetype being used for sample: ' + self.name)
-
+        
         #Obtain and sort the available line files pertaining to the current scan
         scanFiles = natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'+self.lineExt), reverse=False)
         
@@ -197,8 +197,14 @@ class SampleData:
             
                 #Add file name to those already scanned
                 self.readScanFiles.append(scanFileName)
-                    
-                lineNum = int(scanFileName.split('line')[1].split('.')[0])-1
+                
+                #Extract line number from the filename, removing leading zeros, subtract 1 for zero indexing
+                lineNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
+                
+                #If the line numbers are not the physical row numbers, then obtain correct number from stored LUT
+                if unorderedNames and impModel and scanMethod == 'linewise': lineNum = physicalLineNums[lineNum]
+                
+                #Record that the line number specified has been read previously
                 self.readLines.append(lineNum)
                 
                 #If ignoring missing lines, then determine the offset for correct indexing
@@ -262,6 +268,7 @@ class Sample:
             if not sampleData.simulationFlag:
                 print('Writing UNLOCK')
                 with open(dir_ImpDataFinal + 'UNLOCK', 'w') as filehandle: _ = [filehandle.writelines(str(tuple([pos[0]+1, pos[1]*sampleData.scanRate]))+'\n') for pos in newIdxs.tolist()]
+                if unorderedNames and impModel and scanMethod == 'linewise': physicalLineNums[len(physicalLineNums.keys())] = int(pos[0])
                 equipWait()
                 sampleData.readScanData()
                 self.mzImages = copy.deepcopy(sampleData.mzImages)
@@ -700,6 +707,7 @@ def runSLADS(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFla
     #Check stopping criteria, just in case of a bad input
     if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
     elif sampleData.scanMethod == 'linewise' and sampleData.finalDim[0]-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
+    if np.sum(sample.ERD) == 0: completedRunFlag = True
     
     #Perform the first update for the result
     result.update(sample)
@@ -726,6 +734,7 @@ def runSLADS(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFla
             #Check stopping criteria
             if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
             elif sampleData.scanMethod == 'linewise' and sampleData.finalDim[0]-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
+            if np.sum(sample.ERD) == 0: completedRunFlag = True
             
             #If viz limit, only update when percToViz has been met; otherwise update every iteration
             if ((percToViz != None) and ((sample.percMeasured - result.percsMeasured[-1]) >= percToViz)) or (percToViz == None) or completedRunFlag: result.update(sample)
@@ -932,8 +941,8 @@ def computeERD(sample, sampleData, model, squareUnMeasuredIdxs, squareMeasuredId
         
         #Remove values at measured locations
         ERD[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1]] = 0
-    
-    return ERD
+        
+    return np.nan_to_num(ERD, nan=0, posinf=0, neginf=0)
 
 #Determine which unmeasured points of a sample should be scanned given the current E/RD
 def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan, oracleFlag, bestCFlag):
@@ -966,6 +975,9 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
                                 
                 #When enough new locations have been determined, break from loop
                 if (np.sum(sample.mask)-np.sum(result.lastMask)) >= sampleData.pointsToScan: break
+                
+                #Reacquire the ERD and resize for selection
+                ERD = resize(sample.ERD, tuple(sampleData.finalDim), order=0)
                 
             #Convert to array for indexing
             newIdxs = np.asarray(newIdxs)
@@ -1004,11 +1016,11 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
                 #Perform the measurement, using values from reconstruction 
                 sample.performMeasurements(sampleData, np.asarray(newIdxs[-1]), model, cValue, bestCFlag, oracleFlag, True)
                 
-                #Reacquire the ERD and resize for selection
-                ERD = resize(sample.ERD, tuple(sampleData.finalDim), order=0)
-                
                 #When enough new locations have been determined, break from loop
                 if len(newIdxs) >= sampleData.pointsToScan: break
+                
+                #Reacquire the ERD and resize for selection
+                ERD = resize(sample.ERD, tuple(sampleData.finalDim), order=0)
                 
             #Convert to array for indexing
             newIdxs = np.asarray(newIdxs)

@@ -189,6 +189,9 @@ trainingVizSteps = 10
 #GENERALLY NOT CHANGED
 ##################################################################
 
+#Are the filename line numbers going to be labeled sequentially rather than by physical row number during implementation
+unorderedNames = False
+
 #Should parallelization calls be used (True); if memory overflow issues develop, set to False
 parallelization = True
 

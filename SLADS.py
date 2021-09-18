@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    5 September 2021
+#DATE MODIFIED:	    18 September 2021
 #
-#VERSION NUM:	    0.8.6
+#VERSION NUM:	    0.8.7
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -54,6 +54,7 @@
 #               0.8.4   Parallel c value selection fix, remove network resizing requirement, fix experimental
 #               0.8.5   Model optimization, enable batch processing, SLADS training fix, database acceleration
 #               0.8.6   Memory reduction, reconstruction vectorization, augmentation, global mz, mz window in ppm
+#               0.8.7   Patch for implementation with Agilent hardware
 #               ~0.+.+  Static window option, GAN, Custom adversarial network, Multimodal integration, 
 #               ~1.0.0  Initial release
 #====================================================================
@@ -62,7 +63,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum='0.8.6'
+versionNum='0.8.7'
 
 #Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
