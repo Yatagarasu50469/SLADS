@@ -1,5 +1,5 @@
 
-     ▄▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄ 
+     ▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄ 
 	▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌
 	▐░█▀▀▀▀▀▀▀▀▀ ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ 
 	▐░▌          ▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌          
@@ -10,29 +10,28 @@
 	 ▄▄▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄█░▌ ▄▄▄▄▄▄▄▄▄█░▌
 	▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌
 	 ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀	
-#
 
 # GENERAL INFORMATION
 
 
-    NAME: 			SLADS
+    NAME: 		SLADS
     VERSION NUM:	0.8.7
     LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
-					for Dynamic Sampling with additional constraint to select groups of 
-					points along a single axis. 
+			for Dynamic Sampling with additional constraint to select groups of 
+			points along a single axis. 
     
     AUTHORS:	David Helminiak	EECE, Marquette University
-				Dong Hye Ye	EECE, Marquette University
+			Dong Hye Ye	EECE, Marquette University
     
     COLLAB. 	Julia Laskin	CHEM, Purdue University
-				Hang Hu		CHEM, Purdue University
+			Hang Hu		CHEM, Purdue University
     
     FUNDING:	This project has received funding and was programmed for:
-				NIH Grant 1UG3HL145593-01
+		NIH Grant 1UG3HL145593-01
     
 	GLOBAL
-	CHANGELOG:  	0.1.0   Multithreading adjustments to pointwise SLADS
+	CHANGELOG:	0.1.0   Multithreading adjustments to pointwise SLADS
                     0.1.1   Line constraints, concatenation, pruning, and results organization			
                     0.2.0   Line bounded constraints addition
                     0.3.0   Complete code rewrite, computational improvements
@@ -76,18 +75,18 @@
     	|------->CONFIG_#-description.py
     	|------->SLADS.py
     	|------->mz.csv
-		|------->RECON
+    	|------->RECON
 		|	|------->INPUT
 		|	|	|------->TEST_SAMPLE_1
-		    |	|	|	|------->sampleName-line-0001.RAW
-    	|	|	|	|------->sampleName-line-0002.RAW
+		|	|	|	|------->sampleName-line-0001.RAW
+    	|	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->sampleInfo.txt
-		|	|	|	|------->measuredMask.csv
-		|	|	|	|------->mz.csv
-		|	|	|	|------->physicalLineNums.csv
-		|	|------->RESULTS
-		|	|------->mz.csv
-		|	|------->mzReconstruction.ipynb
+    	|	|	|	|------->measuredMask.csv
+    	|	|	|	|------->mz.csv
+    	|	|	|	|------->physicalLineNums.csv
+    	|	|------->RESULTS
+    	|	|------->mz.csv
+    	|	|------->mzReconstruction.ipynb
     	|------->CODE
     	|	|------->DEFS.py
     	|	|------->EXPERIMENTAL.py
@@ -134,7 +133,7 @@
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
-		|	|	|	|------->physicalLineNums.csv
+    	|	|	|	|------->physicalLineNums.csv
     	|	|------->TEST
     	|	|	|-------dataPrintout.csv
     	|	|	|-------PSNR and SSIM Results (.csv and .png)
@@ -147,7 +146,7 @@
     	|	|	|	|------->Average
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
-		|	|	|	|------->measuredMask.csv
+    	|	|	|	|------->measuredMask.csv
     	|	|-------VALIDATION
     	|	|	|-------dataPrintout.csv
     	|	|	|-------PSNR and SSIM Results (.csv and .png)
@@ -155,12 +154,12 @@
     	|	|	|	|------->Average
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
-		|	|	|	|------->measuredMask.csv
+    	|	|	|	|------->measuredMask.csv
     	|	|	|-------VALIDATION_SAMPLE_2
     	|	|	|	|------->Average
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
-		|	|	|	|------->measuredMask.csv
+    	|	|	|	|------->measuredMask.csv
     	|	|------->TRAIN
     	|	|	|------->Model Training Images
     	|	|	|	|------->...
@@ -176,35 +175,35 @@
 This implementation of SLADS is generally only functional within Windows 10, given a reliance on vendor provided .dll's, as utilized by the multiplierz package. The package versions do not necessarily need to match with those listed. However, should the program produce unexpected errors, installing a specific version of a package might be able to resolve the issue. Note that the multiplierz pacakage, must be installed from the provided link under the installation commands.
 
 	Operating System
-		Win. 10:		Updated as of Jan 1 2021
+		Win. 10:	Updated as of Jan 1 2021
 
 	System
-		Python			3.8.5
-		pip				20.2.4
+		Python		3.8.5
+		pip		20.2.4
 
 	Python Packages
-        opencv-python   4.4.0.46
-        datetime        4.3
-        glob3           0.0.1
-        IPython         7.16.1
-        joblib          0.17.0
-        pandas          1.1.4
-        psutil          5.7.3
-        matplotlib      3.3.2
-		numba			0.53.0
-        pillow          8.0.1
-        ray             1.0.0
-        setuptools      50.3.0
-        scipy           1.5.3
-        sobol           0.9
-        sobol-seq       0.2.0
-        tensorflow      2.5.0
-        natsort         7.0.1
-        multiprocess    0.70.11.1
-        scikit-image    0.17.2
-        scikit-learn    0.23.2
-        sklearn         0.0
-        tqdm            4.51.0
+        	opencv-python   4.4.0.46
+        	datetime        4.3
+        	glob3           0.0.1
+        	IPython         7.16.1
+        	joblib          0.17.0
+        	pandas          1.1.4
+        	psutil          5.7.3
+        	matplotlib      3.3.2
+        	numba           0.53.0
+		pillow          8.0.1
+		ray             1.0.0
+		setuptools      50.3.0
+		scipy           1.5.3
+		sobol           0.9
+		sobol-seq       0.2.0
+		tensorflow      2.5.0
+		natsort         7.0.1
+		multiprocess    0.70.11.1
+		scikit-image    0.17.2
+		scikit-learn    0.23.2
+		sklearn         0.0
+		tqdm            4.51.0
 
 ### **Installation on Windows 10**
 
@@ -243,7 +242,7 @@ All critical parameters for SLADS may be altered in a configuration file (Ex. ./
 
     L0:     Tasks to be performed
     L1:     Task methods
-		L1-0:	Implementation
+        L1-0:   Implementation
         L1-1:   Pointwise
         L1-2:   Linewise
         L1-3:   Training Data Generation
@@ -331,9 +330,9 @@ In the case that multiple configuration files are provided in the form of: CONFI
 Prior to engaging the physical equipment run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, (row number, and position in um to start scanning for 1 second, based on specified scan rate for the sample) saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in MSI files in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. A sampleInfo.txt must be included in the implementation directory as outlined in the CONFIGURATION section. 
 
 # FAQ
-###  **I read through the README thoroughly, but I'm still getting an error, or am confused...**
+###  **I read through the README thoroughly, but I'm still getting an error, or am confused about how a feature should work...**
 
-Feel free to open an issue on the Github repository; though support cannot be guaranteed at this time. 
+Feel free to open an issue on the Github repository; though direct support cannot be guaranteed at this time. 
 
 ###  **Why am I receiving a 'list index out of range' error from the 'readScanData' method**
 
@@ -362,7 +361,7 @@ While it does not currently function for some MSI formats, (verified operational
 	sudo apt-get install -y dotnet-runtime-5.0
 	sudo apt install gnupg ca-certificates
 	sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
-echo "deb https://download.mono-project.com/repo/ubuntu stable-bionic main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
+	echo "deb https://download.mono-project.com/repo/ubuntu stable-bionic main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
 	sudo apt update
 	sudo apt install mono-devel
 	pip3 install git+https://github.com/pythonnet/pythonnet.git@master
