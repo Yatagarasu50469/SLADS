@@ -122,15 +122,7 @@ def importInitialData(sortedSampleFolders):
     #Make sure sample mask initialization is consistent, particularly important for c value optimization
     #DO NOT RUN this section in parallel, makes optimizeC inconsistent, forcing seed in SampleData harms training generalization
     if consistentSeed: np.random.seed(0)
-    
-    #Create a info object for each sample; scanning all MSI data immediatley; pointwise mode in prep for optimize c
-    #if parallelization: 
-    #    t0 = time.time()
-    #    futures = [SampleData_parhelper.remote(sampleFolder, initialPercToScan, stopPerc, 'pointwise', RDMethod, mzGlobalSpec, True, lineRevist, True) for sampleFolder in sortedSampleFolders]
-    #    trainingValidationSampleData = np.asarray(ray.get(futures))
-    #    print('Completed in: '+str(time.time()-t0))
-    #else: trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPerc, 'pointwise', RDMethod, mzGlobalSpec, True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)], dtype='object')
-    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPerc, 'pointwise', RDMethod, mzGlobalSpec, True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)], dtype='object')
+    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPerc, 'pointwise', RDMethod, True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)], dtype='object')
     
     #Save relevant images
     trainDataFlag, valDataFlag = True, False
@@ -190,13 +182,13 @@ def optimizeC(trainingSampleData):
             futures = []
             for cNum in range(0, len(cValues)):
                 for sampleNum in range(0, len(trainingSampleData)):
-                    futures.append(runSLADS_parhelper.remote(trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False))
+                    futures.append(runSLADS_parhelper.remote(trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False, None, False))
             results = np.split(np.asarray(ray.get(futures), dtype='object'), len(cValues))
             print('Completed in: '+str(time.time()-t0))
         else:
             results = []
             for cNum in tqdm(range(0, len(cValues)), desc='c Values', leave=True, ascii=True):
-                results.append([runSLADS(trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False) for sampleNum in tqdm(range(0, len(trainingSampleData)), desc='Samples', leave=False, ascii=True)])
+                results.append([runSLADS(trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False, None, False) for sampleNum in tqdm(range(0, len(trainingSampleData)), desc='Samples', leave=False, ascii=True)])
         areaUnderCurveList = []
         
         for cNum in range(0, len(cValues)):
@@ -344,8 +336,8 @@ def generateDatabases(trainingValidationSampleData, optimalC):
             trainingValidationSampleData[index].generateInitialSets('random')
             
             #If parallel, then add job to list, otherwise just run and collect the result
-            if parallelization: futures.append(runSLADS_parhelper.remote(copy.deepcopy(trainingValidationSampleData[index]), optimalC, False, 1, None, False, True, lineVisitAll, False))
-            else: results.append(runSLADS(copy.deepcopy(trainingValidationSampleData[index]), optimalC, False, 1, None, False, True, lineVisitAll, False))
+            if parallelization: futures.append(runSLADS_parhelper.remote(copy.deepcopy(trainingValidationSampleData[index]), optimalC, False, 1, None, False, True, lineVisitAll, False, None, False))
+            else: results.append(runSLADS(copy.deepcopy(trainingValidationSampleData[index]), optimalC, False, 1, None, False, True, lineVisitAll, False, None, False))
     
     #If parallel, start queue and wait for results
     if parallelization: 

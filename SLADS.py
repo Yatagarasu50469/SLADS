@@ -5,7 +5,7 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    18 September 2021
+#DATE MODIFIED:	    7 October 2021
 #
 #VERSION NUM:	    0.8.7
 #
@@ -19,7 +19,7 @@
 #ADVISOR(S):        Dong Hye Ye		EECE, Marquette University
 #
 #COLLABORATORS:	    Julia Laskin	CHEM, Purdue University
-#                   Hang Hu		CHEM, Purdue University
+#                   Hang Hu		    CHEM, Purdue University
 #
 #FUNDING:	    This project has received funding and was programmed for:
 #               NIH Grant 1UG3HL145593-01
@@ -54,8 +54,8 @@
 #               0.8.4   Parallel c value selection fix, remove network resizing requirement, fix experimental
 #               0.8.5   Model optimization, enable batch processing, SLADS training fix, database acceleration
 #               0.8.6   Memory reduction, reconstruction vectorization, augmentation, global mz, mz window in ppm
-#               0.8.7   Patch for implementation with Agilent hardware
-#               ~0.+.+  Static window option, GAN, Custom adversarial network, Multimodal integration, 
+#               0.8.7   Recon. script, Options for acq. rate, sequential names, live output, row offsets, and input scaling
+#               ~0.+.+  GAN, Custom adversarial network, Multimodal integration
 #               ~1.0.0  Initial release
 #====================================================================
 

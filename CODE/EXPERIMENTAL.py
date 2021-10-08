@@ -16,18 +16,15 @@ def equipWait():
 
 #Perform SLADS with external equipment
 def performImplementation(optimalC):
-    
-    #Storage location for matching sequentially generated indexes with physical line numbers
-    if unorderedNames: physicalLineNums = {}
 
     #Wait for equipment to initialize scan
     equipWait()
     
     #Create a sample object and read the first sets of information
-    sampleData = SampleData(dir_ImpDataFinal, initialPercToScan, stopPerc, scanMethod, RDMethod, mzGlobalSpec, False, lineRevist, False)
+    sampleData = SampleData(dir_ImpDataFinal, initialPercToScan, stopPerc, scanMethod, RDMethod, False, lineRevist, False)
 
     #Run SLADS
-    result = runSLADS(sampleData, optimalC, True, percToScan, percToViz, False, False, lineVisitAll, False)
+    result = runSLADS(sampleData, optimalC, True, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_ImpResults, False)
     
     #Indicate to equipment that the sample scan has concluded
     print('Writing DONE')

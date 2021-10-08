@@ -4,18 +4,17 @@
 
 #Function to generate metadata for multiple samples
 @ray.remote
-def SampleData_parhelper(sampleFolder, initialPercToScan, stopPerc, scanMethod, RDMethod, mzGlobalSpec, ignoreMissingLines, lineRevist, simulationFlag):
-    return SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, RDMethod, mzGlobalSpec, ignoreMissingLines, lineRevist, simulationFlag)
+def SampleData_parhelper(sampleFolder, initialPercToScan, stopPerc, scanMethod, RDMethod, ignoreMissingLines, lineRevist, simulationFlag):
+    return SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, RDMethod, ignoreMissingLines, lineRevist, simulationFlag)
 
 #Object for initializing and storing sample metadata
 class SampleData:
-    def __init__(self, sampleFolder, initialPercToScan, stopPerc, scanMethod, RDMethod, mzGlobalSpec, ignoreMissingLines, lineRevist, simulationFlag):
+    def __init__(self, sampleFolder, initialPercToScan, stopPerc, scanMethod, RDMethod, ignoreMissingLines, lineRevist, simulationFlag):
         
         #Save options as internal variables
         self.scanMethod = scanMethod
         self.initialPercToScan = initialPercToScan
         self.stopPerc = stopPerc
-        self.mzGlobalSpec = mzGlobalSpec
         self.ignoreMissingLines = ignoreMissingLines
         self.lineRevist = lineRevist
         self.simulationFlag = simulationFlag
@@ -23,12 +22,15 @@ class SampleData:
         
         #Store location of MSI data and sample name
         self.sampleFolder = sampleFolder
-        self.name = os.path.basename(os.path.dirname(sampleFolder))
-        #self.name = os.path.basename(sampleFolder)
+        #self.name = os.path.basename(os.path.dirname(sampleFolder))
+        self.name = os.path.basename(sampleFolder)
         
         #Note which files have already been read
         self.readScanFiles = []
         self.readLines = []
+        
+        #Storage location for matching sequentially generated indexes with physical line numbers
+        self.physicalLineNums = {}
         
         #Read in data from sampleInfo.txt
         lineIndex = 0
@@ -50,41 +52,41 @@ class SampleData:
         self.scanRate = float(sampleInfo[lineIndex].rstrip())
         lineIndex += 1
 
+        #Read in acquistion rate
+        self.acqRate = float(sampleInfo[lineIndex].rstrip())
+        lineIndex += 1
+
         #Read in monoisotopic mz (-1 will indicate None)
         self.mzMonoValue = float(sampleInfo[lineIndex].rstrip())
         lineIndex += 1
-
-        #Read in minimum mz
-        self.mzMin = float(sampleInfo[lineIndex].rstrip())
-        lineIndex += 1
-
-        #Read in maximum mz
-        self.mzMax = float(sampleInfo[lineIndex].rstrip())
-        lineIndex += 1
-
+        
         #Read window tolerance (ppm)
         self.ppm = float(sampleInfo[lineIndex].rstrip())*1e-6
         lineIndex += 1
 
-        #Read FT resolution to set precision
-        self.resFT = float(sampleInfo[lineIndex].rstrip())
+        #Number of decimals for mz precision
+        self.mzResOrder = int(sampleInfo[lineIndex].rstrip())
         lineIndex += 1
 
-        #Process the read information
+        #Check if files are numbered sequentially, or according to physical position
+        fileNumbering = int(sampleInfo[lineIndex].rstrip())
+        lineIndex += 1
+
+        #Process the read information as needed for regular use cases
+        if overrideTIC: self.mzMonoValue = -1
         self.ppmPos, self.ppmNeg = 1+self.ppm, 1-self.ppm
-        self.mzResOrder = int(round(np.log10(self.resFT)))
-        self.mzInvRes = pow(10, round(np.log10(self.resFT)))
-        self.mzRes = pow(10, round(np.log10(1/self.resFT)))
         self.mzMonoRange = [self.mzMonoValue*self.ppmNeg, self.mzMonoValue*self.ppmPos]
-        self.binSize = round((self.mzMin*self.ppmPos)-(self.mzMin*self.ppmNeg), self.mzResOrder)
-        
+        if fileNumbering==0: self.unorderedNames = False
+        elif fileNumbering==0: self.unorderedNames = True
+        else: sys.exit('Error - File Numbering parameter used in sampleInfo is not an acceptable value.')
+
         #Get mz ranges to use for visualizations
-        if self.mzGlobalSpec: self.mzValues = np.loadtxt('mz.csv', delimiter=',')
-        else: self.mzValues = np.loadtxt(self.sampleFolder+os.path.sep+'mz.csv', delimiter=',')
+        try: self.mzValues = np.loadtxt(self.sampleFolder+os.path.sep+'mz.csv', delimiter=',')
+        except: self.mzValues = np.loadtxt('mz.csv', delimiter=',')
         self.mzRanges = np.round(np.column_stack((self.mzValues*self.ppmNeg, self.mzValues*self.ppmPos)), self.mzResOrder)
         
         #Store final dimensions for physical domain, determining the number of columns for row-alignment interpolations
-        self.finalDim = [self.numLines, int(round((self.sampleWidth*1e3)/self.scanRate))]
+        self.finalDim = [self.numLines, int(round(((self.sampleWidth*1e3)/self.scanRate)*self.acqRate))]
         
         #If this is a simulation, then get MSI extension and check for missing lines if applicable
         if self.simulationFlag:
@@ -104,7 +106,7 @@ class SampleData:
         self.area = int(round(self.finalDim[0]*self.finalDim[1]))
         
         #Setup objects for storing raw MSI data
-        self.newTimes = np.linspace(0, (self.finalDim[1]-1)/60, self.finalDim[1])
+        self.newTimes = np.linspace(0, ((self.sampleWidth*1e3)/self.scanRate)/60, self.finalDim[1])
         self.mzImages = np.zeros((len(self.mzRanges), self.finalDim[0], self.finalDim[1]))
         self.TIC = np.zeros((self.finalDim))
         if self.mzMonoValue != -1: self.mzMono = np.zeros((self.finalDim))
@@ -139,7 +141,7 @@ class SampleData:
             self.linesToScan = np.asarray([[tuple([rowNum, columnNum]) for columnNum in np.arange(0, self.finalDim[1], 1)] for rowNum in np.arange(0, self.finalDim[0], 1)]).tolist()
 
             #Set initial lines to scan
-            lineIndexes = [int((self.finalDim[0]-1)*0.50)]
+            lineIndexes = [int(round((self.finalDim[0]-1)*0.25)), int(round((self.finalDim[0]-1)*0.50)), int(round((self.finalDim[0]-1)*0.75))]
             
             #Obtain points in the specified lines and add them to the initial scan list
             for lineIndex in lineIndexes:
@@ -165,7 +167,7 @@ class SampleData:
             #Add positions to initial list
             self.initialSets.append(newIdxs)
     
-    def readScanData(self):
+    def readScanData(self, mask=None):
     
         #Get the MSI file extension automatically if it isn't already known
         if self.lineExt == None:
@@ -202,7 +204,7 @@ class SampleData:
                 lineNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
                 
                 #If the line numbers are not the physical row numbers, then obtain correct number from stored LUT
-                if unorderedNames and impModel and scanMethod == 'linewise': lineNum = physicalLineNums[lineNum]
+                if self.unorderedNames and impModel and scanMethod == 'linewise': lineNum = self.physicalLineNums[lineNum+1]
                 
                 #Record that the line number specified has been read previously
                 self.readLines.append(lineNum)
@@ -213,6 +215,10 @@ class SampleData:
                 #Obtain the total ion chromatogram and extract original times
                 ticData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
                 origTimes, TICData = ticData[:,0], ticData[:,1]
+                
+                #If the data is being sparesly acquired, then the listed times in the file need to be shifted
+                if impModel and impOffset and scanMethod == 'linewise' and lineMethod == 'segLine': origTimes += (np.argwhere(mask[lineNum]==1).min()/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
+                elif impModel and impOffset: sys.exit('Error - Using implementation mode with an offset but not segmented-linewise operation is not a supported configuration.')
                 
                 #If normalizing by internal standard, then obtain the relevant data
                 if self.mzMonoValue != -1: mzMonoData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1], self.mzMonoRange[0], self.mzMonoRange[1]))[:,1]
@@ -268,9 +274,9 @@ class Sample:
             if not sampleData.simulationFlag:
                 print('Writing UNLOCK')
                 with open(dir_ImpDataFinal + 'UNLOCK', 'w') as filehandle: _ = [filehandle.writelines(str(tuple([pos[0]+1, pos[1]*sampleData.scanRate]))+'\n') for pos in newIdxs.tolist()]
-                if unorderedNames and impModel and scanMethod == 'linewise': physicalLineNums[len(physicalLineNums.keys())] = int(pos[0])
+                if sampleData.unorderedNames and impModel and scanMethod == 'linewise': sampleData.physicalLineNums[len(sampleData.physicalLineNums.keys())+1] = int(newIdxs[0][0])
                 equipWait()
-                sampleData.readScanData()
+                sampleData.readScanData(self.mask)
                 self.mzImages = copy.deepcopy(sampleData.mzImages)
                 self.mzAvgImage = copy.deepcopy(sampleData.mzAvgImage)
             else: 
@@ -284,7 +290,7 @@ class Sample:
         self.percMeasured = (np.sum(self.mask)/sampleData.area)*100
         
         #Resize and extract measured and unmeasured locations for the square pixel mask
-        self.squareMask = resize(self.mask, tuple(sampleData.squareDim), order=0)
+        self.squareMask = resize(self.mask==1, tuple(sampleData.squareDim), order=0)
         squareMeasuredIdxs, squareUnMeasuredIdxs = np.transpose(np.where(self.squareMask==1)), np.transpose(np.where(self.squareMask==0))
 
         #Determine neighbor information for unmeasured locations
@@ -331,7 +337,8 @@ class Sample:
 
 #Sample scanning progress and final results processing
 class Result:
-    def __init__(self, sampleData, bestCFlag, cValue):
+    def __init__(self, sampleData, liveOutputFlag, dir_Results, bestCFlag, cValue):
+    
         self.sampleData = sampleData
         self.cValue = cValue
         self.bestCFlag = copy.deepcopy(bestCFlag)
@@ -340,78 +347,116 @@ class Result:
         self.startTime = time.time()
         self.lastMask = None
         self.percsMeasured = []
+        self.liveOutputFlag = liveOutputFlag
+        self.dir_Results = dir_Results
+        
+        if animationGen and dir_Results != None:
+
+            #Setup/clean base sample directory
+            self.dir_sampleResults = self.dir_Results + self.sampleData.name + os.path.sep
+            if os.path.exists(self.dir_sampleResults): shutil.rmtree(self.dir_sampleResults)
+            os.makedirs(self.dir_sampleResults)
+            
+            #Prepare subdirectories; for frames and videos of mz progressions
+            self.dir_mzProgression = self.dir_sampleResults + 'mz' + os.path.sep
+            os.makedirs(self.dir_mzProgression)
+            self.dir_mzProgressions = [self.dir_mzProgression + str(self.sampleData.mzRanges[mzNum][0]) + '-' + str(self.sampleData.mzRanges[mzNum][1]) + os.path.sep for mzNum in range(0, len(self.sampleData.mzRanges))]
+            for dir_mzProgressionSub in self.dir_mzProgressions: os.makedirs(dir_mzProgressionSub)
+            self.dir_avgProgression = self.dir_sampleResults + 'Average' + os.path.sep
+            os.makedirs(self.dir_avgProgression)
+            self.dir_videos= self.dir_sampleResults + 'Videos' + os.path.sep
+            os.makedirs(self.dir_videos)
+            
+        if liveOutputFlag: self.visualize_groundTruth()
         
     def update(self, sample):
+    
+        #Update measurement mask and percentage of FOV measured at this step 
         self.lastMask = copy.deepcopy(sample.mask)
         self.percsMeasured.append(copy.deepcopy(sample.percMeasured))
+        
+        #If outputs should be produced at every update step, then do so, determining related metrics as needed
+        if self.liveOutputFlag: 
+            if self.sampleData.simulationFlag: self.extractSimulationData(sample)
+            visualize_serial(sample, self.sampleData, self.dir_avgProgression, self.dir_mzProgressions, False)
+        
+        #If evaluating a c parameter, then find the PSNR of the current reconstructions, otherwise save a copy of the measurement step for later evaluation
         if self.bestCFlag: 
             self.cSelectionList.append(np.mean([compare_psnr(self.sampleData.mzImages[index], sample.mzReconImages[index], data_range=self.sampleData.mzImagesMax[index]) for index in range(0, len(self.sampleData.mzImages))]))
         else:
             self.samples.append(copy.deepcopy(sample))
             self.finalTime = time.time()-self.startTime
-        #Legacy SLADS(-Net) option to use total distortion measure for optimize c
-        #if self.bestCFlag and legacyFlag: self.cSelectionList.append(np.mean([np.sum(computeDifference(self.sampleData.mzImages[index], sample.mzReconImages[index])/self.sampleData.area) for index in range(0, len(sampleData.mzImages))]))
+    
+    #For a given measurement step find PSNR/SSIM of reconstructions, compute the RD, find PSNR of ERD
+    def extractSimulationData(self, sample):
+    
+        #Resize and extract measured and unmeasured locations for the square pixel mask
+        squareMeasuredIdxs, squareUnMeasuredIdxs = np.transpose(np.where(sample.squareMask==1)), np.transpose(np.where(sample.squareMask==0))
+        
+        #Determine neighbor information for unmeasured locations
+        neighborIndices, neighborWeights, neighborDistances = findNeighbors(squareMeasuredIdxs, squareUnMeasuredIdxs)
+        
+        #If using a single mz channel as the average image in SLADS operation
+        if mzSingle: 
+            
+            #Calculate actual averaged mz image
+            sample.mzAvgImage = self.sampleData.mzAvgImage*sample.mask
+            squaremzAvgImage = resize(sample.mzAvgImage, tuple(self.sampleData.squareDim), order=0)
+            
+            #Perform reconstruction of corrected averaged image
+            sample.squaremzAvgReconImage = computeRecon(squaremzAvgImage, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborWeights)
+            sample.mzAvgReconImage = resize(sample.squaremzAvgReconImage, tuple(self.sampleData.finalDim), order=0)
+        
+        sample.mzImagePSNRList = [compare_psnr(self.sampleData.mzImages[index], sample.mzReconImages[index], data_range=self.sampleData.mzImagesMax[index]) for index in range(0, len(self.sampleData.mzImages))]
+        sample.avgmzImagePSNR = compare_psnr(self.sampleData.mzAvgImage, sample.mzAvgReconImage, data_range=np.max(self.sampleData.mzAvgImage))
+        sample.mzImageSSIMList = [compare_ssim(self.sampleData.mzImages[index], sample.mzReconImages[index], data_range=self.sampleData.mzImagesMax[index]) for index in range(0, len(self.sampleData.mzImages))]
+        sample.avgmzImageSSIM = compare_ssim(self.sampleData.mzAvgImage, sample.mzAvgReconImage, data_range=np.max(self.sampleData.mzAvgImage))
+        
+        #Compute the RDPP; for original, compute difference of collapsed mz stack, otherwise collapse mz difference stack 
+        if RDMethod == 'var': sample.RDPP = np.var(abs(self.sampleData.squaremzImages-sample.squaremzReconImages ), axis=0)
+        elif RDMethod == 'max': sample.RDPP = np.max(abs(self.sampleData.squaremzImages-sample.squaremzReconImages ), axis=0)
+        elif RDMethod == 'avg': sample.RDPP = np.mean(abs(self.sampleData.squaremzImages-sample.squaremzReconImages ), axis=0)
+        elif RDMethod == 'sum': sample.RDPP = np.sum(abs(self.sampleData.squaremzImages-sample.squaremzReconImages ), axis=0)
+        elif RDMethod == 'original': sample.RDPP = computeDifference(self.sampleData.squaremzAvgImage, sample.squaremzAvgReconImage)
+        else: sys.exit('Error! - Unknown RD Method specified in configuration: ' + RDMethod)
+        
+        #Compute the actual square RD
+        computeRD(sample, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborDistances, self.cValue, self.bestCFlag, False)
+        
+        #Rescale both the ERD and RD
+        sample.squareRD = (sample.squareRD-np.min(sample.squareRD))/(np.max(sample.squareRD)-np.min(sample.squareRD))
+        sample.ERD = (sample.ERD-np.min(sample.ERD))/(np.max(sample.ERD)-np.min(sample.ERD))
+        
+        #Determine SSIM/PSNR between RD and ERD
+        sample.ERDPSNR = compare_psnr(sample.squareRD, sample.ERD, data_range=np.max(sample.squareRD))
+        sample.ERDSSIM = compare_ssim(sample.squareRD, sample.ERD, data_range=np.max(sample.squareRD))
+        
+        #Resize for visualization
+        sample.ERD = resize(sample.ERD, tuple(self.sampleData.finalDim), order=0)
+        sample.RD = resize(sample.squareRD, tuple(self.sampleData.finalDim), order=0)
     
     #Generate visualiations/metrics as needed at the end of scanning
-    def complete(self, dir_Results):
-        
-        #If was using a single mz as network input, then reset the sampleData average input to actual value
-        if mzSingle: self.sampleData.mzAvgImage = np.mean(self.sampleData.mzImages, axis=0)
+    def complete(self):
         
         #Make sure samples is writable
         self.samples = copy.deepcopy(self.samples)
         
+        #If the filenames were unordered, then save the mapping from filename to physical row
+        if self.sampleData.unorderedNames: np.savetxt(self.dir_sampleResults+'physicalLineNums.csv', np.asarray(list(physicalLineNums.items())), delimiter=',', fmt='%d')
+        
+        #Save a copy of the final measurement mask
+        np.savetxt(self.dir_sampleResults+'measuredMask.csv', self.samples[-1].mask, delimiter=',', fmt='%d')
+        
+        #If was using a single mz as network input, then reset the sampleData average input to actual value
+        if mzSingle: self.sampleData.mzAvgImage = np.mean(self.sampleData.mzImages, axis=0)
+        
         #If this is a simulation, then can compare against ground-truth information
         if self.sampleData.simulationFlag:
             
-            #For each of the measurement steps: find PSNR/SSIM of reconstructions, compute the RD, find PSNR of ERD
-            for sample in self.samples:
-                
-                #Resize and extract measured and unmeasured locations for the square pixel mask
-                squareMeasuredIdxs, squareUnMeasuredIdxs = np.transpose(np.where(sample.squareMask==1)), np.transpose(np.where(sample.squareMask==0))
-                
-                #Determine neighbor information for unmeasured locations
-                neighborIndices, neighborWeights, neighborDistances = findNeighbors(squareMeasuredIdxs, squareUnMeasuredIdxs)
-                
-                #If using a single mz channel as the average image in SLADS operation
-                if mzSingle: 
-                    
-                    #Calculate actual averaged mz image
-                    sample.mzAvgImage = self.sampleData.mzAvgImage*sample.mask
-                    squaremzAvgImage = resize(sample.mzAvgImage, tuple(self.sampleData.squareDim), order=0)
-                    
-                    #Perform reconstruction of corrected averaged image
-                    sample.squaremzAvgReconImage = computeRecon(squaremzAvgImage, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborWeights)
-                    sample.mzAvgReconImage = resize(sample.squaremzAvgReconImage, tuple(self.sampleData.finalDim), order=0)
-                
-                sample.mzImagePSNRList = [compare_psnr(self.sampleData.mzImages[index], sample.mzReconImages[index], data_range=self.sampleData.mzImagesMax[index]) for index in range(0, len(self.sampleData.mzImages))]
-                sample.avgmzImagePSNR = compare_psnr(self.sampleData.mzAvgImage, sample.mzAvgReconImage, data_range=np.max(self.sampleData.mzAvgImage))
-                sample.mzImageSSIMList = [compare_ssim(self.sampleData.mzImages[index], sample.mzReconImages[index], data_range=self.sampleData.mzImagesMax[index]) for index in range(0, len(self.sampleData.mzImages))]
-                sample.avgmzImageSSIM = compare_ssim(self.sampleData.mzAvgImage, sample.mzAvgReconImage, data_range=np.max(self.sampleData.mzAvgImage))
-                
-                #Compute the RDPP; for original, compute difference of collapsed mz stack, otherwise collapse mz difference stack 
-                if RDMethod == 'var': sample.RDPP = np.var(abs(self.sampleData.squaremzImages-sample.squaremzReconImages ), axis=0)
-                elif RDMethod == 'max': sample.RDPP = np.max(abs(self.sampleData.squaremzImages-sample.squaremzReconImages ), axis=0)
-                elif RDMethod == 'avg': sample.RDPP = np.mean(abs(self.sampleData.squaremzImages-sample.squaremzReconImages ), axis=0)
-                elif RDMethod == 'sum': sample.RDPP = np.sum(abs(self.sampleData.squaremzImages-sample.squaremzReconImages ), axis=0)
-                elif RDMethod == 'original': sample.RDPP = computeDifference(self.sampleData.squaremzAvgImage, sample.squaremzAvgReconImage)
-                else: sys.exit('Error! - Unknown RD Method specified in configuration: ' + RDMethod)
-                
-                #Compute the actual square RD
-                computeRD(sample, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborDistances, self.cValue, self.bestCFlag, False)
-                
-                #Rescale both the ERD and RD
-                sample.squareRD = (sample.squareRD-np.min(sample.squareRD))/(np.max(sample.squareRD)-np.min(sample.squareRD))
-                sample.ERD = (sample.ERD-np.min(sample.ERD))/(np.max(sample.ERD)-np.min(sample.ERD))
-                
-                #Determine SSIM/PSNR between RD and ERD
-                sample.ERDPSNR = compare_psnr(sample.squareRD, sample.ERD, data_range=np.max(sample.squareRD))
-                sample.ERDSSIM = compare_ssim(sample.squareRD, sample.ERD, data_range=np.max(sample.squareRD))
-                
-                #Resize for visualization
-                sample.ERD = resize(sample.ERD, tuple(self.sampleData.finalDim), order=0)
-                sample.RD = resize(sample.squareRD, tuple(self.sampleData.finalDim), order=0)
-                
+            #If not done during acquisiton, then for each of the measurement steps find PSNR/SSIM of reconstructions, compute the RD, find PSNR of ERD
+            if not self.liveOutputFlag: 
+                for sample in self.samples: self.extractSimulationData(sample)
+            
             #Summarize scores for testing printout
             self.mzAvgPSNRList = [np.mean(sample.mzImagePSNRList) for sample in self.samples]
             self.avgPSNRList = [sample.avgmzImagePSNR for sample in self.samples]
@@ -422,70 +467,59 @@ class Result:
         
         #If an animation will be produced and the run has completed
         if animationGen:
-
-            #Setup/clean base sample directory
-            dir_sampleResults = dir_Results + self.sampleData.name + os.path.sep
-            if os.path.exists(dir_sampleResults): shutil.rmtree(dir_sampleResults)
-            os.makedirs(dir_sampleResults)
             
-            #Prepare subdirectories; for frames and videos of mz progressions
-            dir_mzProgression = dir_sampleResults + 'mz' + os.path.sep
-            os.makedirs(dir_mzProgression)
-            dir_mzProgressions = [dir_mzProgression + str(self.sampleData.mzRanges[mzNum][0]) + '-' + str(self.sampleData.mzRanges[mzNum][1]) + os.path.sep for mzNum in range(0, len(self.sampleData.mzRanges))]
-            for dir_mzProgressionSub in dir_mzProgressions: os.makedirs(dir_mzProgressionSub)
-            dir_avgProgression = dir_sampleResults + 'Average' + os.path.sep
-            os.makedirs(dir_avgProgression)
-            dir_videos= dir_sampleResults + 'Videos' + os.path.sep
-            os.makedirs(dir_videos)
+            #Generate visualizations if they are not created during operation
+            if not self.liveOutputFlag:
+                self.visualize_groundTruth()
+                if parallelization:
+                    futures = [visualize_parhelper.remote(sample, self.sampleData, self.dir_avgProgression, self.dir_mzProgressions, True) for sample in self.samples]
+                    _ = ray.get(futures)
+                else:
+                    _ = [visualize_serial(sample, self.sampleData, self.dir_avgProgression, self.dir_mzProgressions, False) for sample in tqdm(self.samples, desc='Steps', leave=False, ascii=True)]
             
-            #Perform visualizations in parallel
-            if parallelization:
-                futures = [visualize_parhelper.remote(sample, self.sampleData, dir_avgProgression, dir_mzProgressions, True) for sample in self.samples]
-                _ = ray.get(futures)
-            else:
-                _ = [visualize_serial(sample, self.sampleData, dir_avgProgression, dir_mzProgressions, False) for sample in tqdm(self.samples, desc='Steps', leave=False, ascii=True)]
-
-            #Ground truth borderless avg image
-            if self.sampleData.simulationFlag:
-                saveLocation = dir_avgProgression + 'avgGroundTruth.png'
-                fig=plt.figure()
-                ax=fig.add_subplot(1,1,1)
-                plt.axis('off')
-                if not sysLogNorm: plt.imshow(self.sampleData.mzAvgImage, cmap='hot', aspect='auto')
-                if sysLogNorm: plt.imshow(self.sampleData.mzAvgImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(self.sampleData.mzAvgImage)+3*np.std(self.sampleData.mzAvgImage), base=10, vmin=np.min(self.sampleData.mzAvgImage), vmax=np.max(self.sampleData.mzAvgImage)))
-                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                plt.savefig(saveLocation, bbox_inches=extent)
-                plt.close()
-            
-            #Ground truth borderless mz images
-            if self.sampleData.simulationFlag:
-                for mzNum in range(0, len(self.sampleData.mzRanges)):
-                    saveLocation = dir_mzProgressions[mzNum] + 'groundTruth_mz_' + str(self.sampleData.mzRanges[mzNum][0]) + '-' + str(self.sampleData.mzRanges[mzNum][1]) + '.png'
-                    fig=plt.figure()
-                    ax=fig.add_subplot(1,1,1)
-                    plt.axis('off')
-                    if not sysLogNorm: plt.imshow(self.sampleData.mzImages[mzNum], cmap='hot', aspect='auto')
-                    if sysLogNorm: plt.imshow(self.sampleData.mzImages[mzNum], cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(self.sampleData.mzImages[mzNum])+3*np.std(self.sampleData.mzImages[mzNum]), base=10, vmin=np.min(self.sampleData.mzImages[mzNum]), vmax=np.max(self.sampleData.mzImages[mzNum])))
-                    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-                    plt.savefig(saveLocation, bbox_inches=extent)
-                    plt.close()
-                    
             #Combine mz images into animations
             for mzNum in tqdm(range(0, len(self.sampleData.mzRanges)), desc='mz Videos', leave = False, ascii=True): 
-                dataFileNames = natsort.natsorted(glob.glob(dir_mzProgressions[mzNum] + 'progression_*.png'))
+                dataFileNames = natsort.natsorted(glob.glob(self.dir_mzProgressions[mzNum] + 'progression_*.png'))
                 height, width, layers = cv2.imread(dataFileNames[0]).shape
-                animation = cv2.VideoWriter(dir_videos + str(self.sampleData.mzRanges[mzNum][0]) + '-' + str(self.sampleData.mzRanges[mzNum][1]) + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
+                animation = cv2.VideoWriter(self.dir_videos + str(self.sampleData.mzRanges[mzNum][0]) + '-' + str(self.sampleData.mzRanges[mzNum][1]) + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
                 for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
                 animation.release()
                 animation = None
 
             #Combine average images into animation
-            dataFileNames = natsort.natsorted(glob.glob(dir_avgProgression + 'progression_*.png'))
+            dataFileNames = natsort.natsorted(glob.glob(self.dir_avgProgression + 'progression_*.png'))
             height, width, layers = cv2.imread(dataFileNames[0]).shape
-            animation = cv2.VideoWriter(dir_videos + 'average.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
+            animation = cv2.VideoWriter(self.dir_videos + 'average.avi', cv2.VideoWriter_fourcc(*'MJPG'), 2, (width, height))
             for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
             animation.release()
             animation = None
+
+    #Visualize ground-truth data for simulations
+    def visualize_groundTruth(self):
+        #Ground truth borderless avg image
+        if self.sampleData.simulationFlag:
+            saveLocation = self.dir_avgProgression + 'avgGroundTruth.png'
+            fig=plt.figure()
+            ax=fig.add_subplot(1,1,1)
+            plt.axis('off')
+            if not sysLogNorm: plt.imshow(self.sampleData.mzAvgImage, cmap='hot', aspect='auto')
+            if sysLogNorm: plt.imshow(self.sampleData.mzAvgImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(self.sampleData.mzAvgImage)+3*np.std(self.sampleData.mzAvgImage), base=10, vmin=np.min(self.sampleData.mzAvgImage), vmax=np.max(self.sampleData.mzAvgImage)))
+            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+            plt.savefig(saveLocation, bbox_inches=extent)
+            plt.close()
+        
+        #Ground truth borderless mz images
+        if self.sampleData.simulationFlag:
+            for mzNum in range(0, len(self.sampleData.mzRanges)):
+                saveLocation = self.dir_mzProgressions[mzNum] + 'groundTruth_mz_' + str(self.sampleData.mzRanges[mzNum][0]) + '-' + str(self.sampleData.mzRanges[mzNum][1]) + '.png'
+                fig=plt.figure()
+                ax=fig.add_subplot(1,1,1)
+                plt.axis('off')
+                if not sysLogNorm: plt.imshow(self.sampleData.mzImages[mzNum], cmap='hot', aspect='auto')
+                if sysLogNorm: plt.imshow(self.sampleData.mzImages[mzNum], cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(self.sampleData.mzImages[mzNum])+3*np.std(self.sampleData.mzImages[mzNum]), base=10, vmin=np.min(self.sampleData.mzImages[mzNum]), vmax=np.max(self.sampleData.mzImages[mzNum])))
+                extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+                plt.savefig(saveLocation, bbox_inches=extent)
+                plt.close()
 
 #Visualize multiple sample progression steps at once
 @ray.remote
@@ -564,6 +598,16 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions,
         plt.axis('off')
         if not sysLogNorm: plt.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', vmin=mzMinValue, vmax=mzMaxValue)
         if sysLogNorm: plt.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=mzLinThreshValue, base=10, vmin=mzMinValue, vmax=mzMaxValue))
+        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+        plt.savefig(saveLocation, bbox_inches=extent)
+        plt.close()
+        
+        saveLocation = dir_mzProgressions[mzNum] + 'measured_mz_' + massRange + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
+        fig=plt.figure()
+        ax=fig.add_subplot(1,1,1)
+        plt.axis('off')
+        if not sysLogNorm: plt.imshow(sample.mzImages[mzNum], cmap='hot', aspect='auto', vmin=mzMinValue, vmax=mzMaxValue)
+        if sysLogNorm: plt.imshow(sample.mzImages[mzNum], cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=mzLinThreshValue, base=10, vmin=mzMinValue, vmax=mzMaxValue))
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         plt.savefig(saveLocation, bbox_inches=extent)
         plt.close()
@@ -672,10 +716,15 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions,
         plt.close()
 
 @ray.remote
-def runSLADS_parhelper(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, tqdmHide):
-    return runSLADS(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, tqdmHide)
+def runSLADS_parhelper(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, liveOutputFlag, dir_Results, tqdmHide):
+    
+    #If in a parallel thread, re-import libraries inside of thread to set plotting backend as non-interactive
+    import matplotlib
+    matplotlib.use('agg')
+    
+    return runSLADS(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, liveOutputFlag, dir_Results, tqdmHide)
 
-def runSLADS(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, tqdmHide):
+def runSLADS(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, liveOutputFlag, dir_Results, tqdmHide):
     
     if modelAvailable:
         if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': model = np.load(dir_TrainingResults+'model_cValue_'+str(cValue)+'.npy', allow_pickle=True).item()
@@ -699,7 +748,7 @@ def runSLADS(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFla
     completedRunFlag = False
     
     #Create a new result object to hold scanning progression
-    result = Result(sampleData, bestCFlag, cValue)
+    result = Result(sampleData, liveOutputFlag, dir_Results, bestCFlag, cValue)
     
     #Scan initial sets
     for initialSet in sampleData.initialSets: sample.performMeasurements(sampleData, initialSet, model, cValue, bestCFlag, oracleFlag, False)
@@ -920,6 +969,10 @@ def prepareInput(sample):
         measuredValues[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1]] = 0
         inputImage = np.dstack((reconValues, measuredValues))
     
+    #Normalize/scale the image
+    if normInputMethod == 'minmax': inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
+    elif normInputMethod == 'standardize': inputImage = (inputImage-np.mean(inputImage))/np.std(inputImage)
+        
     return inputImage
 
 #Determine the Expected Reduction in Distortion for uneasured points in a sample
@@ -1011,9 +1064,11 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
                 
                 #Identify the next scanning location and store it for later, actual measurement
                 nextIndex = np.argmax(ERD[lineToScanIdx])
+                
+                #Store that choice for later actual measurement
                 newIdxs.append([lineToScanIdx, nextIndex])
                 
-                #Perform the measurement, using values from reconstruction 
+                #Perform the measurement using values from reconstruction 
                 sample.performMeasurements(sampleData, np.asarray(newIdxs[-1]), model, cValue, bestCFlag, oracleFlag, True)
                 
                 #When enough new locations have been determined, break from loop

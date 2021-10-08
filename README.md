@@ -15,24 +15,24 @@
 # GENERAL INFORMATION
 
 
-    NAME: 		SLADS
+    NAME: 			SLADS
     VERSION NUM:	0.8.7
     LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
-			for Dynamic Sampling with additional constraint to select groups of 
-			points along a single axis. 
+					for Dynamic Sampling with additional constraint to select groups of 
+					points along a single axis. 
     
     AUTHORS:	David Helminiak	EECE, Marquette University
-    		Dong Hye Ye	EECE, Marquette University
+				Dong Hye Ye	EECE, Marquette University
     
     COLLAB. 	Julia Laskin	CHEM, Purdue University
-    		Hang Hu		CHEM, Purdue University
+				Hang Hu		CHEM, Purdue University
     
     FUNDING:	This project has received funding and was programmed for:
-    		NIH Grant 1UG3HL145593-01
+				NIH Grant 1UG3HL145593-01
     
 	GLOBAL
-	CHANGELOG:  0.1.0   Multithreading adjustments to pointwise SLADS
+	CHANGELOG:  	0.1.0   Multithreading adjustments to pointwise SLADS
                     0.1.1   Line constraints, concatenation, pruning, and results organization			
                     0.2.0   Line bounded constraints addition
                     0.3.0   Complete code rewrite, computational improvements
@@ -61,8 +61,8 @@
                     0.8.4   Parallel c value selection fix, remove network resizing requirement, fix experimental
                     0.8.5   Model optimization, enable batch processing, SLADS training fix, database acceleration
                     0.8.6   Memory reduction, mz reconstruction vectorization, augmentation, global mz, mz window in ppm
-                    0.8.7   Patch for implementation with Agilent hardware
-                    ~0.+.+  Static window option, GAN, Custom adversarial network, Multimodal integration, Verified phys. imp.
+                    0.8.7   Recon. script, Options for acq. rate, sequential names, live output, row offsets, and input scaling
+                    ~0.+.+  Custom adversarial network, Multimodal integration
                     ~1.0.0  Initial release
 
 # PROGRAM FILE STRUCTURE
@@ -76,6 +76,18 @@
     	|------->CONFIG_#-description.py
     	|------->SLADS.py
     	|------->mz.csv
+		|------->RECON
+		|	|------->INPUT
+		|	|	|------->TEST_SAMPLE_1
+		    |	|	|	|------->sampleName-line-0001.RAW
+    	|	|	|	|------->sampleName-line-0002.RAW
+    	|	|	|	|------->sampleInfo.txt
+		|	|	|	|------->measuredMask.csv
+		|	|	|	|------->mz.csv
+		|	|	|	|------->physicalLineNums.csv
+		|	|------->RESULTS
+		|	|------->mz.csv
+		|	|------->mzReconstruction.ipynb
     	|------->CODE
     	|	|------->DEFS.py
     	|	|------->EXPERIMENTAL.py
@@ -108,6 +120,7 @@
     	|	|	|	|------->...
     	|	|------->IMP
     	|	|	|------->sampleInfo.txt
+    	|	|	|------->physicalLineNums.csv
     	|	|	|------->sampleName-line-0001.RAW
     	|	|	|------->sampleName-line-0002.RAW
     	|	|	|------->...
@@ -115,6 +128,13 @@
     	|	|	|-------> LOCK
     	|	|	|-------> DONE
     	|------->RESULTS
+    	|	|------->IMP
+    	|	|	|-------IMP_SAMPLE_1
+    	|	|	|	|------->Average
+    	|	|	|	|------->mz
+    	|	|	|	|------->Videos
+    	|	|	|	|------->measuredMask.csv
+		|	|	|	|------->physicalLineNums.csv
     	|	|------->TEST
     	|	|	|-------dataPrintout.csv
     	|	|	|-------PSNR and SSIM Results (.csv and .png)
@@ -122,21 +142,25 @@
     	|	|	|	|------->Average
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
+    	|	|	|	|------->measuredMask.csv
     	|	|	|-------TEST_SAMPLE_2
     	|	|	|	|------->Average
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
+		|	|	|	|------->measuredMask.csv
     	|	|-------VALIDATION
     	|	|	|-------dataPrintout.csv
     	|	|	|-------PSNR and SSIM Results (.csv and .png)
-    	|	|	|-------TEST_SAMPLE_1
+    	|	|	|-------VALIDATION_SAMPLE_1
     	|	|	|	|------->Average
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
-    	|	|	|-------TEST_SAMPLE_2
+		|	|	|	|------->measuredMask.csv
+    	|	|	|-------VALIDATION_SAMPLE_2
     	|	|	|	|------->Average
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
+		|	|	|	|------->measuredMask.csv
     	|	|------->TRAIN
     	|	|	|------->Model Training Images
     	|	|	|	|------->...
@@ -156,7 +180,7 @@ This implementation of SLADS is generally only functional within Windows 10, giv
 
 	System
 		Python			3.8.5
-		pip			20.2.4
+		pip				20.2.4
 
 	Python Packages
         opencv-python   4.4.0.46
@@ -167,7 +191,7 @@ This implementation of SLADS is generally only functional within Windows 10, giv
         pandas          1.1.4
         psutil          5.7.3
         matplotlib      3.3.2
-	numba		0.53.0
+		numba			0.53.0
         pillow          8.0.1
         ray             1.0.0
         setuptools      50.3.0
@@ -219,9 +243,10 @@ All critical parameters for SLADS may be altered in a configuration file (Ex. ./
 
     L0:     Tasks to be performed
     L1:     Task methods
-        L1-0:   Pointwise
-        L1-1:   Linewise
-        L1-2:   Training Data Generation
+		L1-0:	Implementation
+        L1-1:   Pointwise
+        L1-2:   Linewise
+        L1-3:   Training Data Generation
     L2:     DLADS model parameters
     L3:     Runtime/Output settings
     L4:     Non-operational - Do not change
@@ -239,22 +264,21 @@ One file must be included in each of the sample folders (specifically within the
 		Instrument field of view, not of just the sample dimensions
 		Must also account for any missing line files (if applicable) for training/testing!
 	- Scan Rate (um/s)
-		May be specified differently than instrumentation for finer resolution
-		Output pixel positions are based on this parameter
+		Output pixel positions and spatial resolution are based on this parameter in combination with the acquisition rate
+	- Acquisition Rate (spectra/s)
+		Output pixel positions and spatial resolution are based on this parameter in combination with the scan rate
 	- Monoisotopic m/z (-1 indicates None, which will use TIC instead)
 		Used for normalization of the m/z images
-	- Minimum m/z
-		Lower limit of the m/z spectrum expected to be acquired
-	- Maximum m/z
-		Upper limit of the m/z spectrum expected to be acquired
 	- m/z tolerance (ppm)
 		Only specify/include if m/z specification is set to 'value', or if using 'standard' normalization
-	- FT resolution
-		Sets value precision when considering spectrum locations/values
+	- m/z precision
+		Number of decimal places used when considering spectrum locations/values
+	- Sequential filenames (1 indicates sequential, 0 for physical row location)
+		Indicates whether the filename line numbers going to be labeled sequentially rather than by physical row number
 
 Each piece of information should be on its own line without additional description, as shown in the EXAMPLE sample directory. 
 
-Another file mz.csv should be placed in the base directory, which contains line separated values of m/z locations, where the ranges used for visualization are determined through the specified m/z tolerance, to be extracted and used for a sample (as specified in sampleInfo.txt). At this time, each m/z should be handpicked to highlight underlying structures of interest. If using the SLADS variants, or original RD generation method the m/z should be geometrically complementary. 
+Another file mz.csv should be placed in the base directory, which contains line separated values of m/z locations, where the ranges used for visualization are determined through the specified m/z tolerance, to be extracted and used for a sample (as specified in sampleInfo.txt). If there are different mz that are specific to a sample, then a mz.csv should be placed in the sample directory, alongside the sampleInfo.txt file. Local/sample mz.csv files are used even when a global mz.csv is defined, though both need to have the same number of values/channels for model compatability. At this time, each m/z should be handpicked to highlight underlying structures of interest. If using the SLADS variants, or original RD generation method the m/z should be geometrically complementary. 
 
 Each MSI data file (ex. .d, or .raw), must be labeled with the standard convention: 
 
@@ -284,6 +308,8 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 			Average: Individual and overall images of the progressive scanning for averaged m/z
 			mz: Individual and overall images of the progressive scanning for each specified m/z
 			Videos: Videos of final scan progression
+			physicalLineNums.csv: Mapping from sequential filename numbering to physical row number
+			measuredMask.csv: Final measurement mask; 1 for measured, 0 for unmeasured
 		avgPSNR_Percentage.csv(.png): Progressive PSNR of the reconstruction for the averaged m/z
 		dataPrintout.csv(.png): Summary of final results
 		ERDPSNR_Percentage.csv(.png): Progressive PSNR of the ERD
@@ -294,7 +320,7 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 	VALIDATION: Validation results
 		Note: Identical structure to TEST
 
-In the case that multiple configuration files are provided in the form of: CONFIG_*descriptor*.py, the RESULTS folder will be duplicated with the same suffix for ease of testing.  Configuration file will be copied into the results directory at the termination of the program. 
+In the case that multiple configuration files are provided in the form of: CONFIG_*descriptor*.py, the RESULTS folder will be duplicated with the same suffix for ease of testing. Configuration file will be copied into the results directory at the termination of the program. 
 
 # OPERATIONAL PROCEDURE
 
@@ -313,7 +339,7 @@ Feel free to open an issue on the Github repository; though support cannot be gu
 
 Most likely this is due to MSI line filenames not matching the convention outlined above.
 
-###  **SLADS procdues an error: Could not connect to socket /tmp/ray/session_.../sockets/raylet**
+###  **SLADS produces an error: Could not connect to socket /tmp/ray/session_.../sockets/raylet**
 
 Although the error would suggest there is something wrong with the network connectivity (can double check firewall settings that port 6375 is allowed to receive/send traffic), it is actually more likely to be an issue with Ray's ability to connect to its dependent services. At this time there isn't a fix available, though some success can be had simply continuing to re-run the script until it does manage to connect. If using Mac OS X, you might be able to mitigate the issue (albeit with additional text written onscreen) by installing ray at version 0.8.6.
 

@@ -12,20 +12,20 @@ def simulateSLADS(sortedSampleFolders, dir_Results, optimalC):
         random.seed(0)
 
     #Do not run initial samplData generation in parallel, changes mask initialization
-    sampleData = [SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, RDMethod, mzGlobalSpec, True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)]
+    sampleData = [SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, RDMethod, True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)]
     
     #Run algorithm for each of the samples, timing and storing metric progression for each
     if parallelization: 
-        futures = [runSLADS_parhelper.remote(sampleData[sampleNum], optimalC, True, percToScan, percToViz, False, False, lineVisitAll, False) for sampleNum in range(0,len(sampleData))]
+        futures = [runSLADS_parhelper.remote(sampleData[sampleNum], optimalC, True, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False) for sampleNum in range(0,len(sampleData))]
         results = ray.get(futures)
-    else: results = [runSLADS(sampleData[sampleNum], optimalC, True, percToScan, percToViz, False, False, lineVisitAll, False) for sampleNum in tqdm(range(0,len(sampleData)), desc='Samples', position=0, leave=True, ascii=True)]
+    else: results = [runSLADS(sampleData[sampleNum], optimalC, True, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False) for sampleNum in tqdm(range(0,len(sampleData)), desc='Samples', position=0, leave=True, ascii=True)]
     
     #Perform completion/visualization routines
     mzAvgPSNR_Results, avgPSNR_Results, ERDPSNR_Results = [], [], []
     mzAvgSSIM_Results, avgSSIM_Results, ERDSSIM_Results = [], [], []
     perc_Results, time_Results = [], []
     for result in tqdm(results, desc='Visualization', position=0, leave=True, ascii=True):
-        result.complete(dir_Results)
+        result.complete()
         time_Results.append(result.finalTime)
         mzAvgPSNR_Results.append(result.mzAvgPSNRList)
         avgPSNR_Results.append(result.avgPSNRList)

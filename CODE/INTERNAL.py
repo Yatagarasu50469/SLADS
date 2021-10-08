@@ -41,7 +41,7 @@ dir_InputData = '.' + os.path.sep + 'INPUT' + os.path.sep
 dir_TrainingData = dir_InputData + 'TRAIN' + os.path.sep
 dir_TestingData = dir_InputData + 'TEST' + os.path.sep
 if impInputDir == None:  dir_ImpData = dir_InputData + 'IMP' + os.path.sep
-else: dir_ImpData = impResultsDir
+else: dir_ImpData = impInputDir
 
 #Results directories
 dir_Results = '.' + os.path.sep + 'RESULTS' + os.path.sep

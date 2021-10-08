@@ -23,12 +23,6 @@ testingModel = True
 #Is this an implementation run
 impModel = False
 
-#If an implementation run, what name should be used for data obtained
-impSampleName = 'SAMPLE_1'
-
-#If an implementation run, where will the MSI files be located (location will be emptied on run); None equivalent to './RESULTS/IMP/'
-impInputDir = None
-
 ##################################################################
 
 
@@ -37,22 +31,41 @@ impInputDir = None
 #TASK METHODS
 ##################################################################
 
+#Override listed sample monoisotopic m/z and use TIC normalization for all samples
+overrideTIC = True
+
 #Which model should be used for ERD generation (SLADS-LS, SLADS-Net, DLADS)
 #Recommend DLADS if GPU(s) available for training and SLADS-LS if not
 #Trained models are not intercompatible between models!
 erdModel = 'DLADS'
 
 #Which scanning method shoud be used: pointwise or linewise
-scanMethod = 'pointwise'
+scanMethod = 'linewise'
 
 #var, max, avg, sum, original (original collapses before difference between recon and ground-truth mz)
 RDMethod = 'sum'
 
-#Should a global mz specification be used (True), or should the mz be taken for each sample independently (False)
-mzGlobalSpec = True
+#How should the data be modified before input to the model, 'minmax', 'standardize', or None
+normInputMethod = 'minmax'
 
 #==================================================================
 #PARAMETERS: L1-0
+#IMPLEMENTATION OPTIONS
+#==================================================================
+
+#If an implementation run, what name should be used for data obtained
+impSampleName = 'SAMPLE_1'
+
+#If an implementation run, where will the MSI files be located (location will be emptied on run); None equivalent to './RESULTS/IMP/'
+impInputDir = None
+
+#If the measurement times listed in the acquried MSI files do not start with 0 being at the left-side of the FOV
+impOffset = True
+
+#==================================================================
+
+#==================================================================
+#PARAMETERS: L1-1
 #POINTWISE OPTIONS
 #==================================================================
 
@@ -66,12 +79,12 @@ stopPerc = 40
 percToScan = None
 
 #What percentage of points should be acquired between visualization steps; if all steps should be, then set to None
-percToViz = 1
+percToViz = None
 
 #==================================================================
 
 #==================================================================
-#PARAMETERS: L1-1
+#PARAMETERS: L1-2
 #LINEWISE OPTIONS
 #==================================================================
 
@@ -82,12 +95,12 @@ lineMethod = 'segLine'
 lineRevist = False
 
 #Should all lines be scanned at least once
-lineVisitAll = False
+lineVisitAll = True
 
 #==================================================================
 
 #==================================================================
-#PARAMETERS: L1-2
+#PARAMETERS: L1-3
 #TRAINING DATA GENERATION
 #==================================================================
 
@@ -98,7 +111,7 @@ initialPercToScanTrain = 1
 stopPercTrain = 40
 
 #Possible c values for RD approximation
-cValues = np.array([1, 2, 4, 8, 16])
+cValues = np.array([1, 2, 4, 8, 16, 32, 64])
 
 #How many masks should be used for each percentage during training
 numMasks = 1
@@ -106,6 +119,7 @@ numMasks = 1
 #==================================================================
 
 ##################################################################
+
 
 ##################################################################
 #PARAMETERS: L2
@@ -141,7 +155,7 @@ modelDef = 'unet'
 numStartFilters = 32
 
 #Which optimizer should be used('Nadam', 'Adam', or 'RMSProp')
-optimizer = 'Nadam'
+optimizer = 'Adam'
 
 #Which loss function should be used for the optimizer ('MAE', or 'MSE')
 lossFunc = 'MAE'
@@ -189,14 +203,14 @@ trainingVizSteps = 10
 #GENERALLY NOT CHANGED
 ##################################################################
 
-#Are the filename line numbers going to be labeled sequentially rather than by physical row number during implementation
-unorderedNames = False
+#Should output visualizations be generated during acquisition? (Not recommended for simulation)
+liveOutputFlag = False
 
 #Should parallelization calls be used (True); if memory overflow issues develop, set to False
 parallelization = True
 
 #Which system GPU(s) are available; ('None', whichever is available; '-1', CPU only)
-availableGPUs = '1'
+availableGPUs = 'None'
 
 #Should the training data be visualized and saved; turning off will save notable time in training
 trainingDataPlot = True
@@ -219,11 +233,6 @@ precision = 0.001
 #Should mz images be shown with log normalized colorbars 
 sysLogNorm = False
 
-#Should only a single mz be used as the network input (allows evaluation over multiple, uses first mz in mz.csv local/global file)
-#WARNING: ONLY should enable when using SLADS variants; Purpose is proof that considering multiple mz channels is better than a single
-#NOTE: DELETE ASAP!!! Very likely to break expected usage - After results published
-mzSingle = False
-
 ##################################################################
 
 
@@ -242,6 +251,11 @@ LOOCV = False
 #PARAMETERS: L5
 #DEBUG/DEPRECATED - WILL MOST LIKELY BE REMOVED IN FUTURE
 ##################################################################
+
+#Should only a single mz be used as the network input (allows evaluation over multiple, uses first mz in mz.csv local/global file)
+#WARNING: ONLY should enable when using SLADS variants; Purpose is proof that considering multiple mz channels is better than a single
+#NOTE: DELETE ASAP!!! Very likely to break expected usage - After results published
+mzSingle = False
 
 #Should total distortion be used for c value determination and static window in RD generation [15,15] be used (For comparison with originally published SLADS methods)
 legacyFlag = False
