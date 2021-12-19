@@ -9,19 +9,19 @@
 ##################################################################
 
 #Is training of a model to be performed
-trainingModel = True
+trainingModel = False
 
 #If trainingModel, should existing database/cValue in RESULTS be loaded instad of creating a new one
 loadTrainValDatasets = False
 
 #If validation dataset should be simulated
-validationModel = True
+validationModel = False
 
 #Is testing of a model to be performed
-testingModel = True
+testingModel = False
 
 #Is this an implementation run
-impModel = False
+impModel = True
 
 ##################################################################
 
@@ -46,7 +46,7 @@ scanMethod = 'linewise'
 RDMethod = 'sum'
 
 #How should the data be modified before input to the model, 'minmax', 'standardize', or None
-normInputMethod = 'minmax'
+normInputMethod = None
 
 #==================================================================
 #PARAMETERS: L1-0
@@ -73,7 +73,7 @@ impOffset = True
 initialPercToScan = 1
 
 #Stopping percentage for number of acquired pixels during testing/implementation
-stopPerc = 40
+stopPerc = 50
 
 #If group-wise, what percentage of points should be acquired; otherwise set to None
 percToScan = None
@@ -108,10 +108,10 @@ lineVisitAll = True
 initialPercToScanTrain = 1
 
 #Stopping percentage for number of acquired pixels for training
-stopPercTrain = 40
+stopPercTrain = 30
 
 #Possible c values for RD approximation
-cValues = np.array([1, 2, 4, 8, 16, 32, 64])
+cValues = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
 
 #How many masks should be used for each percentage during training
 numMasks = 1
@@ -148,20 +148,20 @@ numAugTimes = 0
 #What inputs should be used to the network (ReconAndMeasured, ReconValues, MeasuredValues, AverageReconValues, AverageMeasuredValues, AverageReconAndMeasured)
 inputMethod = 'ReconAndMeasured'
 
-#Which model should be used for training: cnn, unet, or flatunet
+#Which model should be used for training (unet)
 modelDef = 'unet'
 
 #How many filters should be used
-numStartFilters = 32
+numStartFilters = 64
 
 #Which optimizer should be used('Nadam', 'Adam', or 'RMSProp')
-optimizer = 'Adam'
+optimizer = 'Nadam'
 
 #Which loss function should be used for the optimizer ('MAE', or 'MSE')
 lossFunc = 'MAE'
 
 #What should the learning rate of the model's optimizer be
-learningRate = 1e-4
+learningRate = 1e-5
 
 #What should the batch size for pushing data through the network be
 batchSize = 1

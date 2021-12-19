@@ -28,7 +28,7 @@
 			Hang Hu		CHEM, Purdue University
     
     FUNDING:	This project has received funding and was programmed for:
-			NIH Grant 1UG3HL145593-01
+		NIH Grant 1UG3HL145593-01
     
 	GLOBAL
 	CHANGELOG:	0.1.0   Multithreading adjustments to pointwise SLADS
@@ -119,7 +119,6 @@
     	|	|	|	|------->...
     	|	|------->IMP
     	|	|	|------->sampleInfo.txt
-    	|	|	|------->physicalLineNums.csv
     	|	|	|------->sampleName-line-0001.RAW
     	|	|	|------->sampleName-line-0002.RAW
     	|	|	|------->...

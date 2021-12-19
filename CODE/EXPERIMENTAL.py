@@ -33,4 +33,4 @@ def performImplementation(optimalC):
 
     #Call completion/printout function
     print('Generating Visualizations')
-    result.complete(dir_ImpResults)
+    result.complete()

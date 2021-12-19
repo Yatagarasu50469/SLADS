@@ -23,7 +23,7 @@ class EpochEnd(keras.callbacks.Callback):
         self.nanValue = False
 
     def on_epoch_end(self, epoch, logs=None):
-
+        
         if np.isnan(logs.get('loss')): 
             self.model.stop_training = True
             self.nanValue = True
@@ -82,13 +82,11 @@ class EpochEnd(keras.callbacks.Callback):
                     vizSample = self.vizSamples[vizSampleNum]
                     
                     ERD = self.model(makeCompatible(prepareInput(vizSample)), training=False)[0,:,:,0].numpy()
-                    ERD[vizSample.squareMask==1] = 0
-                    
-                    RD = (vizSample.squareRD-np.min(vizSample.squareRD))/(np.max(vizSample.squareRD)-np.min(vizSample.squareRD))
-                    ERD = (ERD-np.min(ERD))/(np.max(ERD)-np.min(ERD))
+                    RD = vizSample.squareRD
 
-                    ERD_PSNR = compare_psnr(RD, ERD, data_range=1)
-                    ERD_SSIM = compare_ssim(RD, ERD, data_range=1)
+                    maxRangeValue = np.max([RD, ERD])
+                    ERD_PSNR = compare_psnr(RD, ERD, data_range=maxRangeValue)
+                    ERD_SSIM = compare_ssim(RD, ERD, data_range=maxRangeValue)
                     
                     if np.isnan(ERD_PSNR) or np.isnan(ERD_SSIM): 
                         self.model.stop_training = True
@@ -101,12 +99,14 @@ class EpochEnd(keras.callbacks.Callback):
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                     
                     ax = plt.subplot2grid((3,3), (vizSampleNum+1,1))
-                    im = ax.imshow(RD, aspect='auto', vmin=0, vmax=1)
+                    #im = ax.imshow(RD, aspect='auto', vmin=0, vmax=1)
+                    im = ax.imshow(RD, aspect='auto', vmin=0)
                     ax.set_title('RD', fontsize=15, fontweight='bold')
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                     
                     ax = plt.subplot2grid((3,3), (vizSampleNum+1,2))
-                    im = ax.imshow(ERD, aspect='auto', vmin=0, vmax=1)
+                    #im = ax.imshow(ERD, aspect='auto', vmin=0, vmax=1)
+                    im = ax.imshow(ERD, aspect='auto', vmin=0)
                     ax.set_title('ERD - PSNR: ' + str(round(ERD_PSNR,4)) + ' SSIM: ' + str(round(ERD_SSIM,4)), fontsize=15, fontweight='bold')
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                     
@@ -387,7 +387,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         
         #Create and save regression model based on user selection
         if erdModel == 'SLADS-LS': model = linear_model.LinearRegression()
-        elif erdModel == 'SLADS-Net': model = nnr(activation='identity', solver='adam', alpha=1e-5, hidden_layer_sizes=(50, 5), random_state=1, max_iter=500)
+        elif erdModel == 'SLADS-Net': model = nnr(activation='identity', solver='adam', alpha=1e-4, hidden_layer_sizes=(50, 5), random_state=1, max_iter=500)
         model.fit(bigPolyFeatures, bigRD)
         np.save(dir_TrainingResults+'model_cValue_'+str(optimalC), model)
         
@@ -419,56 +419,10 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         if len(trainInputImages[0].shape) > 2: numChannels = trainInputImages[0].shape[2]
         else: numChannels = 1
         
-        #Specify data augmentation steps
-        data_augmentation = tf.keras.Sequential([
-        experimental.preprocessing.RandomFlip("horizontal_and_vertical"),
-        experimental.preprocessing.RandomHeight(factor=(-0.25, 0.25)),
-        experimental.preprocessing.RandomWidth(factor=(-0.25, 0.25)),
-        experimental.preprocessing.RandomRotation(factor = (-0.125, 0.125), fill_mode='constant'),
-        experimental.preprocessing.RandomTranslation(height_factor=(-0.25, 0.25), width_factor=(-0.25, 0.25), fill_mode = "constant"),
-        ])
-        
-        #If data augmentation is to be performed
-        augmentedSets = []
-        if numAugTimes>0:
-            
-            #Combine input and output images, so they can be augmented the same way; expanding dims for network compatability
-            augInputSets = [tf.expand_dims(np.dstack((trainInputImages[index], trainOutputImages[index])), 0) for index in range(0, len(trainInputImages))]
-            
-            #Setup samples for augmentation; do so in advance of calls, otherwise changes input/output random seeds...
-            for _ in range(0, numAugTimes): augmentedSets = augmentedSets+[tf.squeeze(data_augmentation(image), axis=0).numpy() for image in augInputSets]
-            
-            #Split augmented input and output data
-            for image in augmentedSets:
-                trainInputImages.append(image[:,:,:numChannels])
-                trainOutputImages.append(np.squeeze(image[:,:,numChannels:], axis=2))
-            
-        #f = plt.figure(figsize=(22,15))
-        #j = 0
-        #for i in range(10):
-        #    if i >= 5: i, j = i-5, 2
-        #    index = np.random.randint(0, high=len(trainInputImages))
-        #    ax = plt.subplot2grid(shape=(4,5), loc=(0+j,i))
-        #    ax.imshow(np.mean(trainInputImages[index], axis=-1), aspect='auto', cmap='hot')
-        #    ax = plt.subplot2grid(shape=(4,5), loc=(1+j,i))
-        #    ax.imshow(trainOutputImages[index], aspect='auto')
+        #Create generators/iterators for the training and validation sets
+        trainGen = DataGen(trainInputImages, trainOutputImages, numChannels, True)
+        valGen = DataGen(valInputImages, valOutputImages, numChannels, False)
 
-        f = plt.figure(figsize=(10,10))
-        for i in range(9):
-            index = np.random.randint(0, high=len(trainOutputImages))
-            ax = plt.subplot(3, 3, i + 1)
-            ax.imshow(trainOutputImages[index], aspect='auto')
-        
-        plt.savefig(dir_TrainingResults+'randomOutputSet.png')
-        plt.close()
-         
-        #Transform image sets into tensorflow datasets and batch
-        trainData = tf.data.Dataset.from_generator(lambda: iter(zip(trainInputImages, trainOutputImages)), output_types=(tf.float32, tf.float32), output_shapes=([None,None,numChannels], [None,None]))
-        trainData = trainData.padded_batch(batchSize)
-        if not noValFlag: 
-            valData = tf.data.Dataset.from_generator(lambda: iter(zip(valInputImages, valOutputImages)), output_types=(tf.float32, tf.float32), output_shapes=([None,None,numChannels], [None,None]))
-            valData = valData.batch(1)
-        
         #While a model has not been trained, reinitialize
         trainingAttempts = 0
         while True:
@@ -482,16 +436,20 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             elif optimizer == 'RMSProp': trainOptimizer = tf.keras.optimizers.RMSprop(learning_rate=learningRate)
             
             #Select loss function
-            if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss=tf.keras.losses.MeanAbsoluteError())
+            if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss='mean_absolute_error')
             elif lossFunc == 'MSE': model.compile(optimizer=trainOptimizer, loss='mean_squared_error')
-            
+            #elif lossFunc == 'CCE': model.compile(optimizer=trainOptimizer, loss='categorical_crossentropy')
+            #elif lossFunc == 'Dice': model.compile(optimizer=trainOptimizer, loss=DiceLoss())
+            #elif lossFunc == 'Jaccard': model.compile(optimizer=trainOptimizer, loss=JaccardLoss())
+
             #Setup callback object
             epochEndCallback = EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizSamples, vizSampleData, dir_TrainingModelResults)
             
             #Perform training
             t0 = time.time()
-            if not noValFlag: history = model.fit(trainData, epochs=numEpochs, callbacks=[epochEndCallback], validation_data=valData, validation_freq=1, verbose=1, shuffle=True)
-            else: history = model.fit(trainData, epochs=numEpochs, callbacks=[epochEndCallback], verbose=1, shuffle=True)
+            if not noValFlag: history = model.fit(trainGen, epochs=numEpochs, callbacks=[epochEndCallback], validation_data=valGen, validation_freq=1, verbose=1, shuffle=True)
+            else: sys.exit('Error! - Model training without validation data not presently functional.')
+            #history = model.fit(trainGen, epochs=numEpochs, callbacks=[epochEndCallback], verbose=1, shuffle=True)
             
             #Check if training terminated due to nan, if not then break from loop, else restart training
             if not epochEndCallback.nanValue: break
@@ -506,7 +464,43 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         #Save the final model and weights
         model.save(dir_TrainingResults+'model_cValue_'+str(optimalC))
         
-        #Write out the training history to a .csv
+        # #Write out the training history to a .csv
         pd.DataFrame(history.history).to_csv(dir_TrainingResults+'history.csv')
         
         return model
+
+class DataGen(tf.keras.utils.Sequence):
+    
+    def __init__(self, inputs, outputs, numChannels, dataAug, batchSize=1):
+        self.origInputs = inputs
+        self.origOutputs = outputs
+        self.numChannels = numChannels
+        self.dataAug = dataAug
+        self.batchSize = batchSize
+        self.length = len(inputs)
+        self.data_augmentation = tf.keras.Sequential([
+        tf.keras.layers.RandomCrop(64,64),
+        tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical"),
+        tf.keras.layers.experimental.preprocessing.RandomRotation(factor = (-0.125, 0.125), fill_mode='constant'),
+        tf.keras.layers.experimental.preprocessing.RandomTranslation(height_factor=(-0.25, 0.25), width_factor=(-0.25, 0.25), fill_mode = "constant"),
+        ])
+        if self.dataAug: 
+            self.comImages = [tf.expand_dims(np.dstack((self.origInputs[index], self.origOutputs[index])), 0) for index in range(0, self.length)]
+            self.on_epoch_end()
+        else: self.inputs, self.outputs = [makeCompatible(inputImage) for inputImage in self.origInputs], [makeCompatible(outputImage) for outputImage in self.origOutputs]
+
+    def on_epoch_end(self):
+        if self.dataAug: 
+            self.inputs, self.outputs = [], []
+            for index in range(0, self.length):
+                comImage = tf.squeeze(self.data_augmentation(self.comImages[index]), axis=0).numpy()
+                self.inputs.append(makeCompatible(comImage[:,:,:self.numChannels]))
+                self.outputs.append(makeCompatible(np.squeeze(comImage[:,:,self.numChannels:], axis=2)))
+
+    def __len__(self):
+        return math.ceil(self.length/self.batchSize)
+
+    def __getitem__(self, index):
+        return self.inputs[index], self.outputs[index]
+
+

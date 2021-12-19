@@ -22,7 +22,6 @@ class SampleData:
         
         #Store location of MSI data and sample name
         self.sampleFolder = sampleFolder
-        #self.name = os.path.basename(os.path.dirname(sampleFolder))
         self.name = os.path.basename(sampleFolder)
         
         #Note which files have already been read
@@ -141,7 +140,7 @@ class SampleData:
             self.linesToScan = np.asarray([[tuple([rowNum, columnNum]) for columnNum in np.arange(0, self.finalDim[1], 1)] for rowNum in np.arange(0, self.finalDim[0], 1)]).tolist()
 
             #Set initial lines to scan
-            lineIndexes = [int(round((self.finalDim[0]-1)*0.25)), int(round((self.finalDim[0]-1)*0.50)), int(round((self.finalDim[0]-1)*0.75))]
+            lineIndexes = [int(round((self.finalDim[0]-1)*0.50))]
             
             #Obtain points in the specified lines and add them to the initial scan list
             for lineIndex in lineIndexes:
@@ -216,16 +215,16 @@ class SampleData:
                 ticData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
                 origTimes, TICData = ticData[:,0], ticData[:,1]
                 
-                #If the data is being sparesly acquired, then the listed times in the file need to be shifted
+                #If the data is being sparesly acquired, then the listed times in the file need to be shifted; convert np.float to float for method compatability
                 if impModel and impOffset and scanMethod == 'linewise' and lineMethod == 'segLine': origTimes += (np.argwhere(mask[lineNum]==1).min()/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
                 elif impModel and impOffset: sys.exit('Error - Using implementation mode with an offset but not segmented-linewise operation is not a supported configuration.')
                 
                 #If normalizing by internal standard, then obtain the relevant data
-                if self.mzMonoValue != -1: mzMonoData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1], self.mzMonoRange[0], self.mzMonoRange[1]))[:,1]
+                if self.mzMonoValue != -1: mzMonoData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(self.mzMonoRange[0]), float(self.mzMonoRange[1])))[:,1]
                 
-                #Read in specified mz ranges, normalize as specified, and interpolate to new times
+                #Read in specified mz ranges, normalize as specified, and interpolate to new times; convert np.float to float for method compatability
                 for mzRangeNum in range(0, len(self.mzRanges)): 
-                    mzData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1], self.mzRanges[mzRangeNum][0], self.mzRanges[mzRangeNum][1]))[:,1]
+                    mzData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(self.mzRanges[mzRangeNum][0]), float(self.mzRanges[mzRangeNum][1])))[:,1]
                     if self.mzMonoValue == -1: mzData = np.nan_to_num(mzData/TICData, nan=0, posinf=0, neginf=0)
                     else: mzData = np.nan_to_num(mzData/mzMonoData, nan=0, posinf=0, neginf=0)
                     self.mzImages[mzRangeNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(mzData, nan=0, posinf=0, neginf=0))
@@ -273,7 +272,7 @@ class Sample:
             #If not simulation, then read from equipment, otherwise mask ground-truth mz images by what should have been scanned
             if not sampleData.simulationFlag:
                 print('Writing UNLOCK')
-                with open(dir_ImpDataFinal + 'UNLOCK', 'w') as filehandle: _ = [filehandle.writelines(str(tuple([pos[0]+1, pos[1]*sampleData.scanRate]))+'\n') for pos in newIdxs.tolist()]
+                with open(dir_ImpDataFinal + 'UNLOCK', 'w') as filehandle: _ = [filehandle.writelines(str(tuple([pos[0]+1, (pos[1]*sampleData.scanRate)/sampleData.acqRate]))+'\n') for pos in newIdxs.tolist()]
                 if sampleData.unorderedNames and impModel and scanMethod == 'linewise': sampleData.physicalLineNums[len(sampleData.physicalLineNums.keys())+1] = int(newIdxs[0][0])
                 equipWait()
                 sampleData.readScanData(self.mask)
@@ -424,12 +423,17 @@ class Result:
         computeRD(sample, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborDistances, self.cValue, self.bestCFlag, False)
         
         #Rescale both the ERD and RD
-        sample.squareRD = (sample.squareRD-np.min(sample.squareRD))/(np.max(sample.squareRD)-np.min(sample.squareRD))
-        sample.ERD = (sample.ERD-np.min(sample.ERD))/(np.max(sample.ERD)-np.min(sample.ERD))
+        #sample.squareRD = (sample.squareRD-np.min(sample.squareRD))/(np.max(sample.squareRD)-np.min(sample.squareRD))
+        #sample.ERD = (sample.ERD-np.min(sample.ERD))/(np.max(sample.ERD)-np.min(sample.ERD))
         
         #Determine SSIM/PSNR between RD and ERD
-        sample.ERDPSNR = compare_psnr(sample.squareRD, sample.ERD, data_range=np.max(sample.squareRD))
-        sample.ERDSSIM = compare_ssim(sample.squareRD, sample.ERD, data_range=np.max(sample.squareRD))
+        #sample.ERDPSNR = compare_psnr(sample.squareRD, sample.ERD, data_range=1)
+        #sample.ERDSSIM = compare_ssim(sample.squareRD, sample.ERD, data_range=1)
+
+        #Determine SSIM/PSNR between RD and ERD
+        maxRangeValue = np.max([sample.squareRD, sample.ERD])
+        sample.ERDPSNR = compare_psnr(sample.squareRD, sample.ERD, data_range=maxRangeValue)
+        sample.ERDSSIM = compare_ssim(sample.squareRD, sample.ERD, data_range=maxRangeValue)
         
         #Resize for visualization
         sample.ERD = resize(sample.ERD, tuple(self.sampleData.finalDim), order=0)
@@ -442,7 +446,7 @@ class Result:
         self.samples = copy.deepcopy(self.samples)
         
         #If the filenames were unordered, then save the mapping from filename to physical row
-        if self.sampleData.unorderedNames: np.savetxt(self.dir_sampleResults+'physicalLineNums.csv', np.asarray(list(physicalLineNums.items())), delimiter=',', fmt='%d')
+        if self.sampleData.unorderedNames: np.savetxt(self.dir_sampleResults+'physicalLineNums.csv', np.asarray(list(self.sampleData.physicalLineNums.items())), delimiter=',', fmt='%d')
         
         #Save a copy of the final measurement mask
         np.savetxt(self.dir_sampleResults+'measuredMask.csv', self.samples[-1].mask, delimiter=',', fmt='%d')
@@ -649,13 +653,15 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions,
     
     if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (1,1))
     else: ax = plt.subplot2grid((1,3), (0,2))
-    im = ax.imshow(sample.ERD, cmap='viridis', vmin=0, vmax=1, aspect='auto')
+    #im = ax.imshow(sample.ERD, cmap='viridis', vmin=0, vmax=1, aspect='auto')
+    im = ax.imshow(sample.ERD, cmap='viridis', vmin=0, aspect='auto')
     ax.set_title('ERD')
     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
     if sampleData.simulationFlag: 
         ax = plt.subplot2grid((2,3), (1,2))
-        im = ax.imshow(sample.RD, cmap='viridis', vmin=0, vmax=1, aspect='auto')
+        #im = ax.imshow(sample.RD, cmap='viridis', vmin=0, vmax=1, aspect='auto')
+        im = ax.imshow(sample.RD, cmap='viridis', vmin=0, aspect='auto')
         ax.set_title('RD')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
     
@@ -690,7 +696,8 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions,
     fig=plt.figure()
     ax=fig.add_subplot(1,1,1)
     plt.axis('off')
-    plt.imshow(sample.ERD, aspect='auto', vmin=0, vmax=1)
+    #plt.imshow(sample.ERD, aspect='auto', vmin=0, vmax=1)
+    plt.imshow(sample.ERD, aspect='auto', vmin=0)
     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     plt.savefig(saveLocation, bbox_inches=extent)
     plt.close()
@@ -710,7 +717,8 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions,
         fig=plt.figure()
         ax=fig.add_subplot(1,1,1)
         plt.axis('off')
-        plt.imshow(sample.RD, aspect='auto', vmin=0, vmax=1)
+        #plt.imshow(sample.RD, aspect='auto', vmin=0, vmax=1)
+        plt.imshow(sample.RD, aspect='auto', vmin=0)
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         plt.savefig(saveLocation, bbox_inches=extent)
         plt.close()
@@ -728,9 +736,10 @@ def runSLADS(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFla
     
     if modelAvailable:
         if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': model = np.load(dir_TrainingResults+'model_cValue_'+str(cValue)+'.npy', allow_pickle=True).item()
+        #elif erdModel == 'DLADS' and lossFunc == 'Dice': model = tf.keras.models.load_model(dir_TrainingResults+'model_cValue_'+str(cValue), custom_objects={'loss': DiceLoss()})
+        #elif erdModel == 'DLADS' and lossFunc == 'Jaccard': model = tf.keras.models.load_model(dir_TrainingResults+'model_cValue_'+str(cValue), custom_objects={'loss': JaccardLoss()})
         elif erdModel == 'DLADS': model = tf.keras.models.load_model(dir_TrainingResults+'model_cValue_'+str(cValue))
-    else: 
-        model = None
+    else: model = None
     
     #Make sure random selection is consistent
     if consistentSeed: np.random.seed(0)
@@ -778,7 +787,8 @@ def runSLADS(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFla
             newIdxs = findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan, oracleFlag, bestCFlag)
             
             #Perform measurements, reconstructions and ERD/RD computations
-            sample.performMeasurements(sampleData, newIdxs, model, cValue, bestCFlag, oracleFlag, False)
+            if len(newIdxs) != 0: sample.performMeasurements(sampleData, newIdxs, model, cValue, bestCFlag, oracleFlag, False)
+            else: completedRunFlag = True
             
             #Check stopping criteria
             if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
@@ -786,7 +796,7 @@ def runSLADS(sampleData, cValue, modelAvailable, percToScan, percToViz, bestCFla
             if np.sum(sample.ERD) == 0: completedRunFlag = True
             
             #If viz limit, only update when percToViz has been met; otherwise update every iteration
-            if ((percToViz != None) and ((sample.percMeasured - result.percsMeasured[-1]) >= percToViz)) or (percToViz == None) or completedRunFlag: result.update(sample)
+            if ((percToViz != None) and ((sample.percMeasured-result.percsMeasured[-1]) >= percToViz)) or (percToViz == None) or sampleData.scanMethod == 'linewise' or completedRunFlag: result.update(sample)
             
             #Update the progress bar
             pbar.n = np.clip(round(sample.percMeasured,2), 0, maxProgress)
@@ -929,12 +939,14 @@ def computePolyFeatures(sampleData, reconImage, squareMeasuredIdxs, squareUnMeas
 
 #Prepare data for DLADS model input
 def prepareInput(sample):
-    
+
     squareMeasuredIdxs, squareUnMeasuredIdxs = np.transpose(np.where(sample.squareMask==1)), np.transpose(np.where(sample.squareMask==0))
     
     if inputMethod == 'ReconValues':
         inputImage = copy.deepcopy(np.moveaxis(sample.squaremzReconImages, 0, -1))
         inputImage[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1], :] = 0
+    elif inputMethod == 'ReconImages':
+        inputImage = copy.deepcopy(np.moveaxis(sample.squaremzReconImages, 0, -1))
     elif inputMethod == 'MeasuredValues':
         inputImage = copy.deepcopy(np.moveaxis(sample.squaremzReconImages, 0, -1))
         inputImage[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1], :] = 0
@@ -944,16 +956,6 @@ def prepareInput(sample):
         reconValues[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1], :] = 0
         measuredValues[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1], :] = 0
         inputImage = np.dstack((reconValues, measuredValues))
-    elif inputMethod == 'ReconValuesAndInverseMask':
-        reconValues = copy.deepcopy(np.moveaxis(sample.squaremzReconImages, 0, -1))
-        reconValues[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1], :] = 0
-        inverseMask = np.zeros(sample.squareMask.shape)
-        inverseMask[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1]] = 1
-        inputImage = np.dstack((reconValues, inverseMask))
-    elif inputMethod == 'ReconValuesAndDistanceMap':
-        reconValues = copy.deepcopy(np.moveaxis(sample.squaremzReconImages, 0, -1))
-        reconValues[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1], :] = 0
-        inputImage = np.dstack((reconValues, sample.distanceMap))
     elif inputMethod == 'AverageReconValues':
         inputImage = copy.deepcopy(sample.squaremzAvgReconImage)
         inputImage[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1]] = 0
@@ -968,11 +970,27 @@ def prepareInput(sample):
         measuredValues = copy.deepcopy(sample.squaremzAvgReconImage)
         measuredValues[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1]] = 0
         inputImage = np.dstack((reconValues, measuredValues))
-    
-    #Normalize/scale the image
+    elif inputMethod == 'features':
+        inputImage = copy.deepcopy(np.moveaxis(sample.squaremzReconImages, 0, -1))
+        inputImage = (np.ones((inputImage.shape))*np.max(inputImage, axis=(0, 1)))-inputImage
+        inputImage[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1], :] = 0
+        #inputImage[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1], :] = 0
+        #inputImage = np.dstack((measuredValues, inputImage))
+        #inputImage[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1], :] = 0
+        #inputImage[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1], :] = 0
+        #inputImage = (inputImage-np.mean(inputImage))/np.std(inputImage)
+        #inputImage = np.dstack(((sample.distanceMap/np.max(sample.distanceMap))*np.max(inputImage), inputImage))
+        #inputImage = scipy.ndimage.sobel(copy.deepcopy(np.moveaxis(sample.squaremzReconImages, 0, -1)))
+        #inputImage = np.dstack((sample.distanceMap/np.max(sample.distanceMap), inputImage))
+    elif inputMethod == 'features2':
+        inputImage = copy.deepcopy(np.moveaxis(sample.squaremzReconImages, 0, -1))
+        inputImage = (np.ones((inputImage.shape))*np.mean(inputImage, axis=(0, 1)))-inputImage
+        inputImage[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1], :] = 0
+
+    #Normalize/scale the data
     if normInputMethod == 'minmax': inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
     elif normInputMethod == 'standardize': inputImage = (inputImage-np.mean(inputImage))/np.std(inputImage)
-        
+
     return inputImage
 
 #Determine the Expected Reduction in Distortion for uneasured points in a sample
@@ -991,7 +1009,7 @@ def computeERD(sample, sampleData, model, squareUnMeasuredIdxs, squareMeasuredId
         
         #Send input, made compatible, through trained model
         ERD = model(makeCompatible(prepareInput(sample)), training=False)[0,:,:,0].numpy()
-        
+
         #Remove values at measured locations
         ERD[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1]] = 0
         
@@ -1039,20 +1057,19 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
             newIdxs = np.asarray([sample.unMeasuredIdxs[np.argmax(ERD[sample.unMeasuredIdxs[:,0], sample.unMeasuredIdxs[:,1]])].tolist()])
             
     elif sampleData.scanMethod == 'linewise':
-        #==========================================
-        #OPTIMAL LINE DETERMINATION
-        #==========================================
-
+    
         #Choose the line with maximum ERD and extract the actual indices
         if not lineRevist: ERD[np.where(np.sum(sample.mask, axis=1)>0)] = 0
         lineToScanIdx = np.nanargmax(np.nansum(ERD, axis=1))
+        #lineToScanIdx = np.nanargmax(np.nanmean(ERD, axis=1))
+        #lineToScanIdx = np.nanargmax(np.nanvar(ERD, axis=1))
         
-        #==========================================
-        #PARTIAL LINE BY PERCENT
-        #==========================================
-        #Scan stopPerc locations on the line with maximized ERD
-        if lineMethod == 'percLine':
-        
+        #Identify the line where the number of pointsToScan with the highest ERD have the largest mean
+        #lineToScanIdx = np.argmax([np.nanmean(np.sort(ERD[lineNum])[::-1][:sampleData.pointsToScan]) for lineNum in range(0, ERD.shape[0])])
+
+        #If points on the line should be chosen one-by-one, temporarily using reconstruction values for updating ERD
+        if linePointSelection == 'single': 
+            
             #Create a list to hold the chosen scanning locations
             newIdxs = []
             
@@ -1079,17 +1096,23 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
                 
             #Convert to array for indexing
             newIdxs = np.asarray(newIdxs)
-        #==========================================
+            
+            #Sort columns for progressive physical scanning order
+            newIdxs[:,1] = np.sort(newIdxs[:,1])
+            
+        #If points on the line should be selected in one step/group
+        elif linePointSelection == 'group':
+            indexes = np.sort(np.argsort(ERD[lineToScanIdx])[::-1][:sampleData.pointsToScan])
+            newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
         
         #==========================================
         #PARTIAL LINE BY START/END POINTS
         #==========================================
         #Choose segment to scan on line which contains at least stopPerc locations with maximal ERD
-        elif lineMethod == 'segLine':
-            indexes = np.sort(np.argsort(ERD[lineToScanIdx])[::-1][:sampleData.pointsToScan])
-            newIdxs = np.column_stack([np.ones(indexes[-1]-indexes[0]+1)*lineToScanIdx, np.arange(indexes[0],indexes[-1]+1)]).astype(int)
-        else: sys.exit('Error! - Unknown line method specified in configuation: ' + lineMethod)
-            
+        if lineMethod == 'segLine': 
+            indexes = np.arange(newIdxs[:,1][0],newIdxs[:,1][-1]+1)
+            newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
+        elif lineMethod != 'percLine': sys.exit('Error! - Unknown line method specified in configuation: ' + lineMethod)
         #==========================================
         
         #==========================================
@@ -1148,51 +1171,53 @@ def computeRecon(inputImage, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborI
 def unet(numFilters, numChannels, batchSize):
     
     inputs = Input(shape=(None,None,numChannels), batch_size=batchSize)
-    
-    conv1 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(inputs)
-    conv1 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv1)
-    down1 = Conv2D(numFilters, 3, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv1)
-    
-    conv2 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down1)
-    conv2 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv2)
-    down2 = Conv2D(numFilters*2, 3, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv2)
-    
-    conv3 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down2)
-    conv3 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv3)
-    conv3 = Dropout(rate=0.5)(conv3)
-    down3 = Conv2D(numFilters*4, 3, (2,2), activation='relu', padding='same', kernel_initializer='he_normal')(conv3)
-    
-    conv4 = Conv2D(numFilters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(down3)
-    conv4 = Conv2D(numFilters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv4)
-    conv4 = Dropout(rate=0.5)(conv4)
 
-    up7 = customResize(conv4, conv3)
-    up7 = Conv2D(numFilters*8, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up7)
-    merge7 = concatenate([up7, conv3], axis = 3)
-    conv7 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge7)
-    conv7 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv7)
+    conv1 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters, kernel_size=(3,3), padding='same')(inputs))
+    conv2 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters, kernel_size=(3,3), padding='same')(conv1))
+    down1 = MaxPool2D(pool_size=(2,2))(conv2)
 
-    up8 = customResize(conv7, conv2)
-    up8 = Conv2D(numFilters*4, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up8)
-    merge8 = concatenate([up8, conv2], axis = 3)
-    conv8 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge8)
-    conv8 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv8)
+    conv3 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*2, kernel_size=(3,3), padding='same')(down1))
+    conv4 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*2, kernel_size=(3,3), padding='same')(conv3))
+    down2 = MaxPool2D(pool_size=(2,2))(conv4)
 
-    up9 = customResize(conv8, conv1)
-    up9 = Conv2D(numFilters*2, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(up9)
-    merge9 = concatenate([up9, conv1], axis = 3)
-    conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(merge9)
-    conv9 = Conv2D(numFilters, 3, activation = 'relu', padding = 'same', kernel_initializer = 'he_normal')(conv9)
-    
-    dense = Conv2D(numFilters, (1,1), activation='relu', padding='same', kernel_initializer = 'he_normal')(conv9)
-    dense = Conv2D(numFilters, (1,1), activation='relu', padding='same', kernel_initializer = 'he_normal')(dense)
-    
-    output = Conv2D(1, (1,1), activation='relu', padding='same', kernel_initializer = 'he_normal')(dense)
-    
-    return tf.keras.Model(inputs=inputs, outputs=output)
+    conv5 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*4, kernel_size=(3,3), padding='same')(down2))
+    conv6 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*4, kernel_size=(3,3), padding='same')(conv5))
+    down3 = MaxPool2D(pool_size=(2,2))(conv6)
 
+    conv7 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*8, kernel_size=(3,3), padding='same')(down3))
+    conv8 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*8, kernel_size=(3,3), padding='same')(conv7))
+    down4 = MaxPool2D(pool_size=(2,2))(conv8)
+
+    conv9 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*16, kernel_size=(3,3), padding='same')(down4))
+    conv10 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*16, kernel_size=(3,3), padding='same')(conv9))
+    
+    up1 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*8, kernel_size=(2,2), padding='same')(customResize(conv10, conv8)))
+    merge1 = concatenate([conv8, up1])
+    conv11 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*8, kernel_size=(3,3), padding='same')(merge1))
+    conv12 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*8, kernel_size=(3,3), padding='same')(conv11))
+
+    up2 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*4, kernel_size=(2,2), padding='same')(customResize(conv12, conv6)))
+    merge2 = concatenate([conv6, up2])
+    conv13 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*4, kernel_size=(3,3), padding='same')(merge2))
+    conv14 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*4, kernel_size=(3,3), padding='same')(conv13))
+
+    up3 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*2, kernel_size=(2,2), padding='same')(customResize(conv14, conv4)))
+    merge3 = concatenate([conv4, up3])
+    conv15 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*2, kernel_size=(3,3), padding='same')(merge3))
+    conv16 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters*2, kernel_size=(3,3), padding='same')(conv15))
+
+    up4 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters, kernel_size=(2,2), padding='same')(customResize(conv16, conv2)))
+    merge4 = concatenate([conv2, up4])
+    conv17 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters, kernel_size=(3,3), padding='same')(merge4))
+    conv18 = tf.keras.layers.LeakyReLU(alpha=0.2)(Conv2D(filters=numFilters, kernel_size=(3,3), padding='same')(conv17))
+
+    outputs = Conv2D(filters=1, kernel_size=(1,1), activation='relu', padding='same')(conv18)
+
+    return tf.keras.Model(inputs=inputs, outputs=outputs)
+
+#NEAREST_NEIGHBOR, BILINEAR
 def customResize(x, y):
-    x = image_ops.resize_images_v2(x, array_ops.shape(y)[1:3], method=image_ops.ResizeMethod.BILINEAR)
+    x = image_ops.resize_images_v2(x, array_ops.shape(y)[1:3], method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
     nshape = tuple(y.shape.as_list())
     x.set_shape((None, nshape[1], nshape[2], None))
     return x
@@ -1231,3 +1256,19 @@ def sizeFunc(num, suffix='B'):
 #Determine absolute difference between two arrays
 def computeDifference(array1, array2):
     return abs(array1-array2)
+
+class DiceLoss(tf.keras.losses.Loss):
+    def call(self, y_true, y_pred):
+        y_true = tf.cast(y_true, tf.float32)
+        y_pred = tf.math.sigmoid(y_pred)
+        numerator = 2 * tf.reduce_sum(y_true * y_pred)
+        denominator = tf.reduce_sum(y_true + y_pred)
+        return 1 - numerator / denominator
+
+class JaccardLoss():
+    def call(self, y_true, y_pred):
+        intersection = K.sum(K.abs(y_true * y_pred), axis=-1)
+        sum_ = K.sum(K.abs(y_true) + K.abs(y_pred), axis=-1)
+        jac = (intersection + 100) / (sum_ - intersection + 100)
+        return (1 - jac) * 100
+
