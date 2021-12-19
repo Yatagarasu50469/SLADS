@@ -1068,7 +1068,7 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
         #lineToScanIdx = np.argmax([np.nanmean(np.sort(ERD[lineNum])[::-1][:sampleData.pointsToScan]) for lineNum in range(0, ERD.shape[0])])
 
         #If points on the line should be chosen one-by-one, temporarily using reconstruction values for updating ERD
-        if linePointSelection == 'single': 
+        if lineMethod == 'percLine' and linePointSelection == 'single': 
             
             #Create a list to hold the chosen scanning locations
             newIdxs = []
@@ -1101,16 +1101,17 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
             newIdxs[:,1] = np.sort(newIdxs[:,1])
             
         #If points on the line should be selected in one step/group
-        elif linePointSelection == 'group':
+        elif lineMethod == 'percLine' and linePointSelection == 'group':
             indexes = np.sort(np.argsort(ERD[lineToScanIdx])[::-1][:sampleData.pointsToScan])
             newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
         
         #==========================================
         #PARTIAL LINE BY START/END POINTS
         #==========================================
-        #Choose segment to scan on line which contains at least stopPerc locations with maximal ERD
+        #Choose segment to scan on line
         if lineMethod == 'segLine': 
-            indexes = np.arange(newIdxs[:,1][0],newIdxs[:,1][-1]+1)
+            indexes = np.sort(np.where(ERD[lineToScanIdx]>skimage.filters.threshold_otsu(ERD))[0])
+            indexes = np.arange(indexes[0],indexes[-1]+1)
             newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
         elif lineMethod != 'percLine': sys.exit('Error! - Unknown line method specified in configuation: ' + lineMethod)
         #==========================================
