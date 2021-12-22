@@ -76,7 +76,7 @@ class SampleData:
         self.ppmPos, self.ppmNeg = 1+self.ppm, 1-self.ppm
         self.mzMonoRange = [self.mzMonoValue*self.ppmNeg, self.mzMonoValue*self.ppmPos]
         if fileNumbering==0: self.unorderedNames = False
-        elif fileNumbering==0: self.unorderedNames = True
+        elif fileNumbering==1: self.unorderedNames = True
         else: sys.exit('Error - File Numbering parameter used in sampleInfo is not an acceptable value.')
 
         #Get mz ranges to use for visualizations
@@ -179,7 +179,7 @@ class SampleData:
         
         #Obtain and sort the available line files pertaining to the current scan
         scanFiles = natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'+self.lineExt), reverse=False)
-        
+
         #Identify which files have not yet been scanned, if line revisiting is disabled (update not replace)
         if self.lineRevist == False: scanFiles = list(set(scanFiles)-set(self.readScanFiles))
         
@@ -192,7 +192,7 @@ class SampleData:
             #Establish file pointer and line number (1 indexed) for the specific scan
             try: data = mzFile(scanFileName)
             except: readErrorFlag = True
-            
+            if readErrorFlag: Tracer()()
             #If the data file is 'good' then continue processing
             if not readErrorFlag:
             
