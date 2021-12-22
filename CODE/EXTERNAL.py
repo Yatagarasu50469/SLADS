@@ -73,6 +73,7 @@ from sobol import *
 from tqdm.auto import tqdm
 
 matplotlib.use('agg') #Non-interactive plotting mode
+sys.coinit_flags = 0 #
 
 #==================================================================
 #TENSORFLOW IMPORT AND SETUP
