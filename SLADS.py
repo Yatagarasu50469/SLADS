@@ -54,7 +54,7 @@
 #               0.8.4   Parallel c value selection fix, remove network resizing requirement, fix experimental
 #               0.8.5   Model optimization, enable batch processing, SLADS training fix, database acceleration
 #               0.8.6   Memory reduction, reconstruction vectorization, augmentation, global mz, mz window in ppm
-#               0.8.7   Recon. script, Options for acq. rate, sequential names, live output, row offsets, and input scaling
+#               0.8.7   Recon. script, acq. rate, seq. names, live output, offsets, input scaling, Otsu segLine
 #               ~0.+.+  GAN, Custom adversarial network, Multimodal integration
 #               ~1.0.0  Initial release
 #====================================================================
