@@ -20,18 +20,35 @@ else:
 #INTERNAL OBJECT SETUP
 #==================================================================
 
-#Initialize multiprocessing pool server; make sure a pool isn't still running from a ctl+c exit
+#Limit GPU(s) if indicated
+if availableGPUs != 'None': os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
+numGPUs = len(tf.config.experimental.list_physical_devices('GPU'))
+
+#Initialize multiprocessing pool; make sure a pool isn't still running from a ctl+c exit
 if parallelization: 
     ray.shutdown()
     numberCPUS = multiprocessing.cpu_count()
     if numberCPUS>2: numberCPUS = numberCPUS-2
     ray.init(num_cpus=numberCPUS, logging_level=logging.ERROR)
 
-#Force tensorflow to use (a) specific GPU(s) if indicated
-if availableGPUs != 'None': os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
+#Allow partial GPU memory allocation
+for gpu in tf.config.experimental.list_physical_devices('GPU'): tf.config.experimental.set_memory_growth(gpu, True)
 
 #Check chosen regression model is available
 if not erdModel in ['SLADS-LS', 'SLADS-Net', 'DLADS']: sys.exit('Error - Specified erdModel is not available')
+
+#Define deployment for trained models
+@serve.deployment(route_prefix="/ModelServer", ray_actor_options={"num_gpus": numGPUs})
+class ModelServer:
+
+    def __init__(self, erdModel, model_path):
+        self.erdModel = erdModel
+        if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': self.model = np.load(model_path, allow_pickle=True).item()
+        elif erdModel == 'DLADS': self.model = tf.function(tf.keras.models.load_model(model_path), experimental_relax_shapes=True)
+
+    def __call__(self, data):
+        if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': return self.model.predict(data)
+        elif erdModel == 'DLADS': return self.model(data, training=False)[0,:,:,0].numpy()
 
 #PATH/DIRECTORY SETUP
 #==================================================================

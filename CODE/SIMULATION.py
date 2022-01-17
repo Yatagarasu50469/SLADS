@@ -2,23 +2,36 @@
 #TESTING SLADS SPECIFIC
 #==================================================================
 
+#import tempfile
+       
 #Given a set of sample paths, perform simulations using a trained SLADS Model
-def simulateSLADS(sortedSampleFolders, dir_Results, optimalC):
+def simulateSLADS(sortedSampleFolders, dir_Results, model, optimalC):
 
-    #If consistentcy in the random generator is desired for comparisons, then reset seed
+    #If consistency in the random generator is desired for comparisons, then reset seed
     if consistentSeed: 
         tf.random.set_seed(0)
         np.random.seed(0)
         random.seed(0)
     
-    #Do not run initial samplData generation in parallel, changes mask initialization
-    sampleData = [SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, RDMethod, True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)]
-    
+    #If existing testing database should be used, try loading it (adjust its internal configuration variables) and if it doesn't exist then generate a new one anyway
+    if loadTestDataset and os.path.exists(dir_TrainingResults + 'testingDatabase.p'): 
+        sampleDataset = pickle.load(open(dir_TrainingResults + 'testingDatabase.p', "rb" ))
+        for sampleData in sampleDataset: 
+            sampleData.scanMethod = scanMethod
+            sampleData.initialPercToScan = initialPercToScan
+            sampleData.stopPerc = stopPerc
+            sampleData.lineRevist = lineRevist
+            sampleData.generateInitialSets(scanMethod)
+            sampleData.readScanData()
+    else:
+        sampleDataset = [SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, RDMethod, True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)]
+        pickle.dump(sampleDataset, open(dir_TrainingResults + 'testingDatabase.p', 'wb'))
+
     #Run algorithm for each of the samples, timing and storing metric progression for each
     if parallelization: 
-        futures = [runSLADS_parhelper.remote(sampleData[sampleNum], optimalC, True, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False) for sampleNum in range(0,len(sampleData))]
+        futures = [runSLADS_parhelper.remote(sampleDataset[sampleNum], optimalC, model, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False) for sampleNum in range(0,len(sampleDataset))]
         results = ray.get(futures)
-    else: results = [runSLADS(sampleData[sampleNum], optimalC, True, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False) for sampleNum in tqdm(range(0,len(sampleData)), desc='Samples', position=0, leave=True, ascii=True)]
+    else: results = [runSLADS(sampleDataset[sampleNum], optimalC, model, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False) for sampleNum in tqdm(range(0,len(sampleDataset)), desc='Samples', position=0, leave=True, ascii=True)]
     
     #Perform completion/visualization routines
     mzAvgPSNR_Results, avgPSNR_Results, ERDPSNR_Results = [], [], []
@@ -131,14 +144,14 @@ def simulateSLADS(sortedSampleFolders, dir_Results, optimalC):
     plt.close()
     
     #Find the final results for each image
-    lastQuantityMeasured = [quantityMeasured_Results[i][-1] for i in range(0, len(sampleData))]
-    lastmzAvgPSNR = [mzAvgPSNR_Results[i][-1] for i in range(0, len(sampleData))]
-    lastAvgPSNR = [avgPSNR_Results[i][-1] for i in range(0, len(sampleData))]
-    lastERDPSNR = [ERDPSNR_Results[i][-1] for i in range(0, len(sampleData))]
-    lastmzAvgSSIM = [mzAvgSSIM_Results[i][-1] for i in range(0, len(sampleData))]
-    lastAvgSSIM = [avgSSIM_Results[i][-1] for i in range(0, len(sampleData))]
-    lastERDSSIM = [ERDSSIM_Results[i][-1] for i in range(0, len(sampleData))]
-    lastTime = [time_Results[i] for i in range(0, len(sampleData))]
+    lastQuantityMeasured = [quantityMeasured_Results[i][-1] for i in range(0, len(sampleDataset))]
+    lastmzAvgPSNR = [mzAvgPSNR_Results[i][-1] for i in range(0, len(sampleDataset))]
+    lastAvgPSNR = [avgPSNR_Results[i][-1] for i in range(0, len(sampleDataset))]
+    lastERDPSNR = [ERDPSNR_Results[i][-1] for i in range(0, len(sampleDataset))]
+    lastmzAvgSSIM = [mzAvgSSIM_Results[i][-1] for i in range(0, len(sampleDataset))]
+    lastAvgSSIM = [avgSSIM_Results[i][-1] for i in range(0, len(sampleDataset))]
+    lastERDSSIM = [ERDSSIM_Results[i][-1] for i in range(0, len(sampleDataset))]
+    lastTime = [time_Results[i] for i in range(0, len(sampleDataset))]
     
     #Printout final results 
     dataPrintout = []

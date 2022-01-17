@@ -15,7 +15,7 @@ def equipWait():
     if os.path.isfile(dir_ImpDataFinal + 'UNLOCK'): os.remove(dir_ImpDataFinal + 'UNLOCK')
 
 #Perform SLADS with external equipment
-def performImplementation(optimalC):
+def performImplementation(model, optimalC):
 
     #Wait for equipment to initialize scan
     equipWait()
@@ -24,7 +24,7 @@ def performImplementation(optimalC):
     sampleData = SampleData(dir_ImpDataFinal, initialPercToScan, stopPerc, scanMethod, RDMethod, False, lineRevist, False)
 
     #Run SLADS
-    result = runSLADS(sampleData, optimalC, True, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_ImpResults, False)
+    result = runSLADS(sampleData, optimalC, model, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_ImpResults, False)
     
     #Indicate to equipment that the sample scan has concluded
     print('Writing DONE')

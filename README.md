@@ -15,7 +15,7 @@
 
 
     NAME: 		SLADS
-    VERSION NUM:	0.8.7
+    VERSION NUM:	0.8.8
     LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
@@ -61,6 +61,7 @@
                     0.8.5   Model optimization, enable batch processing, SLADS training fix, database acceleration
                     0.8.6   Memory reduction, mz reconstruction vectorization, augmentation, global mz, mz window in ppm
                     0.8.7   Recon. script, Options for acq. rate, sequential names, live output, row offsets, and input scaling
+                    0.8.8   Interpolation limits, static graph, parallel inferencing, ray deployment, test of FAISS
                     ~0.+.+  Custom adversarial network, Multimodal integration
                     ~1.0.0  Initial release
 
@@ -119,6 +120,7 @@
     	|	|	|	|------->...
     	|	|------->IMP
     	|	|	|------->sampleInfo.txt
+    	|	|	|------->physicalLineNums.csv
     	|	|	|------->sampleName-line-0001.RAW
     	|	|	|------->sampleName-line-0002.RAW
     	|	|	|------->...
@@ -177,32 +179,33 @@ This implementation of SLADS is generally only functional within Windows 10, giv
 		Win. 10:	Updated as of Jan 1 2021
 
 	System
-		Python		3.8.5
-		pip		20.2.4
+		Python		3.6.9
+		pip		21.2.4
 
 	Python Packages
-        	opencv-python   4.4.0.46
-        	datetime        4.3
-        	glob3           0.0.1
-        	IPython         7.16.1
-        	joblib          0.17.0
-        	pandas          1.1.4
-        	psutil          5.7.3
-        	matplotlib      3.3.2
-        	numba           0.53.0
-		pillow          8.0.1
-		ray             1.0.0
-		setuptools      50.3.0
-		scipy           1.5.3
-		sobol           0.9
-		sobol-seq       0.2.0
-		tensorflow      2.5.0
-		natsort         7.0.1
-		multiprocess    0.70.11.1
-		scikit-image    0.17.2
-		scikit-learn    0.23.2
-		sklearn         0.0
-		tqdm            4.51.0
+		DateTime	4.3
+		glob3		0.0.1
+		ipython		8.0.0
+		joblib		1.1.0
+		matplotlib	3.5.1
+		multiplierz	2.2.1
+		natsort		8.0.2
+		numba		0.55.0
+		numpy		1.21.5
+		opencv-python	4.5.5.62
+		pandas		1.3.5
+		Pillow		9.0.0
+		psutil		5.9.0
+		ray		1.9.2
+		scikit-image	0.19.1
+		scikit-learn	0.23.2                 
+		scipy		1.7.3
+		setuptools	47.3.1
+		sklearn		0.0
+		sobol		0.9
+		sobol-seq	0.2.0
+		tensorflow	2.7.0
+		tqdm		4.62.3
 
 ### **Installation on Windows 10**
 
@@ -211,7 +214,7 @@ If GPU acceleration is to be used, a compatible CUDA Toolkit and cuDNN must be i
 Install Visual Studio Community 2019, with the additional options: "Desktop development with C++" and "Python development":  https://visualstudio.microsoft.com/downloads/
 Also install the "Build Tools for Visual Studio 2019", under "All downloads"/"Tools for Visual Studio 2019"
 
-Install Python 3.8.3+: choosing to install with advanced options, selecting to install for all users, and add python to environment variables
+Install Python 3.8.0+: choosing to install with advanced options, selecting to install for all users, and add python to environment variables
 
 Open the command prompt as an administrator (right-click on the command prompt icon and choose "Run as administrator")
 
@@ -224,7 +227,7 @@ Note that the actual location of the specified file may vary depending on potent
 Navigate inside the command prompt to the SLADS base directory then enter the following commands:
 
 	$ python3 -m pip install --upgrade pip
-	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib numba pillow ray scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tensorflow-addons tqdm numpy opencv-python pydot graphviz
+	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib numba pillow ray ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tensorflow-addons tqdm numpy opencv-python pydot graphviz
 	$ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
 
 	$ python
@@ -298,6 +301,7 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 		Model Training Images: Visualized training convergence images
 		trainingDatabase.p: Database of training samples; random 1% point masks from 1-40%
 		validationDatabase.p: Database of validation samples; random 1% point masks from 1-40%
+		testingDatabase.p: Database of testing sample data to allow for rapid back-to-back simulations
 		trainingValidationSampleData.p: Database of training and validation sample data
 		model_cValue_: Trained model corresponding to the indicated c value (.npy for SLADS-LS and SLADS-Net)
 
@@ -368,4 +372,4 @@ While it does not currently function for some MSI formats, (verified operational
 
 ###  **The legacy single mz mode training images look incorrect**
 
-Integration with nano-DESI MSI was never intended to perform evaluation of some mz reconstructions over the whole spectrum; it's simply too computationally expensive to consider. The single mz mode operates by setting the ground-truth average image as the ground-truth singuler mz visualization, since in SLADS operation, only the average image is used to determine E/RD. Evaluation is performed with reconstructed multiple m/z images against their ground-truth conterparts. The multiple ground-truth mz are averaged together into the correct ground-truth average mz image when simulated scanning is completed. Since this routine is not setup to be performed during training, or generation of the training/validation database, the saved images for the averaged reconstruction and averaged ground-truth are incorrectly labeled. The single mz mode is intended to be removed in the next version release and should not be used except for very specific circumstances!
+Integration with nano-DESI MSI was never intended to perform evaluation of some mz reconstructions over the whole spectrum; it's simply too computationally expensive to consider. The single mz mode operates by setting the ground-truth average image as the ground-truth singuler mz visualization, since in SLADS operation, only the average image is used to determine E/RD. Evaluation is performed with reconstructed multiple m/z images against their ground-truth conterparts. The multiple ground-truth mz are averaged together into the correct ground-truth average mz image when simulated scanning is completed. Since this routine is not setup to be performed during training, or generation of the training/validation database, the saved images for the averaged reconstruction and averaged ground-truth are incorrectly labeled. The single mz mode is intended to be removed and should not be used except for very specific circumstances!

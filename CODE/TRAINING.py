@@ -83,6 +83,7 @@ class EpochEnd(keras.callbacks.Callback):
                     
                     ERD = self.model(makeCompatible(prepareInput(vizSample)), training=False)[0,:,:,0].numpy()
                     RD = vizSample.squareRD
+                    #RD = vizSample.RDPP
 
                     maxRangeValue = np.max([RD, ERD])
                     ERD_PSNR = compare_psnr(RD, ERD, data_range=maxRangeValue)
@@ -400,6 +401,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         for sample in tqdm(trainingDatabase, desc = 'Training Data Setup', leave=True, ascii=True):
             trainInputImages.append(prepareInput(sample))
             trainOutputImages.append(sample.squareRD)
+            #trainOutputImages.append(sample.RDPP)
 
         #If there is a validation set then create respective lists
         if len(validationDatabase)<=0: 
@@ -410,6 +412,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             for sample in tqdm(validationDatabase, desc = 'Validation Data Setup', leave=True, ascii=True):
                 valInputImages.append(prepareInput(sample))
                 valOutputImages.append(sample.squareRD)
+                #valOutputImages.append(sample.RDPP)
                 
             #Extract lowest and highest density from the first validation sample for visualization during training; assumes 1% spacing
             vizSamples = [validationDatabase[0], validationDatabase[len(np.arange(initialPercToScanTrain,stopPercTrain))]]
@@ -438,6 +441,8 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             #Select loss function
             if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss='mean_absolute_error')
             elif lossFunc == 'MSE': model.compile(optimizer=trainOptimizer, loss='mean_squared_error')
+            #elif lossFunc == 'SCE': model.compile(optimizer=trainOptimizer, loss=))
+            #elif lossFunc == 'Depth': model.compile(optimizer=trainOptimizer, loss=DepthLoss())
             #elif lossFunc == 'CCE': model.compile(optimizer=trainOptimizer, loss='categorical_crossentropy')
             #elif lossFunc == 'Dice': model.compile(optimizer=trainOptimizer, loss=DiceLoss())
             #elif lossFunc == 'Jaccard': model.compile(optimizer=trainOptimizer, loss=JaccardLoss())
@@ -461,8 +466,8 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         
         print('Model Training Time: ' + str(datetime.timedelta(seconds=(time.time()-t0))))
         
-        #Save the final model and weights
-        model.save(dir_TrainingResults+'model_cValue_'+str(optimalC))
+        #Save the final model and weights; do not include optimizer to save space
+        model.save(dir_TrainingResults+'model_cValue_'+str(optimalC), include_optimizer=False)
         
         # #Write out the training history to a .csv
         pd.DataFrame(history.history).to_csv(dir_TrainingResults+'history.csv')

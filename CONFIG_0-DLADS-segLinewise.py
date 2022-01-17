@@ -18,10 +18,13 @@ loadTrainValDatasets = False
 validationModel = False
 
 #Is testing of a model to be performed
-testingModel = False
+testingModel = True
+
+#If testingModel, should existing database in RESULTS be loaded instad of creating a new one
+loadTestDataset = False
 
 #Is this an implementation run
-impModel = True
+impModel = False
 
 ##################################################################
 
@@ -42,11 +45,8 @@ erdModel = 'DLADS'
 #Which scanning method shoud be used: pointwise or linewise
 scanMethod = 'linewise'
 
-#var, max, avg, sum, original (original collapses before difference between recon and ground-truth mz)
+#sum or original (original collapses before difference between recon and ground-truth mz)
 RDMethod = 'sum'
-
-#How should the data be modified before input to the model, 'minmax', 'standardize', or None
-normInputMethod = None
 
 #==================================================================
 #PARAMETERS: L1-0
@@ -73,7 +73,7 @@ impOffset = True
 initialPercToScan = 1
 
 #Stopping percentage for number of acquired pixels during testing/implementation
-stopPerc = 50
+stopPerc = 30
 
 #If group-wise, what percentage of points should be acquired; otherwise set to None
 percToScan = None
@@ -88,8 +88,14 @@ percToViz = None
 #LINEWISE OPTIONS
 #==================================================================
 
-#What method should be used for linewise point selection: (segLine, partial line segment) (percLine, Top stopPerc% ERD locations) (none, full line)
+#How should points be returned from a chosen line: (segLine; partial line segment) (percLine; top stopPerc% ERD locations) (none, full line)
 lineMethod = 'segLine'
+
+#How should individual points on a chosen line be selected: (single; one-by-one, updates ERD from reconstruction) (group; all chosen in one step)
+linePointSelection = 'group'
+
+#If using a segLine, how should the start and end points be determined (minPerc, left/right most of the top stopPerc ERD values) (otsu, left/right most of the foreground ERD found with Otsu)
+segLineMethod = 'otsu'
 
 #Should lines be allowed to be revisited
 lineRevist = False
@@ -112,6 +118,7 @@ stopPercTrain = 30
 
 #Possible c values for RD approximation
 cValues = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
+#cValues = np.array([8])
 
 #How many masks should be used for each percentage during training
 numMasks = 1
@@ -145,10 +152,10 @@ featDistCutoff = 0.25
 #How many augmented versions of the training data should be added to the base set
 numAugTimes = 0
 
-#What inputs should be used to the network (ReconAndMeasured, ReconValues, MeasuredValues, AverageReconValues, AverageMeasuredValues, AverageReconAndMeasured)
-inputMethod = 'ReconAndMeasured'
+#What inputs should be used to the network besides a mask of unmeasured locations (ReconValues, MeasuredValues, ReconImages)
+inputMethod = 'ReconAndMeasuredMask'
 
-#Which model should be used for training (unet)
+#Which model should be used for training: cnn, unet, or flatunet
 modelDef = 'unet'
 
 #How many filters should be used
@@ -157,7 +164,7 @@ numStartFilters = 64
 #Which optimizer should be used('Nadam', 'Adam', or 'RMSProp')
 optimizer = 'Nadam'
 
-#Which loss function should be used for the optimizer ('MAE', or 'MSE')
+#Which loss function should be used for the optimizer ('MAE', 'MSE', or 'CCE')
 lossFunc = 'MAE'
 
 #What should the learning rate of the model's optimizer be
@@ -190,7 +197,7 @@ trainingSplit = 0.8
 #Should visualizations of the training progression be generated
 trainingProgressionVisuals = True
 
-#If visualizations of the training progression are to be generated, how often should this occur
+#If visualizations of the training progression are to be generated, how often (epochs) should this occur
 trainingVizSteps = 10
 
 #==================================================================
