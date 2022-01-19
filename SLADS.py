@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    17 January 2021
+#DATE MODIFIED:	    19 January 2021
 #
-#VERSION NUM:	    0.8.8
+#VERSION NUM:	    0.8.9
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -22,7 +22,7 @@
 #                   Hang Hu		CHEM, Purdue University
 #
 #FUNDING:	    This project has received funding and was programmed for:
-#               NIH Grant 1UG3HL145593-01
+#                   NIH Grant 1UG3HL145593-01
 #
 #GLOBAL
 #CHANGELOG:     0.1.0   Multithreading adjustments to pointwise SLADS
@@ -56,6 +56,7 @@
 #               0.8.6   Memory reduction, reconstruction vectorization, augmentation, global mz, mz window in ppm
 #               0.8.7   Recon. script, acq. rate, seq. names, live output, offsets, input scaling, Otsu segLine
 #               0.8.8   Interpolation limits, static graph, parallel inferencing, ray deployment, test of FAISS
+#               0.8.9   Simplification
 #               ~0.+.+  GAN, Custom adversarial network, Multimodal integration
 #               ~1.0.0  Initial release
 #====================================================================
@@ -64,7 +65,7 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum='0.8.8'
+versionNum='0.8.9'
 
 #Import all involved external libraries
 exec(open("./CODE/EXTERNAL.py").read())
@@ -152,11 +153,10 @@ for configFileName in configFileNames:
 
         #Train model(s) for the given database and c value
         sectionTitle('PERFORMING TRAINING')
-        model = trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, optimalC)
+        trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, optimalC)
 
     #Load models and c value before testing, or implementation
     optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
-    
 
     #If it is going to be employed, then start server, deploy, and get handle for model queries
     if testingModel or validationModel or impModel:

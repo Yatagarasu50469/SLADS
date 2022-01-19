@@ -10,7 +10,6 @@ import cv2
 import contextlib
 import copy
 import datetime
-#import faiss
 import gc
 import glob
 import logging
@@ -48,6 +47,7 @@ from joblib import Parallel, delayed
 from matplotlib.pyplot import figure
 from multiplierz.mzAPI import mzFile
 from multiplierz.spectral_process import mz_range
+from numba import cuda
 from numba import jit
 from PIL import Image
 from ray import serve

@@ -21,7 +21,7 @@ validationModel = False
 testingModel = True
 
 #If testingModel, should existing database in RESULTS be loaded instad of creating a new one
-loadTestDataset = False
+loadTestDataset = True
 
 #Is this an implementation run
 impModel = False
@@ -118,7 +118,6 @@ stopPercTrain = 30
 
 #Possible c values for RD approximation
 cValues = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
-#cValues = np.array([8])
 
 #How many masks should be used for each percentage during training
 numMasks = 1
@@ -149,13 +148,10 @@ featDistCutoff = 0.25
 #DLADS MODEL PARAMETERS (disregard if using SLADS-LS or SLADS-Net)
 #==================================================================
 
-#How many augmented versions of the training data should be added to the base set
-numAugTimes = 0
+#What inputs should be used to the network besides a mask of unmeasured locations (allChannels or avgChannels)
+inputMethod = 'allChannels'
 
-#What inputs should be used to the network besides a mask of unmeasured locations (ReconValues, MeasuredValues, ReconImages)
-inputMethod = 'ReconAndMeasuredMask'
-
-#Which model should be used for training: cnn, unet, or flatunet
+#Which model should be used for training (unet)
 modelDef = 'unet'
 
 #How many filters should be used
@@ -164,7 +160,7 @@ numStartFilters = 64
 #Which optimizer should be used('Nadam', 'Adam', or 'RMSProp')
 optimizer = 'Nadam'
 
-#Which loss function should be used for the optimizer ('MAE', 'MSE', or 'CCE')
+#Which loss function should be used for the optimizer ('MAE' or 'MSE')
 lossFunc = 'MAE'
 
 #What should the learning rate of the model's optimizer be
