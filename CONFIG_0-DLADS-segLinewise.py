@@ -149,10 +149,13 @@ featDistCutoff = 0.25
 #DLADS MODEL PARAMETERS (disregard if using SLADS-LS or SLADS-Net)
 #==================================================================
 
-#What inputs should be used to the network besides a mask of unmeasured locations (allChannels or avgChannels)
-inputMethod = 'allChannels'
+#How many augmented versions of the training data should be added to the base set
+numAugTimes = 0
 
-#Which model should be used for training (unet)
+#What inputs should be used to the network besides a mask of unmeasured locations (ReconValues, MeasuredValues, ReconImages)
+inputMethod = 'ReconAndMeasuredMask'
+
+#Which model should be used for training: cnn, unet, or flatunet
 modelDef = 'unet'
 
 #How many filters should be used
@@ -161,7 +164,7 @@ numStartFilters = 64
 #Which optimizer should be used('Nadam', 'Adam', or 'RMSProp')
 optimizer = 'Nadam'
 
-#Which loss function should be used for the optimizer ('MAE' or 'MSE')
+#Which loss function should be used for the optimizer ('MAE', 'MSE', or 'CCE')
 lossFunc = 'MAE'
 
 #What should the learning rate of the model's optimizer be

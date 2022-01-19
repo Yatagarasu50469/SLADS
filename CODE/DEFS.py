@@ -256,6 +256,7 @@ class Sample:
         self.squareRD = np.zeros((sampleData.squareDim))
         self.percMeasured = 0
         self.iteration = 0
+        #self.neighborIndex = faiss.IndexFlatL2(2)
         
     def performMeasurements(self, sampleData, newIdxs, model, cValue, bestCFlag, oracleFlag, fromRecon):
 
@@ -289,8 +290,13 @@ class Sample:
         #Update percentage pixels measured; only when not fromRecon
         self.percMeasured = (np.sum(self.mask)/sampleData.area)*100
         
-        #Resize the square pixel mask
+        #Resize the square pixel mask; do not replace stored version until new measured indexes are determined
+        #newSquareMask = resize(self.mask, tuple(sampleData.squareDim), order=0)
         self.squareMask = resize(self.mask, tuple(sampleData.squareDim), order=0)
+
+        #Determine which indexes are newly scanned and then update the stored square mask
+        #newSquareMeasuredIdxs = np.transpose(np.where(newSquareMask-self.squareMask==1))
+        #self.squareMask = newSquareMask
 
         #Extract measured and unmeasured locations for the new mask
         squareMeasuredIdxs, squareUnMeasuredIdxs = np.transpose(np.where(self.squareMask==1)), np.transpose(np.where(self.squareMask==0))
@@ -298,6 +304,20 @@ class Sample:
         #Determine neighbor information for unmeasured locations
         if len(squareUnMeasuredIdxs) > 0: neighborIndices, neighborWeights, neighborDistances = findNeighbors(squareMeasuredIdxs, squareUnMeasuredIdxs)
         else: neighborIndices, neighborWeights, neighborDistances = [], [], []
+
+        #Augment knn and determine inverse distance weights with faiss
+        #t0 = time.time()
+        #self.neighborIndex.add(np.ascontiguousarray(newSquareMeasuredIdxs).astype(np.float32))
+        #neighborDistances, neighborIndices = self.neighborIndex.search(np.ascontiguousarray(squareUnMeasuredIdxs).astype(np.float32), numNeighbors)
+        #unNormNeighborWeights = 1.0/neighborDistances
+        #neighborWeights = unNormNeighborWeights/(np.sum(unNormNeighborWeights, axis=1))[:, np.newaxis]
+        #neighborDistances = neighborDistances**0.5
+        #print('faiss Neighbors:', len(newSquareMeasuredIdxs), ' Time:', time.time()-t0)
+        #print()
+        #print()
+
+        #self.distanceMap = np.zeros(tuple(sampleData.squareDim))
+        #self.distanceMap[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1]] = neighborDistances[:,0]
 
         #Compute the reconstructions with square pixels if new data is acquired
         if not fromRecon:
@@ -327,13 +347,25 @@ class Sample:
             else: self.ERD = np.zeros(sampleData.squareDim)
         elif oracleFlag or bestCFlag:
         
-            #If this is a full measurement step, compute the RDPP
+            #If this is a full measurement step, compute the RDPP; for original, compute difference of collapsed mz stack, otherwise collapse mz difference stack 
             if not fromRecon:
                 if RDMethod == 'original': self.RDPP = computeDifference(sampleData.squaremzAvgImage, self.squaremzAvgReconImage)
                 elif RDMethod == 'avg': self.RDPP = np.mean(abs(sampleData.squaremzImages-self.squaremzReconImages), axis=0)
                 elif RDMethod == 'sum': self.RDPP = np.sum(abs(sampleData.squaremzImages-self.squaremzReconImages), axis=0)
-            
-            computeRD(self, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborDistances, cValue, bestCFlag, fromRecon)
+            if RDMethod != 'dssim': computeRD(self, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborDistances, cValue, bestCFlag, fromRecon)
+            if RDMethod == 'dssim': 
+                self.RDPP = np.sum(abs(sampleData.squaremzImages-self.squaremzReconImages), axis=0)
+                #reconImages = np.asarray([(reconImage-np.min(reconImage))/(np.max(reconImage)-np.min(reconImage)) for reconImage in copy.deepcopy(self.squaremzReconImages)])
+                #gtImages = np.asarray([(gtImage-np.min(gtImage))/(np.max(gtImage)-np.min(gtImage)) for gtImage in copy.deepcopy(sampleData.squaremzImages)])
+                #_, self.squareRD = compare_ssim(gtImages, reconImages, win_size=None, channel_axis=0, gaussian_weights=True, full=True)
+
+                minValue = np.min((np.min(sampleData.squaremzImages), np.min(self.squaremzReconImages)))
+                maxValue = np.max((np.max(sampleData.squaremzImages), np.max(self.squaremzReconImages)))
+                _, self.squareRD = compare_ssim(((sampleData.squaremzImages-minValue)/(maxValue-minValue)), ((self.squaremzReconImages-minValue)/(maxValue-minValue)), win_size=None, channel_axis=0, gaussian_weights=True, full=True)
+
+                #_, self.squareRD = compare_ssim(sampleData.squaremzImages, self.squaremzReconImages, win_size=None, channel_axis=0, gaussian_weights=True, full=True)#, sigma=3)
+                self.squareRD = np.mean(self.squareRD, axis=0)
+                self.squareRD =  np.ones(self.squareRD.shape)-self.squareRD
             self.RD = resize(self.squareRD, tuple(sampleData.finalDim), order=0)
             self.ERD = self.RD
         else: self.ERD = computeERD(self, sampleData, model, squareUnMeasuredIdxs, squareMeasuredIdxs)
@@ -430,8 +462,19 @@ class Result:
             if RDMethod == 'original': sample.RDPP = computeDifference(self.sampleData.squaremzAvgImage, sample.squaremzAvgReconImage)
             elif RDMethod == 'avg': sample.RDPP = np.mean(abs(self.sampleData.squaremzImages-sample.squaremzReconImages), axis=0)
             elif RDMethod == 'sum': sample.RDPP = np.sum(abs(self.sampleData.squaremzImages-sample.squaremzReconImages), axis=0)
+            if RDMethod != 'dssim': computeRD(sample, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborDistances, self.cValue, self.bestCFlag, False)
+            if RDMethod == 'dssim': 
+                sample.RDPP = np.sum(abs(self.sampleData.squaremzImages-sample.squaremzReconImages), axis=0)
+                #reconImages = np.asarray([(reconImage-np.min(reconImage))/(np.max(reconImage)-np.min(reconImage)) for reconImage in copy.deepcopy(sample.squaremzReconImages)])
+                #gtImages = np.asarray([(gtImage-np.min(gtImage))/(np.max(gtImage)-np.min(gtImage)) for gtImage in copy.deepcopy(self.sampleData.squaremzImages)])
+                #_, sample.squareRD = compare_ssim(gtImages, reconImages, win_size=None, channel_axis=0, gaussian_weights=True, full=True)
 
-            computeRD(sample, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborDistances, self.cValue, self.bestCFlag, False)
+                minValue = np.min((np.min(self.sampleData.squaremzImages), np.min(sample.squaremzReconImages)))
+                maxValue = np.max((np.max(self.sampleData.squaremzImages), np.max(sample.squaremzReconImages)))
+                _, sample.squareRD = compare_ssim(((self.sampleData.squaremzImages-minValue)/(maxValue-minValue)), ((sample.squaremzReconImages-minValue)/(maxValue-minValue)), win_size=None, channel_axis=0, gaussian_weights=True, full=True)
+            
+                sample.squareRD = np.mean(sample.squareRD, axis=0)
+                sample.squareRD =  np.ones(sample.squareRD.shape)-sample.squareRD
             sample.RD = resize(sample.squareRD, tuple(self.sampleData.finalDim), order=0)
 
         #Determine SSIM/PSNR between RD and ERD
@@ -939,17 +982,52 @@ def prepareInput(sample):
 
     squareMeasuredIdxs, squareUnMeasuredIdxs = np.transpose(np.where(sample.squareMask==1)), np.transpose(np.where(sample.squareMask==0))
     
-    if inputMethod == 'avgChannels':
+    if inputMethod == 'ReconValues':
+        inputImage = copy.deepcopy(np.moveaxis(sample.squaremzReconImages, 0, -1))
+        inputImage[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1], :] = 0
+    elif inputMethod == 'ReconImages':
+        inputImage = copy.deepcopy(np.moveaxis(sample.squaremzReconImages, 0, -1))
+        #inputImage = copy.deepcopy(sample.squaremzReconImages)
+        #inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
+        #inputImage = np.moveaxis(inputImage, 0, -1)
+    elif inputMethod == 'MeasuredValues':
+        inputImage = copy.deepcopy(np.moveaxis(sample.squaremzReconImages, 0, -1))
+        inputImage[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1], :] = 0
+        #inputImage = copy.deepcopy(sample.squaremzReconImages)
+        #inputImage = (inputImage-np.min(inputImage))/(np.max(inputImage)-np.min(inputImage))
+        #inputImage = np.moveaxis(inputImage, 0, -1)
+        #inputImage[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1], :] = 0
+    elif inputMethod == 'ReconAndMeasured':
+        reconImages = copy.deepcopy(sample.squaremzReconImages)
+        #reconImages = (reconImages-np.min(reconImages))/(np.max(reconImages)-np.min(reconImages))
+        reconValues = np.moveaxis(copy.deepcopy(reconImages), 0, -1)
+        measuredValues = np.moveaxis(copy.deepcopy(reconImages), 0, -1)
+        reconValues[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1], :] = 0
+        measuredValues[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1], :] = 0
+        inputImage = np.dstack((reconValues, measuredValues))
+    elif inputMethod == 'AverageReconValues':
+        inputImage = copy.deepcopy(sample.squaremzAvgReconImage)
+        inputImage[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1]] = 0
+        inputImage = np.expand_dims(inputImage, 2)
+    elif inputMethod == 'AverageMeasuredValues':
+        inputImage = copy.deepcopy(sample.squaremzAvgReconImage)
+        inputImage[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1]] = 0
+        inputImage = np.expand_dims(inputImage, 2)
+    elif inputMethod == 'AverageReconAndMeasured':
         reconValues = copy.deepcopy(sample.squaremzAvgReconImage)
         reconValues[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1]] = 0
         measuredValues = copy.deepcopy(sample.squaremzAvgReconImage)
         measuredValues[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1]] = 0
-        inputImage = np.dstack((sample.squareMask, reconValues, measuredValues))
-    elif inputMethod == 'allChannels':
-        reconImages = np.moveaxis(copy.deepcopy(sample.squaremzReconImages), 0, -1)
-        reconValues = copy.deepcopy(reconImages)
+        inputImage = np.dstack((reconValues, measuredValues))
+    elif inputMethod == 'MeasValuesMask':
+        inputImage = copy.deepcopy(np.moveaxis(sample.squaremzReconImages, 0, -1))
+        inputImage[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1], :] = 0
+        inputImage = np.dstack((sample.squareMask, inputImage))
+    elif inputMethod == 'ReconAndMeasuredMask':
+        reconImages = copy.deepcopy(sample.squaremzReconImages)
+        reconValues = np.moveaxis(copy.deepcopy(reconImages), 0, -1)
+        measuredValues = np.moveaxis(copy.deepcopy(reconImages), 0, -1)
         reconValues[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1], :] = 0
-        measuredValues = copy.deepcopy(reconImages)
         measuredValues[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1], :] = 0
         inputImage = np.dstack((sample.squareMask, reconValues, measuredValues))
 
@@ -1085,6 +1163,14 @@ def findNeighbors(measuredIdxs, unMeasuredIdxs):
     unNormNeighborWeights = 1.0/(neighborDistances**2.0)
     neighborWeights = unNormNeighborWeights/(np.sum(unNormNeighborWeights, axis=1))[:, np.newaxis]
 
+    #Calculate knn and determine inverse distance weights with faiss
+    #index = faiss.IndexFlatL2(measuredIdxs.shape[1])
+    #index.add(np.ascontiguousarray(measuredIdxs).astype(np.float32))
+    #neighborDistances, neighborIndices = index.search(np.ascontiguousarray(unMeasuredIdxs).astype(np.float32), numNeighbors)
+    #unNormNeighborWeights = 1.0/neighborDistances
+    #neighborWeights = unNormNeighborWeights/(np.sum(unNormNeighborWeights, axis=1))[:, np.newaxis]
+    #neighborDistances = neighborDistances**0.5
+
     return neighborIndices, neighborWeights, neighborDistances
 
 #Perform the reconstruction
@@ -1180,4 +1266,39 @@ def sizeFunc(num, suffix='B'):
 def computeDifference(array1, array2):
     return abs(array1-array2)
 
+class DiceLoss(tf.keras.losses.Loss):
+    def call(self, y_true, y_pred):
+        y_true = tf.cast(y_true, tf.float32)
+        y_pred = tf.math.sigmoid(y_pred)
+        numerator = 2 * tf.reduce_sum(y_true * y_pred)
+        denominator = tf.reduce_sum(y_true + y_pred)
+        return 1 - numerator / denominator
+
+class JaccardLoss(tf.keras.losses.Loss):
+    def call(self, y_true, y_pred):
+        intersection = K.sum(K.abs(y_true * y_pred), axis=-1)
+        sum_ = K.sum(K.abs(y_true) + K.abs(y_pred), axis=-1)
+        jac = (intersection + 100) / (sum_ - intersection + 100)
+        return (1 - jac) * 100
+
+class DepthLoss(tf.keras.losses.Loss):
+    def call(self, y_true, y_pred):
+    
+        # Point-wise depth
+        l_depth = K.mean(K.abs(y_pred - y_true), axis=-1)
+
+        # Edges
+        dy_true, dx_true = tf.image.image_gradients(y_true)
+        dy_pred, dx_pred = tf.image.image_gradients(y_pred)
+        l_edges = K.mean(K.abs(dy_pred - dy_true) + K.abs(dx_pred - dx_true), axis=-1)
+
+        # Structural similarity (SSIM) index
+        l_ssim = K.clip((1 - tf.image.ssim(y_true, y_pred, 1)) * 0.5, 0, 1)
+
+        # Weights
+        w1 = 1.0
+        w2 = 1.0
+        w3 = 0.1
+
+        return (w1 * l_ssim) + (w2 * K.mean(l_edges)) + (w3 * K.mean(l_depth))
 

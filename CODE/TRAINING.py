@@ -83,6 +83,7 @@ class EpochEnd(keras.callbacks.Callback):
                     
                     ERD = self.model(makeCompatible(prepareInput(vizSample)), training=False)[0,:,:,0].numpy()
                     RD = vizSample.squareRD
+                    #RD = vizSample.RDPP
 
                     maxRangeValue = np.max([RD, ERD])
                     ERD_PSNR = compare_psnr(RD, ERD, data_range=maxRangeValue)
@@ -171,7 +172,7 @@ def importInitialData(sortedSampleFolders):
     
     return trainingValidationSampleData
 
-#Given a set of samples, determine an optimal c value
+#Given a set of training samples, determine an optimal c value
 def optimizeC(trainingSampleData):
     
     #If there are more than one c value, determine which minimizes the total distortion in the samples, force this optimization to be performed with pointwise scanning
@@ -194,7 +195,7 @@ def optimizeC(trainingSampleData):
         for cNum in range(0, len(cValues)):
         
             #Double check that results were split correctly according to cValue
-            if np.sum(np.diff([results[cNum][index].cValue for index in range(0, len(results[cNum]))]))>0: sys.exit('Error! - Results for c values were not split correctly.')
+            if np.sum(np.diff([results[cNum][index].cValue for index in range(0, len(results[cNum]))]))>0: Tracer()()
             
             #Extract percentage results at the specified precision
             percents, trainingmzMetric_mean = percResults([result.cSelectionList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
@@ -319,7 +320,7 @@ def generateDatabases(trainingValidationSampleData, optimalC):
     trainingDatabase, validationDatabase = [], []
     
     if consistentSeed: np.random.seed(0)
-
+    
     #For the number of mask iterations specified, create new masks and scan them with the specified method
     if parallelization: futures = []
     else: results = []
@@ -341,7 +342,6 @@ def generateDatabases(trainingValidationSampleData, optimalC):
     
     #If parallel, start queue and wait for results
     if parallelization: 
-        print('Initializing Parallel Generation')
         t0 = time.time()
         results = ray.get(futures)
         print('Completed in: '+str(time.time()-t0))
@@ -401,6 +401,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         for sample in tqdm(trainingDatabase, desc = 'Training Data Setup', leave=True, ascii=True):
             trainInputImages.append(prepareInput(sample))
             trainOutputImages.append(sample.squareRD)
+            #trainOutputImages.append(sample.RDPP)
 
         #If there is a validation set then create respective lists
         if len(validationDatabase)<=0: 
@@ -411,6 +412,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             for sample in tqdm(validationDatabase, desc = 'Validation Data Setup', leave=True, ascii=True):
                 valInputImages.append(prepareInput(sample))
                 valOutputImages.append(sample.squareRD)
+                #valOutputImages.append(sample.RDPP)
                 
             #Extract lowest and highest density from the first validation sample for visualization during training; assumes 1% spacing
             vizSamples = [validationDatabase[0], validationDatabase[len(np.arange(initialPercToScanTrain,stopPercTrain))]]
@@ -439,6 +441,11 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             #Select loss function
             if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss='mean_absolute_error')
             elif lossFunc == 'MSE': model.compile(optimizer=trainOptimizer, loss='mean_squared_error')
+            #elif lossFunc == 'SCE': model.compile(optimizer=trainOptimizer, loss=))
+            #elif lossFunc == 'Depth': model.compile(optimizer=trainOptimizer, loss=DepthLoss())
+            #elif lossFunc == 'CCE': model.compile(optimizer=trainOptimizer, loss='categorical_crossentropy')
+            #elif lossFunc == 'Dice': model.compile(optimizer=trainOptimizer, loss=DiceLoss())
+            #elif lossFunc == 'Jaccard': model.compile(optimizer=trainOptimizer, loss=JaccardLoss())
 
             #Setup callback object
             epochEndCallback = EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizSamples, vizSampleData, dir_TrainingModelResults)
@@ -462,14 +469,10 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         #Save the final model and weights; do not include optimizer to save space
         model.save(dir_TrainingResults+'model_cValue_'+str(optimalC), include_optimizer=False)
         
-        #Clear GPU memory of trained model(s)
-        for i in range(0, len(tf.config.list_physical_devices('GPU'))): 
-            cuda.select_device(i)
-            cuda.close()
-
-        #Write out the training history to a .csv
+        # #Write out the training history to a .csv
         pd.DataFrame(history.history).to_csv(dir_TrainingResults+'history.csv')
         
+        return model
 
 class DataGen(tf.keras.utils.Sequence):
     
