@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    19 January 2021
+#DATE MODIFIED:	    22 December 2021
 #
-#VERSION NUM:	    0.8.9
+#VERSION NUM:	    0.8.7
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -19,10 +19,10 @@
 #ADVISOR(S):        Dong Hye Ye		EECE, Marquette University
 #
 #COLLABORATORS:	    Julia Laskin	CHEM, Purdue University
-#                   Hang Hu		CHEM, Purdue University
+#                   Hang Hu		    CHEM, Purdue University
 #
 #FUNDING:	    This project has received funding and was programmed for:
-#                   NIH Grant 1UG3HL145593-01
+#               NIH Grant 1UG3HL145593-01
 #
 #GLOBAL
 #CHANGELOG:     0.1.0   Multithreading adjustments to pointwise SLADS
@@ -55,8 +55,6 @@
 #               0.8.5   Model optimization, enable batch processing, SLADS training fix, database acceleration
 #               0.8.6   Memory reduction, reconstruction vectorization, augmentation, global mz, mz window in ppm
 #               0.8.7   Recon. script, acq. rate, seq. names, live output, offsets, input scaling, Otsu segLine
-#               0.8.8   Interpolation limits, static graph, parallel inferencing, ray deployment, test of FAISS
-#               0.8.9   Simplification
 #               ~0.+.+  GAN, Custom adversarial network, Multimodal integration
 #               ~1.0.0  Initial release
 #====================================================================
@@ -65,22 +63,16 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum='0.8.9'
+versionNum='0.8.7'
 
-#Import all involved external libraries
+#Import all involved external libraries (just once!)
 exec(open("./CODE/EXTERNAL.py").read())
 
-#Import general method and class definitions
-exec(open("./CODE/DEFS.py").read())
-
-#Obtain list of configuration files
-configFileNames = natsort.natsorted(glob.glob('./CONFIG_*.py'))
-
-#If there is more than one configuration file, validate their syntax
-if len(configFileNames) > 1: [exec(open(configFileName).read()) for configFileName in configFileNames]
-
 #For each of the configuration files that are present, run SLADS
-for configFileName in configFileNames:
+for configFileName in natsort.natsorted(glob.glob('./CONFIG_*.py')):
+
+    #Import basic definitions
+    exec(open("./CODE/DEFS.py").read())
 
     #Load in variable definitions from the configuration file
     exec(open(configFileName).read())
@@ -147,21 +139,14 @@ for configFileName in configFileNames:
             optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
             trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase.p', "rb" ))
             validationDatabase = pickle.load(open(dir_TrainingResults + 'validationDatabase.p', "rb" ))
-
+        
         #Train model(s) for the given database and c value
         sectionTitle('PERFORMING TRAINING')
-        trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, optimalC)
+        model = trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, optimalC)
 
     #Load models and c value before testing, or implementation
     optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
-
-    #If it is going to be employed, then start server, deploy, and get handle for model queries
-    if testingModel or validationModel or impModel:
-        serve.start()
-        if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': ModelServer.deploy(erdModel, dir_TrainingResults+'model_cValue_'+str(optimalC)+'.npy')
-        elif erdModel == 'DLADS': ModelServer.deploy(erdModel, dir_TrainingResults+'model_cValue_'+str(optimalC))
-        model = ModelServer.get_handle()
-
+    
     #If needed import any specific testing function and class definitions
     if validationModel or testingModel: exec(open("./CODE/SIMULATION.py").read())
 
@@ -178,7 +163,7 @@ for configFileName in configFileNames:
         validationSamplePaths = [sampleData.sampleFolder for sampleData in validationSampleData]
         
         #Perform simulations
-        simulateSLADS(validationSamplePaths, dir_ValidationResults, model, optimalC)
+        simulateSLADS(validationSamplePaths, dir_ValidationResults, optimalC)
 
     #If a model needs to be tested
     if testingModel:
@@ -188,7 +173,12 @@ for configFileName in configFileNames:
         testSamplePaths = natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False)
         
         #Perform simulations
-        simulateSLADS(testSamplePaths, dir_TestingResults, model, optimalC)
+        simulateSLADS(testSamplePaths, dir_TestingResults, optimalC)
+
+    #If Leave-One-Out Cross Validation is to be performed
+    if LOOCV:
+        sectionTitle('PERFORMING LOOCV')
+        sys.exit('Error! - LOOCV is not implemented at this time')
 
     #If a model is to be used in an implementation
     if impModel:
@@ -198,17 +188,16 @@ for configFileName in configFileNames:
         exec(open("./CODE/EXPERIMENTAL.py").read())
 
         #Begin performing an implementation
-        performImplementation(model, optimalC)
+        performImplementation(optimalC)
 
     #Copy the results folder and the config file into it
     resultCopy = shutil.copytree('./RESULTS', destResultsFolder)
     configCopy = shutil.copy(configFileName, destResultsFolder+'/'+os.path.basename(configFileName))
 
-    #Shutdown the ray and model server(s)
+    #Shutdown the ray server
     if parallelization: ray.shutdown()
-    if testingModel or validationModel or impModel: serve.shutdown()
 
-    #Notate the completion of intended operations
+    #AFTER INTENDED PROCEDURES (TRAINING/TESTING) HAVE BEEN PERFORMED
     sectionTitle('PROGRAM COMPLETE')
 
 #Shutdown python kernel
