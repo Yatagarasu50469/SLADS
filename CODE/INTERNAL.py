@@ -31,9 +31,6 @@ if parallelization:
     if numberCPUS>2: numberCPUS = numberCPUS-2
     ray.init(num_cpus=numberCPUS, logging_level=logging.ERROR)
 
-#Allow partial GPU memory allocation
-for gpu in tf.config.list_physical_devices('GPU'): tf.config.experimental.set_memory_growth(gpu, True)
-
 #Check chosen regression model is available
 if not erdModel in ['SLADS-LS', 'SLADS-Net', 'DLADS']: sys.exit('Error - Specified erdModel is not available')
 

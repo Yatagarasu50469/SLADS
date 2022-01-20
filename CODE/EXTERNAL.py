@@ -76,7 +76,7 @@ from sobol import *
 from tqdm.auto import tqdm
 
 matplotlib.use('agg') #Non-interactive plotting mode
-sys.coinit_flags = 0 #
+sys.coinit_flags = 0 #Change method of instantiation for COM objects
 
 #==================================================================
 #TENSORFLOW IMPORT AND SETUP
@@ -84,6 +84,9 @@ sys.coinit_flags = 0 #
 
 #Make tensorflow only report errors (3), warnings (2), information (1), all (0)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+#Allocate memory for CUDA in an asynchronous manner, prevents GPU OOM when training multiple models
+os.environ["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
 
 import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
@@ -96,7 +99,7 @@ from tensorflow.keras.optimizers import *
 from tensorflow.keras.utils import *
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import image_ops
-from tensorflow.python.keras import backend as K
+from tensorflow.keras import backend as K
 from tensorflow.python.util import dispatch
 from tensorflow.python.util.tf_export import keras_export
 from tensorflow.tools.docs import doc_controls

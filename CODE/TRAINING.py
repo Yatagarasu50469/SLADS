@@ -409,15 +409,15 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             for sample in tqdm(validationDatabase, desc = 'Validation Data Setup', leave=True, ascii=True):
                 valInputImages.append(prepareInput(sample))
                 valOutputImages.append(sample.squareRD)
-                
+            
             #Extract lowest and highest density from the first validation sample for visualization during training; assumes 1% spacing
             vizSamples = [validationDatabase[0], validationDatabase[len(np.arange(initialPercToScanTrain,stopPercTrain))]]
             vizSampleData = validationSampleData[0]
-                    
+        
         #Determine the number of channels in the input images
         if len(trainInputImages[0].shape) > 2: numChannels = trainInputImages[0].shape[2]
         else: numChannels = 1
-        
+
         #Create generators/iterators for the training and validation sets
         trainGen = DataGen(trainInputImages, trainOutputImages, numChannels, True)
         valGen = DataGen(valInputImages, valOutputImages, numChannels, False)
@@ -440,7 +440,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
 
             #Setup callback object
             epochEndCallback = EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizSamples, vizSampleData, dir_TrainingModelResults)
-            
+
             #Perform training
             t0 = time.time()
             if not noValFlag: history = model.fit(trainGen, epochs=numEpochs, callbacks=[epochEndCallback], validation_data=valGen, validation_freq=1, verbose=1, shuffle=True)
@@ -460,14 +460,8 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         #Save the final model and weights; do not include optimizer to save space
         model.save(dir_TrainingResults+'model_cValue_'+str(optimalC), include_optimizer=False)
         
-        #Clear GPU memory of trained model(s)
-        for i in range(0, len(tf.config.list_physical_devices('GPU'))): 
-            cuda.select_device(i)
-            cuda.close()
-
         #Write out the training history to a .csv
         pd.DataFrame(history.history).to_csv(dir_TrainingResults+'history.csv')
-        
 
 class DataGen(tf.keras.utils.Sequence):
     

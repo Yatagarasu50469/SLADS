@@ -330,7 +330,6 @@ class Sample:
             #If this is a full measurement step, compute the RDPP
             if not fromRecon:
                 if RDMethod == 'original': self.RDPP = computeDifference(sampleData.squaremzAvgImage, self.squaremzAvgReconImage)
-                elif RDMethod == 'avg': self.RDPP = np.mean(abs(sampleData.squaremzImages-self.squaremzReconImages), axis=0)
                 elif RDMethod == 'sum': self.RDPP = np.sum(abs(sampleData.squaremzImages-self.squaremzReconImages), axis=0)
             
             computeRD(self, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborDistances, cValue, bestCFlag, fromRecon)
@@ -428,7 +427,6 @@ class Result:
             sample.RD = np.zeros(self.sampleData.finalDim)
         else:
             if RDMethod == 'original': sample.RDPP = computeDifference(self.sampleData.squaremzAvgImage, sample.squaremzAvgReconImage)
-            elif RDMethod == 'avg': sample.RDPP = np.mean(abs(self.sampleData.squaremzImages-sample.squaremzReconImages), axis=0)
             elif RDMethod == 'sum': sample.RDPP = np.sum(abs(self.sampleData.squaremzImages-sample.squaremzReconImages), axis=0)
 
             computeRD(sample, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborDistances, self.cValue, self.bestCFlag, False)
@@ -749,9 +747,8 @@ def runSLADS(sampleData, cValue, model, percToScan, percToViz, bestCFlag, oracle
     #Create a new sample object to hold current information
     sample = Sample(sampleData)
     
-    #Indicate that the stopping condition has not yet been met and that there are new measurements
+    #Indicate that the stopping condition has not yet been met
     completedRunFlag = False
-    noNewMeasurements = False
     
     #Create a new result object to hold scanning progression
     result = Result(sampleData, liveOutputFlag, dir_Results, bestCFlag, cValue)
@@ -785,7 +782,7 @@ def runSLADS(sampleData, cValue, model, percToScan, percToViz, bestCFlag, oracle
             
             #Perform measurements, reconstructions and ERD/RD computations
             if len(newIdxs) != 0: sample.performMeasurements(sampleData, newIdxs, model, cValue, bestCFlag, oracleFlag, False)
-            else: completedRunFlag, noNewMeasurements = True, True
+            else: break
             
             #Check stopping criteria
             if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
@@ -793,7 +790,7 @@ def runSLADS(sampleData, cValue, model, percToScan, percToViz, bestCFlag, oracle
             if np.sum(sample.physicalERD) == 0: completedRunFlag = True
 
             #If viz limit, only update when percToViz has been met; otherwise update every iteration
-            if ((percToViz != None) and ((sample.percMeasured-result.percsMeasured[-1]) >= percToViz)) or (percToViz == None) or sampleData.scanMethod == 'linewise' or (completedRunFlag and not noNewMeasurements): result.update(sample)
+            if ((percToViz != None) and ((sample.percMeasured-result.percsMeasured[-1]) >= percToViz)) or (percToViz == None) or sampleData.scanMethod == 'linewise' or completedRunFlag: result.update(sample)
 
             #Update the progress bar
             pbar.n = np.clip(round(sample.percMeasured,2), 0, maxProgress)
@@ -1013,15 +1010,15 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
             
     elif sampleData.scanMethod == 'linewise':
 
+        #Create a list to hold the chosen scanning locations
+        newIdxs = []
+
         #Choose the line with maximum ERD and extract the actual indices
         #if not sampleData.lineRevist: ERD[np.where(np.sum(sample.mask, axis=1)>0)] = 0
         lineToScanIdx = np.nanargmax(np.nansum(ERD, axis=1))
 
         #If points on the line should be chosen one-by-one, temporarily using reconstruction values for updating ERD
         if lineMethod == 'percLine' and linePointSelection == 'single': 
-            
-            #Create a list to hold the chosen scanning locations
-            newIdxs = []
             
             #Until the stopPerc has been reached, substitute reconstruction values for actual measurements
             while True:
@@ -1062,11 +1059,14 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
         if lineMethod == 'segLine': 
             if segLineMethod == 'otsu':
                 indexes = np.sort(np.where(ERD[lineToScanIdx]>skimage.filters.threshold_otsu(ERD))[0])
-                indexes = np.arange(indexes[0],indexes[-1]+1)
-                newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
+                if len(indexes)>0: 
+                    indexes = np.arange(indexes[0],indexes[-1]+1)
+                    newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
             elif segLineMethod == 'minPerc':
                 indexes = np.sort(np.argsort(ERD[lineToScanIdx])[::-1][:sampleData.pointsToScan])
-                newIdxs = np.column_stack([np.ones(indexes[-1]-indexes[0]+1)*lineToScanIdx, np.arange(indexes[0],indexes[-1]+1)]).astype(int)
+                #Filter out any ERD locations with zero values
+                Tracer()
+                if len(indexes)>0: newIdxs = np.column_stack([np.ones(indexes[-1]-indexes[0]+1)*lineToScanIdx, np.arange(indexes[0],indexes[-1]+1)]).astype(int)
         #==========================================
         
         #==========================================
@@ -1149,10 +1149,8 @@ def customResize(x, y):
 def makeCompatible(image):
 
     #Reshape for tensor transition, as needed by number of channels
-    if len(image.shape) > 2: image = image.reshape((1,image.shape[0],image.shape[1],image.shape[2]))
-    else: image = image.reshape((1,image.shape[0],image.shape[1],1))
-
-    return image
+    if len(image.shape) > 2: return image.reshape((1,image.shape[0],image.shape[1],image.shape[2]))
+    else: return image.reshape((1,image.shape[0],image.shape[1],1))
 
 #Interpolate results to a given precision for averaging results
 def percResults(results, perc_testingResults, precision):

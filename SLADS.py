@@ -82,9 +82,6 @@ if len(configFileNames) > 1: [exec(open(configFileName).read()) for configFileNa
 #For each of the configuration files that are present, run SLADS
 for configFileName in configFileNames:
 
-    #Re-import all involved external libraries
-    exec(open("./CODE/EXTERNAL.py").read())
-
     #Load in variable definitions from the configuration file
     exec(open(configFileName).read())
 
