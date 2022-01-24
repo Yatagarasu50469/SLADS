@@ -5,7 +5,7 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    19 January 2021
+#DATE MODIFIED:	    24 January 2021
 #
 #VERSION NUM:	    0.8.9
 #
@@ -56,7 +56,7 @@
 #               0.8.6   Memory reduction, reconstruction vectorization, augmentation, global mz, mz window in ppm
 #               0.8.7   Recon. script, acq. rate, seq. names, live output, offsets, input scaling, Otsu segLine
 #               0.8.8   Interpolation limits, static graph, parallel inferencing, ray deployment, test of FAISS
-#               0.8.9   Simplification
+#               0.8.9   Simplification, disable TIC/monoistopic normalization
 #               ~0.+.+  GAN, Custom adversarial network, Multimodal integration
 #               ~1.0.0  Initial release
 #====================================================================

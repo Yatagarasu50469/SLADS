@@ -21,7 +21,7 @@ validationModel = False
 testingModel = True
 
 #If testingModel, should existing database in RESULTS be loaded instad of creating a new one
-loadTestDataset = True
+loadTestDataset = False
 
 #Is this an implementation run
 impModel = False
@@ -34,16 +34,11 @@ impModel = False
 #TASK METHODS
 ##################################################################
 
-#Override listed sample monoisotopic m/z and use TIC normalization for all samples
-overrideTIC = True
-
 #Which model should be used for ERD generation (SLADS-LS, SLADS-Net, DLADS)
-#Recommend DLADS if GPU(s) available for training and SLADS-LS if not
-#Trained models are not intercompatible between models!
 erdModel = 'DLADS'
 
 #Which scanning method shoud be used: pointwise or linewise
-scanMethod = 'linewise'
+scanMethod = 'pointwise'
 
 #sum or original (original collapses before difference between recon and ground-truth mz)
 RDMethod = 'sum'
@@ -79,7 +74,7 @@ stopPerc = 30
 percToScan = None
 
 #What percentage of points should be acquired between visualization steps; if all steps should be, then set to None
-percToViz = None
+percToViz = 1
 
 #==================================================================
 
@@ -118,6 +113,7 @@ stopPercTrain = 30
 
 #Possible c values for RD approximation
 cValues = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
+#cValues = np.array([8])
 
 #How many masks should be used for each percentage during training
 numMasks = 1
@@ -186,7 +182,7 @@ minimumEpochs = 10
 
 #What percentage of the training data should be used for training
 #Early stopping is only functional with at least 1 validation sample
-#If 1.0, will terminate at minimumEpochs+maxPatience; not recomended!
+#If 1.0, will terminate at minimumEpochs+maxPatience; not functional for DLADS!
 #If 1.0 set maxPatience to zero for model to save when intended
 trainingSplit = 0.8
 
@@ -227,9 +223,6 @@ consistentSeed = True
 #Should animations be generated during testing/implementation
 animationGen = True
 
-#Running in a console/True, jupyter-notebook/False
-consoleRunning = True
-
 #Define precision of the percentage averaging (as percentage is inconsistent between acquistion steps)
 precision = 0.001
 
@@ -254,6 +247,12 @@ LOOCV = False
 #PARAMETERS: L5
 #DEBUG/DEPRECATED - WILL MOST LIKELY BE REMOVED IN FUTURE
 ##################################################################
+
+#Running in a console/True, jupyter-notebook/False
+consoleRunning = True
+
+#Override listed sample monoisotopic m/z and use TIC normalization for all samples
+overrideTIC = True
 
 #Should only a single mz be used as the network input (allows evaluation over multiple, uses first mz in mz.csv local/global file)
 #WARNING: ONLY should enable when using SLADS variants; Purpose is proof that considering multiple mz channels is better than a single

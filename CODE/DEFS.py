@@ -225,8 +225,9 @@ class SampleData:
                 #Read in specified mz ranges, normalize as specified, and interpolate to new times; convert np.float to float for method compatability
                 for mzRangeNum in range(0, len(self.mzRanges)): 
                     mzData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(self.mzRanges[mzRangeNum][0]), float(self.mzRanges[mzRangeNum][1])))[:,1]
-                    if self.mzMonoValue == -1: mzData = np.nan_to_num(mzData/TICData, nan=0, posinf=0, neginf=0)
-                    else: mzData = np.nan_to_num(mzData/mzMonoData, nan=0, posinf=0, neginf=0)
+                    #if self.mzMonoValue == -1: mzData = np.nan_to_num(mzData/TICData, nan=0, posinf=0, neginf=0)
+                    #else: mzData = np.nan_to_num(mzData/mzMonoData, nan=0, posinf=0, neginf=0)
+                    mzData = np.nan_to_num(mzData, nan=0, posinf=0, neginf=0)
                     self.mzImages[mzRangeNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(mzData, nan=0, posinf=0, neginf=0), left=0, right=0)
                 
                 #Interpolate TIC and internal standard (if applicable) to final new times for visualization
@@ -1058,7 +1059,7 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
         #Choose segment to scan on line
         if lineMethod == 'segLine': 
             if segLineMethod == 'otsu':
-                indexes = np.sort(np.where(ERD[lineToScanIdx]>skimage.filters.threshold_otsu(ERD))[0])
+                indexes = np.sort(np.where(ERD[lineToScanIdx]>skimage.filters.threshold_otsu(ERD, nbins=100))[0])
                 if len(indexes)>0: 
                     indexes = np.arange(indexes[0],indexes[-1]+1)
                     newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
@@ -1117,26 +1118,43 @@ def computeRecon(inputImage, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborI
 
     return reconImage
 
-def doubleConv(numFilters, inputs):
+
+def downConv(numFilters, inputs):
     return LeakyReLU(alpha=0.2)(Conv2D(numFilters, 3, padding='same')(LeakyReLU(alpha=0.2)(Conv2D(numFilters, 1, padding='same')(inputs))))
 
+def upConv(numFilters, inputs):
+    return Conv2D(numFilters, 3, activation='relu', padding='same')(Conv2D(numFilters, 1, activation='relu', padding='same')(inputs))
+
 def unet(numFilters, numChannels, batchSize):
+
     inputs = Input(shape=(None,None,numChannels), batch_size=batchSize)
-    conv0 = doubleConv(numFilters, inputs)
-    conv1 = doubleConv(numFilters*2, MaxPool2D(pool_size=(2,2))(conv0))
-    conv2 = doubleConv(numFilters*4, MaxPool2D(pool_size=(2,2))(conv1))
-    conv3 = doubleConv(numFilters*8, MaxPool2D(pool_size=(2,2))(conv2))
-    conv4 = doubleConv(numFilters*16, MaxPool2D(pool_size=(2,2))(conv3))
-    up1 = LeakyReLU(alpha=0.2)(Conv2D(numFilters*16, 2, padding='same')(customResize(conv4, conv3)))
-    conv5 = doubleConv(numFilters*8, concatenate([conv3, up1]))
-    up2 = LeakyReLU(alpha=0.2)(Conv2D(numFilters*8, 2, padding='same')(customResize(conv5, conv2)))
-    conv6 = doubleConv(numFilters*4, concatenate([conv2, up2]))
-    up3 = LeakyReLU(alpha=0.2)(Conv2D(numFilters*4, 2, padding='same')(customResize(conv6, conv1)))
-    conv7 = doubleConv(numFilters*2, concatenate([conv1, up3]))
-    up4 = LeakyReLU(alpha=0.2)(Conv2D(numFilters*2, 2, padding='same')(customResize(conv7, conv0)))
-    conv8 = doubleConv(numFilters, concatenate([conv0, up4]))
+
+    conv0 = downConv(numFilters, inputs)
+
+    conv1 = downConv(numFilters*2, MaxPool2D(pool_size=(2,2))(conv0))
+
+    conv2 = downConv(numFilters*4, MaxPool2D(pool_size=(2,2))(conv1))
+
+    conv3 = downConv(numFilters*8, MaxPool2D(pool_size=(2,2))(conv2))
+
+    conv4 = downConv(numFilters*16, MaxPool2D(pool_size=(2,2))(conv3))
+
+    up1 = Conv2D(numFilters*16, 2, activation='relu', padding='same')(customResize(conv4, conv3))
+    conv5 = upConv(numFilters*8, concatenate([conv3, up1]))
+
+    up2 = Conv2D(numFilters*8, 2, activation='relu', padding='same')(customResize(conv5, conv2))
+    conv6 = upConv(numFilters*4, concatenate([conv2, up2]))
+
+    up3 = Conv2D(numFilters*4, 2, activation='relu', padding='same')(customResize(conv6, conv1))
+    conv7 = upConv(numFilters*2, concatenate([conv1, up3]))
+
+    up4 = Conv2D(numFilters*2, 2, activation='relu', padding='same')(customResize(conv7, conv0))
+    conv8 = upConv(numFilters, concatenate([conv0, up4]))
+
     outputs = Conv2D(1, 1, activation='relu', padding='same')(conv8)
+
     return tf.keras.Model(inputs=inputs, outputs=outputs)
+
 
 #NEAREST_NEIGHBOR, BILINEAR
 def customResize(x, y):
