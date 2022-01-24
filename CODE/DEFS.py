@@ -1065,8 +1065,6 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
                     newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
             elif segLineMethod == 'minPerc':
                 indexes = np.sort(np.argsort(ERD[lineToScanIdx])[::-1][:sampleData.pointsToScan])
-                #Filter out any ERD locations with zero values
-                Tracer()
                 if len(indexes)>0: newIdxs = np.column_stack([np.ones(indexes[-1]-indexes[0]+1)*lineToScanIdx, np.arange(indexes[0],indexes[-1]+1)]).astype(int)
         #==========================================
         
