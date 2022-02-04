@@ -62,7 +62,8 @@
                     0.8.6   Memory reduction, mz reconstruction vectorization, augmentation, global mz, mz window in ppm
                     0.8.7   Recon. script, Options for acq. rate, sequential names, live output, row offsets, and input scaling
                     0.8.8   Interpolation limits, static graph, parallel inferencing, ray deployment, test of FAISS
-                    0.8.9   Simplification, disable TIC/monoistopic normalization
+                    0.8.9   Simplification
+					0.9.0   Multichannel E/RD
                     ~0.+.+  Custom adversarial network, Multimodal integration
                     ~1.0.0  Initial release
 
@@ -197,7 +198,7 @@ This implementation of SLADS is generally only functional within Windows 10, giv
 		pandas		1.3.5
 		Pillow		9.0.0
 		psutil		5.9.0
-		ray		1.6.0
+		ray		1.9.2
 		scikit-image	0.19.1
 		scikit-learn	0.23.2                 
 		scipy		1.7.3
@@ -269,8 +270,6 @@ One file must be included in each of the sample folders (specifically within the
 		Output pixel positions and spatial resolution are based on this parameter in combination with the acquisition rate
 	- Acquisition Rate (spectra/s)
 		Output pixel positions and spatial resolution are based on this parameter in combination with the scan rate
-	- Monoisotopic m/z (-1 indicates None, which will use TIC instead)
-		Used for normalization of the m/z images
 	- m/z tolerance (ppm)
 		Only specify/include if m/z specification is set to 'value', or if using 'standard' normalization
 	- m/z precision

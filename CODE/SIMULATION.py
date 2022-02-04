@@ -2,8 +2,6 @@
 #TESTING SLADS SPECIFIC
 #==================================================================
 
-#import tempfile
-       
 #Given a set of sample paths, perform simulations using a trained SLADS Model
 def simulateSLADS(sortedSampleFolders, dir_Results, model, optimalC):
 
@@ -24,14 +22,14 @@ def simulateSLADS(sortedSampleFolders, dir_Results, model, optimalC):
             sampleData.generateInitialSets(scanMethod)
             sampleData.readScanData()
     else:
-        sampleDataset = [SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, RDMethod, True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)]
+        sampleDataset = [SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)]
         pickle.dump(sampleDataset, open(dir_TrainingResults + 'testingDatabase.p', 'wb'))
 
     #Run algorithm for each of the samples, timing and storing metric progression for each
     if parallelization: 
-        futures = [runSLADS_parhelper.remote(sampleDataset[sampleNum], optimalC, model, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False) for sampleNum in range(0,len(sampleDataset))]
+        futures = [runSampling_parhelper.remote(sampleDataset[sampleNum], optimalC, model, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False) for sampleNum in range(0,len(sampleDataset))]
         results = ray.get(futures)
-    else: results = [runSLADS(sampleDataset[sampleNum], optimalC, model, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False) for sampleNum in tqdm(range(0,len(sampleDataset)), desc='Samples', position=0, leave=True, ascii=True)]
+    else: results = [runSampling(sampleDataset[sampleNum], optimalC, model, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False) for sampleNum in tqdm(range(0,len(sampleDataset)), desc='Samples', position=0, leave=True, ascii=True)]
     
     #Perform completion/visualization routines
     mzAvgPSNR_Results, avgPSNR_Results, ERDPSNR_Results = [], [], []

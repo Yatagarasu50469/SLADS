@@ -5,18 +5,16 @@
 #AESTHETIC SETUP
 #==================================================================
 #Determine console size if applicable
-if consoleRunning and systemOS != 'Windows':
+if systemOS != 'Windows':
     consoleRows, consoleColumns = os.popen('stty size', 'r').read().split()
-elif consoleRunning and systemOS == 'Windows':
+elif systemOS == 'Windows':
     h = windll.kernel32.GetStdHandle(-12)
     csbi = create_string_buffer(22)
     res = windll.kernel32.GetConsoleScreenBufferInfo(h, csbi)
     (bufx, bufy, curx, cury, wattr, left, top, right, bottom, maxx, maxy) = struct.unpack("hhhhHhhhhhh", csbi.raw)
     consoleRows = bottom-top
     consoleColumns = right-left
-else:
-    consoleRows, consoleColumns = 40, 40
-
+    
 #INTERNAL OBJECT SETUP
 #==================================================================
 
@@ -31,8 +29,8 @@ if parallelization:
     if numberCPUS>2: numberCPUS = numberCPUS-2
     ray.init(num_cpus=numberCPUS, logging_level=logging.ERROR)
 
-#Check chosen regression model is available
-if not erdModel in ['SLADS-LS', 'SLADS-Net', 'DLADS']: sys.exit('Error - Specified erdModel is not available')
+#Allow partial GPU memory allocation
+for gpu in tf.config.list_physical_devices('GPU'): tf.config.experimental.set_memory_growth(gpu, True)
 
 #Define deployment for trained models
 @serve.deployment(route_prefix="/ModelServer", ray_actor_options={"num_gpus": numGPUs})

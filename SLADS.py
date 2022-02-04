@@ -5,9 +5,9 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    24 January 2021
+#DATE MODIFIED:	    3 February 2021
 #
-#VERSION NUM:	    0.8.9
+#VERSION NUM:	    0.9.0
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -56,7 +56,8 @@
 #               0.8.6   Memory reduction, reconstruction vectorization, augmentation, global mz, mz window in ppm
 #               0.8.7   Recon. script, acq. rate, seq. names, live output, offsets, input scaling, Otsu segLine
 #               0.8.8   Interpolation limits, static graph, parallel inferencing, ray deployment, test of FAISS
-#               0.8.9   Simplification, disable TIC/monoistopic normalization
+#               0.8.9   Simplification
+#               0.9.0   Multichannel E/RD
 #               ~0.+.+  GAN, Custom adversarial network, Multimodal integration
 #               ~1.0.0  Initial release
 #====================================================================
@@ -65,47 +66,33 @@
 #MAIN PROGRAM
 #==================================================================
 #Current version information
-versionNum='0.8.9'
+versionNum='0.9.0'
 
 #Import all involved external libraries
-exec(open("./CODE/EXTERNAL.py").read())
+exec(open("./CODE/EXTERNAL.py", encoding='utf-8').read())
 
 #Import general method and class definitions
-exec(open("./CODE/DEFS.py").read())
+exec(open("./CODE/DEFS.py", encoding='utf-8').read())
 
 #Obtain list of configuration files
 configFileNames = natsort.natsorted(glob.glob('./CONFIG_*.py'))
 
 #If there is more than one configuration file, validate their syntax
-if len(configFileNames) > 1: [exec(open(configFileName).read()) for configFileName in configFileNames]
+if len(configFileNames) > 1: [exec(open(configFileName, encoding='utf-8').read()) for configFileName in configFileNames]
 
 #For each of the configuration files that are present, run SLADS
 for configFileName in configFileNames:
 
     #Load in variable definitions from the configuration file
-    exec(open(configFileName).read())
+    exec(open(configFileName, encoding='utf-8').read())
 
     #Setup directories and internal variables
-    exec(open("./CODE/INTERNAL.py").read())
+    exec(open("./CODE/INTERNAL.py", encoding='utf-8').read())
 
-    sectionTitle("\
-      ▄▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄\n \
-    ▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌\n \
-    ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀\n \
-    ▐░▌          ▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌\n \
-    ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌          ▐░█▄▄▄▄▄▄▄█░▌▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄▄▄\n \
-    ▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░░▌\n \
-     ▀▀▀▀▀▀▀▀▀█░▌▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌ ▀▀▀▀▀▀▀▀▀█░▌\n \
-              ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌          ▐░▌\n \
-     ▄▄▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄█░▌ ▄▄▄▄▄▄▄▄▄█░▌\n \
-    ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌\n \
-     ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀\n \
-    Author(s):\t\tDavid Helminiak\t\tEECE Marquette University\n \
-    Advisor(s):\tDong Hye Ye\t\tEECE Marquette University\n \
-    Licence:\t\tGNU General Public License v3.0\n \
-    Version:\t\t"+versionNum+"\n \
-    Config:\t\t"+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0])
+    #Print out the program header
+    programTitle(versionNum, configFileName)
 
+    #Indicate the destination for the results of the configuration
     destResultsFolder = './RESULTS_'+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0]
     
     #If the destination exists, output an error, or delete the folder
@@ -119,7 +106,7 @@ for configFileName in configFileNames:
     if trainingModel:
         
         #Import any specfic training function and class definitions
-        exec(open("./CODE/TRAINING.py").read())
+        exec(open("./CODE/TRAINING.py", encoding='utf-8').read())
         
         #If the dataset has not been generated then generate and find the best c for one, otherwise load the best c previously determined
         if not loadTrainValDatasets:
@@ -163,7 +150,7 @@ for configFileName in configFileNames:
         model = ModelServer.get_handle()
 
     #If needed import any specific testing function and class definitions
-    if validationModel or testingModel: exec(open("./CODE/SIMULATION.py").read())
+    if validationModel or testingModel: exec(open("./CODE/SIMULATION.py", encoding='utf-8').read())
 
     #If a model needs to be tested with validation data
     if validationModel:
@@ -195,15 +182,15 @@ for configFileName in configFileNames:
         sectionTitle('IMPLEMENTING MODEL')
 
         #Import any specific implementation function and class definitions
-        exec(open("./CODE/EXPERIMENTAL.py").read())
+        exec(open("./CODE/EXPERIMENTAL.py", encoding='utf-8').read())
 
         #Begin performing an implementation
         performImplementation(model, optimalC)
-
+    
     #Copy the results folder and the config file into it
     resultCopy = shutil.copytree('./RESULTS', destResultsFolder)
     configCopy = shutil.copy(configFileName, destResultsFolder+'/'+os.path.basename(configFileName))
-
+    
     #Shutdown the ray and model server(s)
     if parallelization: ray.shutdown()
     if testingModel or validationModel or impModel: serve.shutdown()
