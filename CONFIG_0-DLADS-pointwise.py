@@ -9,7 +9,7 @@
 ##################################################################
 
 #Is training of a model to be performed
-trainingModel = True
+trainingModel = False
 
 #If trainingModel, should existing database/cValue in RESULTS be loaded instad of creating a new one
 loadTrainValDatasets = False
@@ -40,14 +40,8 @@ erdModel = 'DLADS'
 #Which scanning method shoud be used: pointwise or linewise
 scanMethod = 'pointwise'
 
-#Override specified m/z and use TIC as the scanning target
-#overrideTIC = True
-
-#Should only a single mz be used as the network input (allows evaluation over multiple, uses first mz in mz.csv local/global file)
-mzSingle = False
-
-#Should static window be used in RD generation [15,15] (For comparison with originally published SLADS methods)
-staticWindow = False
+#sum or original (original collapses before difference between recon and ground-truth mz)
+RDMethod = 'sum'
 
 #==================================================================
 #PARAMETERS: L1-0
@@ -104,9 +98,6 @@ lineRevist = False
 #Should all lines be scanned at least once
 lineVisitAll = True
 
-#Specify what line positions (percent height) should be used for initial acquistion
-startLinePositions = [0.25, 0.50, 0.75]
-
 #==================================================================
 
 #==================================================================
@@ -121,8 +112,8 @@ initialPercToScanTrain = 1
 stopPercTrain = 30
 
 #Possible c values for RD approximation
-#cValues = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
-cValues = np.array([8])
+cValues = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
+#cValues = np.array([8])
 
 #How many masks should be used for each percentage during training
 numMasks = 1
@@ -243,8 +234,11 @@ sysLogNorm = False
 
 ##################################################################
 #PARAMETERS: L4
-#DO NOT CHANGE - OPTIONS NOT CURRENTLY FUNCTIONAL
+#DO NOT CHANGE - ALTERNATE OPTIONS NOT CURRENTLY FUNCTIONAL
 ##################################################################
+
+#Is LOOCV to be performed
+LOOCV = False
 
 ##################################################################
 
@@ -253,5 +247,19 @@ sysLogNorm = False
 #PARAMETERS: L5
 #DEBUG/DEPRECATED - WILL MOST LIKELY BE REMOVED IN FUTURE
 ##################################################################
+
+#Running in a console/True, jupyter-notebook/False
+consoleRunning = True
+
+#Override listed sample monoisotopic m/z and use TIC normalization for all samples
+overrideTIC = True
+
+#Should only a single mz be used as the network input (allows evaluation over multiple, uses first mz in mz.csv local/global file)
+#WARNING: ONLY should enable when using SLADS variants; Purpose is proof that considering multiple mz channels is better than a single
+#NOTE: DELETE ASAP!!! Very likely to break expected usage - After results published
+mzSingle = False
+
+#Should total distortion be used for c value determination and static window in RD generation [15,15] be used (For comparison with originally published SLADS methods)
+legacyFlag = False
 
 ##################################################################

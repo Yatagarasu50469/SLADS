@@ -80,7 +80,8 @@ class EpochEnd(keras.callbacks.Callback):
                 for vizSampleNum in range(0, len(self.vizSamples)):
                 
                     vizSample = self.vizSamples[vizSampleNum]
-                    ERD = np.mean([self.model(makeCompatible(prepareInput(vizSample, mzNum)), training=False)[0,:,:,0].numpy() for mzNum in range(0, len(vizSample.mzReconImages))], axis=0)
+                    
+                    ERD = self.model(makeCompatible(prepareInput(vizSample)), training=False)[0,:,:,0].numpy()
                     RD = vizSample.squareRD
 
                     maxRangeValue = np.max([RD, ERD])
@@ -121,7 +122,7 @@ def importInitialData(sortedSampleFolders):
     #Make sure sample mask initialization is consistent, particularly important for c value optimization
     #DO NOT RUN this section in parallel, makes optimizeC inconsistent, forcing seed in SampleData harms training generalization
     if consistentSeed: np.random.seed(0)
-    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPerc, 'pointwise', True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)], dtype='object')
+    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPerc, 'pointwise', RDMethod, True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)], dtype='object')
     
     #Save relevant images
     trainDataFlag, valDataFlag = True, False
@@ -152,6 +153,18 @@ def importInitialData(sortedSampleFolders):
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         plt.savefig(saveLocation, bbox_inches=extent)
         plt.close()
+        
+        #Save a visual of the normalization image used, if it was not the TIC
+        if sampleData.mzMonoValue!=-1:
+            if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'mzMono_' + sampleData.name + '.png'
+            if valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'mzMono_' + sampleData.name + '.png'
+            fig=plt.figure()
+            ax=fig.add_subplot(1,1,1)
+            plt.axis('off')
+            plt.imshow(sampleData.mzMono, cmap='hot', aspect='auto')
+            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+            plt.savefig(saveLocation, bbox_inches=extent)
+            plt.close()
 
     #Save the samples database
     pickle.dump(trainingValidationSampleData, open(dir_TrainingResults + 'trainingValidationSampleData.p', 'wb'))
@@ -169,13 +182,13 @@ def optimizeC(trainingSampleData):
             futures = []
             for cNum in range(0, len(cValues)):
                 for sampleNum in range(0, len(trainingSampleData)):
-                    futures.append(runSampling_parhelper.remote(trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False, None, False))
+                    futures.append(runSLADS_parhelper.remote(trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False, None, False))
             results = np.split(np.asarray(ray.get(futures), dtype='object'), len(cValues))
             print('Completed in: '+str(time.time()-t0))
         else:
             results = []
             for cNum in tqdm(range(0, len(cValues)), desc='c Values', leave=True, ascii=True):
-                results.append([runSampling(trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False, None, False) for sampleNum in tqdm(range(0, len(trainingSampleData)), desc='Samples', leave=False, ascii=True)])
+                results.append([runSLADS(trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False, None, False) for sampleNum in tqdm(range(0, len(trainingSampleData)), desc='Samples', leave=False, ascii=True)])
         areaUnderCurveList = []
         
         for cNum in range(0, len(cValues)):
@@ -255,7 +268,7 @@ def visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag
     ax.set_title('Recon - PSNR: ' + str(round(compare_psnr(result.sampleData.mzAvgImage, sample.mzAvgReconImage, data_range=np.max(result.sampleData.mzAvgImage)), 5)), fontsize=15)
 
     ax = plt.subplot2grid(shape=(1,5), loc=(0,4))
-    ax.imshow(sample.RD, aspect='auto')
+    ax.imshow((sample.RD-np.min(sample.RD))/(np.max(sample.RD)-np.min(sample.RD)), aspect='auto')
     ax.set_title('RD', fontsize=15)
     plt.savefig(saveLocation)
     plt.close()
@@ -273,7 +286,7 @@ def visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag
     fig=plt.figure()
     ax=fig.add_subplot(1,1,1)
     plt.axis('off')
-    plt.imshow(sample.RD, aspect='auto')
+    plt.imshow((sample.RD-np.min(sample.RD))/(np.max(sample.RD)-np.min(sample.RD)), aspect='auto')
     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     if trainDataFlag: plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent)
     if valDataFlag: plt.savefig(dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent)
@@ -308,10 +321,7 @@ def generateDatabases(trainingValidationSampleData, optimalC):
     if consistentSeed: np.random.seed(0)
 
     #For the number of mask iterations specified, create new masks and scan them with the specified method
-    if parallelization: 
-        futures = []
-        print('Initializing Parallel Generation')
-        t0 = time.time()
+    if parallelization: futures = []
     else: results = []
     maskNumList = []
     for index in tqdm(range(0, len(trainingValidationSampleData)), desc = 'Samples', leave=True, ascii=True, disable=parallelization):
@@ -326,11 +336,13 @@ def generateDatabases(trainingValidationSampleData, optimalC):
             trainingValidationSampleData[index].generateInitialSets('random')
             
             #If parallel, then add job to list, otherwise just run and collect the result
-            if parallelization: futures.append(runSampling_parhelper.remote(copy.deepcopy(trainingValidationSampleData[index]), optimalC, False, 1, None, False, True, lineVisitAll, False, None, False))
-            else: results.append(runSampling(copy.deepcopy(trainingValidationSampleData[index]), optimalC, False, 1, None, False, True, lineVisitAll, False, None, False))
+            if parallelization: futures.append(runSLADS_parhelper.remote(copy.deepcopy(trainingValidationSampleData[index]), optimalC, False, 1, None, False, True, lineVisitAll, False, None, False))
+            else: results.append(runSLADS(copy.deepcopy(trainingValidationSampleData[index]), optimalC, False, 1, None, False, True, lineVisitAll, False, None, False))
     
     #If parallel, start queue and wait for results
     if parallelization: 
+        print('Initializing Parallel Generation')
+        t0 = time.time()
         results = ray.get(futures)
         print('Completed in: '+str(time.time()-t0))
     
@@ -371,16 +383,8 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
     
     if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net':
         
-        #Extract polyFeatures and squareRDValues for each input channel in the sample
-        polyFeatureStack, squareRDValueStack = [], []
-        for sample in trainingDatabase:
-            for channelNum in len(sample.polyFeatures):
-                polyFeatureStack.append(sample.polyFeatures[channelNum])
-                squareRDValueStack.append(sample.squareRDValues[channelNum])
-        
-        #Collapse the stacks for regression
-        bigPolyFeatures = np.row_stack(polyFeatureStack)
-        bigRD = np.concatenate(squareRDValueStack)
+        bigPolyFeatures = np.row_stack([sample.polyFeatures for sample in trainingDatabase])
+        bigRD = np.concatenate([sample.squareRDValues for sample in trainingDatabase])
         
         #Create and save regression model based on user selection
         if erdModel == 'SLADS-LS': model = linear_model.LinearRegression()
@@ -393,9 +397,8 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         #Create lists of input/output images
         trainInputImages, trainOutputImages = [], []
         for sample in tqdm(trainingDatabase, desc = 'Training Data Setup', leave=True, ascii=True):
-            for mzNum in range(0, len(sample.squareRDs)):
-                trainInputImages.append(prepareInput(sample, mzNum))
-                trainOutputImages.append(sample.squareRDs[mzNum])
+            trainInputImages.append(prepareInput(sample))
+            trainOutputImages.append(sample.squareRD)
 
         #If there is a validation set then create respective lists
         if len(validationDatabase)<=0: 
@@ -404,12 +407,11 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             noValFlag = False
             valInputImages, valOutputImages = [], []
             for sample in tqdm(validationDatabase, desc = 'Validation Data Setup', leave=True, ascii=True):
-                for mzNum in range(0, len(sample.squareRDs)):
-                    valInputImages.append(prepareInput(sample, mzNum))
-                    valOutputImages.append(sample.squareRDs[mzNum])
-                
+                valInputImages.append(prepareInput(sample))
+                valOutputImages.append(sample.squareRD)
+            
             #Extract lowest and highest density from the first validation sample for visualization during training; assumes 1% spacing
-            vizSamples = [validationDatabase[0], validationDatabase[len(np.arange(initialPercToScanTrain, stopPercTrain))]]
+            vizSamples = [validationDatabase[0], validationDatabase[len(np.arange(initialPercToScanTrain,stopPercTrain))]]
             vizSampleData = validationSampleData[0]
         
         #Determine the number of channels in the input images
@@ -431,7 +433,6 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             if optimizer == 'Nadam': trainOptimizer = tf.keras.optimizers.Nadam(learning_rate=learningRate)
             elif optimizer == 'Adam': trainOptimizer = tf.keras.optimizers.Adam(learning_rate=learningRate)
             elif optimizer == 'RMSProp': trainOptimizer = tf.keras.optimizers.RMSprop(learning_rate=learningRate)
-            elif optimizer == 'SGD': trainOptimizer = tf.keras.optimizers.SGD(learning_rate=learningRate)
             
             #Select loss function
             if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss='mean_absolute_error')
@@ -488,7 +489,7 @@ class DataGen(tf.keras.utils.Sequence):
             for index in range(0, self.length):
                 comImage = tf.squeeze(self.data_augmentation(self.comImages[index]), axis=0).numpy()
                 self.inputs.append(makeCompatible(comImage[:,:,:self.numChannels]))
-                self.outputs.append(makeCompatible(comImage[:,:,self.numChannels:]))
+                self.outputs.append(makeCompatible(np.squeeze(comImage[:,:,self.numChannels:], axis=2)))
 
     def __len__(self):
         return math.ceil(self.length/self.batchSize)
