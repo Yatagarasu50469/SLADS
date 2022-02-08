@@ -313,11 +313,9 @@ class Sample:
             squaremzAvgImage = resize(self.mzAvgImage, tuple(sampleData.squareDim), order=0)
             self.squaremzAvgReconImage = computeRecon(squaremzAvgImage, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborWeights)
             self.mzAvgReconImage = resize(self.squaremzAvgReconImage, tuple(sampleData.finalDim), order=0)
-            
-        #If needed, or might be needed, compute information for SLADS models; not needed in DLADS
-        if (oracleFlag or bestCFlag or erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net') and len(squareUnMeasuredIdxs) > 0: 
-            self.polyFeatures = computePolyFeatures(sampleData, self.squaremzAvgReconImage, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborWeights, neighborDistances)
-            self.squareRDValues = self.squareRD[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1]]
+
+            #If needed, or might be needed, compute information for SLADS models; not needed in DLADS
+        if (erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net') and len(squareUnMeasuredIdxs) > 0: self.polyFeatures = computePolyFeatures(sampleData, self.squaremzAvgReconImage, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborWeights, neighborDistances)
 
         #Compute RD/ERD
         if len(squareUnMeasuredIdxs) == 0:
@@ -327,13 +325,15 @@ class Sample:
                 self.ERD = self.squareRD
             else: self.ERD = np.zeros(sampleData.squareDim)
         elif oracleFlag or bestCFlag:
-        
+
             #If this is a full measurement step, compute the RDPP
             if not fromRecon:
                 if RDMethod == 'original': self.RDPP = computeDifference(sampleData.squaremzAvgImage, self.squaremzAvgReconImage)
                 elif RDMethod == 'sum': self.RDPP = np.sum(abs(sampleData.squaremzImages-self.squaremzReconImages), axis=0)
             
+            #Compute the RD and use it in place of an ERD
             computeRD(self, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborDistances, cValue, bestCFlag, fromRecon)
+            self.squareRDValues = self.squareRD[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1]]
             self.RD = resize(self.squareRD, tuple(sampleData.finalDim), order=0)
             self.ERD = self.RD
         else: self.ERD = computeERD(self, sampleData, model, squareUnMeasuredIdxs, squareMeasuredIdxs)
@@ -371,7 +371,9 @@ class Result:
             self.dir_mzProgression = self.dir_sampleResults + 'mz' + os.path.sep
             os.makedirs(self.dir_mzProgression)
             self.dir_mzProgressions = [self.dir_mzProgression + str(self.sampleData.mzRanges[mzNum][0]) + '-' + str(self.sampleData.mzRanges[mzNum][1]) + os.path.sep for mzNum in range(0, len(self.sampleData.mzRanges))]
-            for dir_mzProgressionSub in self.dir_mzProgressions: os.makedirs(dir_mzProgressionSub)
+            for dir_mzProgressionSub in self.dir_mzProgressions: 
+                try: os.makedirs(dir_mzProgressionSub)
+                except: print('Folder already exists')
             self.dir_avgProgression = self.dir_sampleResults + 'Average' + os.path.sep
             os.makedirs(self.dir_avgProgression)
             self.dir_videos= self.dir_sampleResults + 'Videos' + os.path.sep
@@ -594,7 +596,7 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions,
         f.tight_layout()
         f.subplots_adjust(top = 0.75)
         saveLocation = dir_mzProgressions[mzNum] + 'progression_mz_' + massRange + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) +'.png'
-        plt.savefig(saveLocation, bbox_inches='tight')
+        plt.savefig(saveLocation)
         plt.close()
         
         #Do borderless saves for each mz image here; mask will be the same as produced in the average output
@@ -671,7 +673,7 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions,
     f.tight_layout()
     f.subplots_adjust(top = 0.85)
     saveLocation = dir_avgProgression + 'progression' + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '_avg.png'
-    plt.savefig(saveLocation, bbox_inches='tight')
+    plt.savefig(saveLocation)
     plt.close()
 
     #Borderless saves

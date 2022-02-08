@@ -321,7 +321,10 @@ def generateDatabases(trainingValidationSampleData, optimalC):
     if consistentSeed: np.random.seed(0)
 
     #For the number of mask iterations specified, create new masks and scan them with the specified method
-    if parallelization: futures = []
+    if parallelization: 
+        futures = []
+        print('Initializing Parallel Generation')
+        t0 = time.time()
     else: results = []
     maskNumList = []
     for index in tqdm(range(0, len(trainingValidationSampleData)), desc = 'Samples', leave=True, ascii=True, disable=parallelization):
@@ -341,8 +344,6 @@ def generateDatabases(trainingValidationSampleData, optimalC):
     
     #If parallel, start queue and wait for results
     if parallelization: 
-        print('Initializing Parallel Generation')
-        t0 = time.time()
         results = ray.get(futures)
         print('Completed in: '+str(time.time()-t0))
     
@@ -433,6 +434,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             if optimizer == 'Nadam': trainOptimizer = tf.keras.optimizers.Nadam(learning_rate=learningRate)
             elif optimizer == 'Adam': trainOptimizer = tf.keras.optimizers.Adam(learning_rate=learningRate)
             elif optimizer == 'RMSProp': trainOptimizer = tf.keras.optimizers.RMSprop(learning_rate=learningRate)
+            elif optimizer == 'SGD': trainOptimizer = tf.keras.optimizers.SGD(learning_rate=learningRate)
             
             #Select loss function
             if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss='mean_absolute_error')
