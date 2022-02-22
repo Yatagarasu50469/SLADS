@@ -183,7 +183,7 @@ This implementation of SLADS is generally only functional within Windows 10, giv
 		Win. 10:	Updated as of Jan 1 2021
 
 	System
-		Python		3.6.9
+		Python		3.8.3
 		pip		21.2.4
 
 	Python Packages
@@ -209,7 +209,7 @@ This implementation of SLADS is generally only functional within Windows 10, giv
 		sklearn		0.0
 		sobol		0.9
 		sobol-seq	0.2.0
-		tensorflow	2.7.0
+		tensorflow	2.8.0
 		tqdm		4.62.3
 
 ### **Installation on Windows 10**
