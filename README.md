@@ -15,7 +15,7 @@
 
 
     NAME: 		SLADS
-    VERSION NUM:	0.8.9
+    VERSION NUM:	0.9.0
     LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
@@ -77,6 +77,7 @@
     	|------->README
     	|------->CONFIG_#-description.py
     	|------->SLADS.py
+    	|------->runConfig.py
     	|------->mz.csv
     	|------->RECON
 		|	|------->INPUT
