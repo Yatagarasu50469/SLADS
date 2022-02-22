@@ -62,7 +62,8 @@
                     0.8.6   Memory reduction, mz reconstruction vectorization, augmentation, global mz, mz window in ppm
                     0.8.7   Recon. script, Options for acq. rate, sequential names, live output, row offsets, and input scaling
                     0.8.8   Interpolation limits, static graph, parallel inferencing, ray deployment, test of FAISS
-                    0.8.9   Simplification, disable TIC/monoistopic normalization
+                    0.8.9   Simplification
+                    0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
                     ~0.+.+  Custom adversarial network, Multimodal integration
                     ~1.0.0  Initial release
 
@@ -167,6 +168,8 @@
     	|	|	|	|------->...
     	|	|	|------->Training Data Images
     	|	|	|	|------->...
+		|	|	|	|------->cValueOptimization.csv
+		|	|	|	|------->trainingValuation_RDTimes.csv
     	|	|	|------->optimalC.npy
     	|	|	|------->trainingDatabase.npy
     	|	|	|------->trainingSamples.npy
@@ -184,6 +187,7 @@ This implementation of SLADS is generally only functional within Windows 10, giv
 		pip		21.2.4
 
 	Python Packages
+		aiorwlock	1.3.0
 		DateTime	4.3
 		glob3		0.0.1
 		ipython		8.0.0
@@ -197,7 +201,7 @@ This implementation of SLADS is generally only functional within Windows 10, giv
 		pandas		1.3.5
 		Pillow		9.0.0
 		psutil		5.9.0
-		ray		1.6.0
+		ray		1.9.2
 		scikit-image	0.19.1
 		scikit-learn	0.23.2                 
 		scipy		1.7.3
@@ -227,13 +231,10 @@ Note that the actual location of the specified file may vary depending on potent
 
 Navigate inside the command prompt to the SLADS base directory then enter the following commands:
 
-	$ python3 -m pip install --upgrade pip
-	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib numba pillow ray ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tensorflow-addons tqdm numpy opencv-python pydot graphviz
+	$ python -m pip install --upgrade pip
+	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tensorflow-addons tqdm opencv-python pydot graphviz aiorwlock
 	$ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
-
-	$ python
-	$ from multiplierz.mzAPI.management import registerInterfaces
-	$ registerInterfaces()
+	$ python -c 'from multiplierz.mzAPI.management import registerInterfaces; registerInterfaces()'
 
 If the final printout indicates actions relating to the MSI file format intended for use, then follow through as neccessary. 
 
@@ -269,8 +270,6 @@ One file must be included in each of the sample folders (specifically within the
 		Output pixel positions and spatial resolution are based on this parameter in combination with the acquisition rate
 	- Acquisition Rate (spectra/s)
 		Output pixel positions and spatial resolution are based on this parameter in combination with the scan rate
-	- Monoisotopic m/z (-1 indicates None, which will use TIC instead)
-		Used for normalization of the m/z images
 	- m/z tolerance (ppm)
 		Only specify/include if m/z specification is set to 'value', or if using 'standard' normalization
 	- m/z precision
@@ -291,7 +290,7 @@ If using Agilent equipment with linewise acquisition modes for an implementation
 ###  **RUN**
 After configuration, to run the program perform the following command in the root directory:
 
-	$ python3 ./SLADS
+	$ python ./SLADS
 
 ###  **RESULTS**
 All results will be placed in ./RESULTS/ (in the case of testing, at the conclusion of a sample's scan) as follows:
@@ -327,50 +326,76 @@ In the case that multiple configuration files are provided in the form of: CONFI
 
 # OPERATIONAL PROCEDURE
 
-**Warning:** This section’s procedure has not been confirmed as functional at this time. Below is a brief proposal of how SLADS may be easily integrated with physical scanning equipment
-
 **Note:** In order to use a SLADS model in a physical implementation, the files resultant from the training procedure must be located within './RESULTS/TRAIN_RESULTS/'.
 
 Prior to engaging the physical equipment run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, (row number, and position in um to start scanning for 1 second, based on specified scan rate for the sample) saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in MSI files in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. A sampleInfo.txt must be included in the implementation directory as outlined in the CONFIGURATION section. 
 
 # FAQ
-###  **I read through the README thoroughly, but I'm still getting an error, or am confused about how a feature should work...**
+###  **I read through the README thoroughly, but I'm still getting an error, am confused about how a feature should work, or would like a feature/option added**
 
-Feel free to open an issue on the Github repository; though direct support cannot be guaranteed at this time. 
+Feel free to check if it has already been addressed in, or open an issue on, the Github repository's issue tab. 
 
 ###  **Why am I receiving a 'list index out of range' error from the 'readScanData' method**
 
 Most likely this is due to MSI line filenames not matching the convention outlined above.
 
-###  **SLADS produces an error: Could not connect to socket /tmp/ray/session_.../sockets/raylet**
-
-Although the error would suggest there is something wrong with the network connectivity (can double check firewall settings that port 6375 is allowed to receive/send traffic), it is actually more likely to be an issue with Ray's ability to connect to its dependent services. At this time there isn't a fix available, though some success can be had simply continuing to re-run the script until it does manage to connect. If using Mac OS X, you might be able to mitigate the issue (albeit with additional text written onscreen) by installing ray at version 0.8.6.
-
-    pip3 uninstall ray
-    pip3 install ray==0.8.6
-
 ###  **Why is SLADS not compatible with Linux distributions, or Mac operating systems**
 
-As of v0.8.0, SLADS obtains information directly from MSI files, rather than pre-processed .csv m/z visualizations. These operations are reliant on vendor specific .dll files as provided in the multiplierz package. Supperficially it appears as though the multiplierz API might function within Linux. For example, the packages pythonnet and comtypes can be installed, but cannot actually function in a linux environment. An alternative approach, that may work, might be to attempt an installation through wineDocker. 
+As of v0.8.0, SLADS obtains information directly from MSI files, rather than pre-processed .csv m/z visualizations. These operations are reliant on vendor specific .dll files as provided in the multiplierz package. Supperficially it appears as though the multiplierz API might function within Linux. For example, the packages pythonnet and comtypes can be installed, but cannot actually function in a linux environment. An alternative approach, that may work, might be to attempt an installation through wineDocker, though this has not been attempted. 
 
-While it does not currently function for some MSI formats, (verified operational for XCalibur .RAW but not Agilent .d) multiplierz may be installed directly on Ubuntu 18.04 with the following commands:
+While it does not currently function for some MSI formats, (verified operational for XCalibur .RAW but not Agilent .d) multiplierz may be installed directly on Ubuntu 18.04 or in a Docker container with the following commands:
+	
+	$ python -m pip install --upgrade pip
+	$ sudo apt-get update
+	$ sudo apt-get install -y wget git python3-opencv
+	$ pip3 install jupyter datetime glob2 IPython joblib pandas pathlib2 psutil matplotlib numba pillow ray ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tensorflow-addons tqdm numpy opencv-python pydot graphviz aiorwlock
+	$ wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
+	$ sudo dpkg -i packages-microsoft-prod.deb
+	$ rm packages-microsoft-prod.deb
+	$ sudo apt-get install -y apt-transport-https clang libglib2.0-dev nuget
+	$ sudo apt-get update
+  	$ sudo apt-get install -y aspnetcore-runtime-5.0
+	$ sudo apt-get install -y dotnet-sdk-5.0
+	$ sudo apt-get install -y dotnet-runtime-5.0
+	$ sudo apt-get install -y gnupg ca-certificates
+	$ sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
+	$ echo "deb https://download.mono-project.com/repo/ubuntu stable-bionic main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
+	$ sudo apt-get update
+	$ sudo apt-get install -y mono-devel
+	$ pip3 install git+https://github.com/pythonnet/pythonnet.git@master
+	$ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
+	$ python -c 'from multiplierz.mzAPI.management import registerInterfaces; registerInterfaces()'
 
-	wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
-	sudo dpkg -i packages-microsoft-prod.deb
-	rm packages-microsoft-prod.deb
-	sudo apt-get install apt-transport-https clang libglib2.0-dev nuget
-	sudo apt-get update
-  	sudo apt-get install -y aspnetcore-runtime-5.0
-	sudo apt-get install -y dotnet-sdk-5.0
-	sudo apt-get install -y dotnet-runtime-5.0
-	sudo apt install gnupg ca-certificates
-	sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
-	echo "deb https://download.mono-project.com/repo/ubuntu stable-bionic main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
-	sudo apt update
-	sudo apt install mono-devel
-	pip3 install git+https://github.com/pythonnet/pythonnet.git@master
-	pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
+The last line may produce a warning that module 'ctypes' has no attribute 'windll'; this should be safe to ignore for use with XCalibur .RAW files. 
 
-###  **The legacy single mz mode training images look incorrect**
+General Docker container setup (assuming system already installed with Docker and the appropriate CUDA Toolkit)
+	$ docker run -it --shm-size=2gb --runtime=nvidia --name DLADS tensorflow/tensorflow:latest-gpu
+	
+Additional useful flags for docker container setup
+	'-v /mnt/Volume/:/workspace': Map mounted volume on host system to /workspace directory inside of the container
+	'-p 8889:8888': Map port 8888 inside of the container to 8889 on the host network (in case of development with jupyter-notebook and multiple users)
+	
+###  **Training across multiple GPUs fails with NCCL Errors**
 
-Integration with nano-DESI MSI was never intended to perform evaluation of some mz reconstructions over the whole spectrum; it's simply too computationally expensive to consider. The single mz mode operates by setting the ground-truth average image as the ground-truth singuler mz visualization, since in SLADS operation, only the average image is used to determine E/RD. Evaluation is performed with reconstructed multiple m/z images against their ground-truth conterparts. The multiple ground-truth mz are averaged together into the correct ground-truth average mz image when simulated scanning is completed. Since this routine is not setup to be performed during training, or generation of the training/validation database, the saved images for the averaged reconstruction and averaged ground-truth are incorrectly labeled. The single mz mode is intended to be removed and should not be used except for very specific circumstances!
+Presuming this error occurs on a Linux OS, increase the available shared memory /dev/shm/ to at least 512 MB. If using a Docker container this can be done by first shutting down Docker completely (sudo systemctl stop docker) editing the container's hostconfig.json file (edited with root privileges at /var/lib/docker/containers/containerID/hostconfig.json), changing the ShmSize to 536870912 and then starting docker back up (sudo systemctl start docker). The changed size may be verified with: df -h /dev/shm
+
+###  **Program produces confusing outputs that look like warnings or errors**
+
+Some common outputs that can safely be ignored are produced from Ray during model deployment or from multiprocessing pools. These cannot currently be suppressed/disabled. Some examples, as shown below, can be safely ignored; if in doubt, please feel free to check if this has already been addressed within, or open an issue on, the Github repository's issue tab. 
+
+	$ INFO checkpoint_path.py:16 -- Using RayInternalKVStore for controller checkpoint and recovery.
+	$ INFO http_state.py:98 -- Starting HTTP proxy with name 'SERVE_CONTROLLER_ACTOR:ExQkiR:SERVE_PROXY_ACTOR ...
+	$ INFO api.py:475 -- Started Serve instance in namespace ...
+	$ INFO:     Started server process ...
+	$ INFO api.py:249 -- Updating deployment 'ModelServer'. component=serve deployment=ModelServer
+	$ INFO deployment_state.py:920 -- Adding 1 replicas to deployment 'ModelServer'. component=serve deployment=ModelServer
+	$ INFO api.py:261 -- Deployment 'ModelServer' is ready at ... component=serve deployment=ModelServer
+	$ core_worker_process.cc:348: The global worker has already been shutdown. This happens when the language frontend accesses the Ray's worker after it is shutdown. The process will exit
+	$ INFO deployment_state.py:940 -- Removing 1 replicas from deployment 'ModelServer'. component=serve deployment=ModelServer
+	
+	
+
+
+
+
+

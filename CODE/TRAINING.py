@@ -21,6 +21,7 @@ class EpochEnd(keras.callbacks.Callback):
         self.dir_TrainingModelResults = dir_TrainingModelResults
         if not self.noValFlag: self.val_lossList = []
         self.nanValue = False
+        self.valLosses = []
 
     def on_epoch_end(self, epoch, logs=None):
         
@@ -30,6 +31,11 @@ class EpochEnd(keras.callbacks.Callback):
         
         #Early stopping criteria
         currentLoss = logs.get('val_loss')
+        #if epoch >= self.minimumEpochs: 
+        #    self.valLosses.append(currentLoss)
+        #    if np.sum(currentLoss == self.valLosses[:-self.maxPatience])) >= self.maxPatience: 
+        #        self.model.stop_training = True
+        #        self.nanValue = True
         if (currentLoss < self.bestLoss) and (epoch >= self.minimumEpochs):
             self.patience = 0
             self.bestLoss = currentLoss
@@ -80,13 +86,13 @@ class EpochEnd(keras.callbacks.Callback):
                 for vizSampleNum in range(0, len(self.vizSamples)):
                 
                     vizSample = self.vizSamples[vizSampleNum]
-                    
-                    ERD = self.model(makeCompatible(prepareInput(vizSample)), training=False)[0,:,:,0].numpy()
-                    RD = vizSample.squareRD
+                    sampleBatch = makeCompatible([prepareInput(vizSample, mzNum) for mzNum in range(0, len(vizSample.mzReconImages))])
+                    squareERD = np.mean(self.model(sampleBatch, training=False)[:,:,:,0].numpy(), axis=0)
+                    squareRD = vizSample.squareRD
 
-                    maxRangeValue = np.max([RD, ERD])
-                    ERD_PSNR = compare_psnr(RD, ERD, data_range=maxRangeValue)
-                    ERD_SSIM = compare_ssim(RD, ERD, data_range=maxRangeValue)
+                    maxRangeValue = np.max([squareRD, squareERD])
+                    ERD_PSNR = compare_psnr(squareRD, squareERD, data_range=maxRangeValue)
+                    ERD_SSIM = compare_ssim(squareRD, squareERD, data_range=maxRangeValue)
                     
                     if np.isnan(ERD_PSNR) or np.isnan(ERD_SSIM): 
                         self.model.stop_training = True
@@ -99,14 +105,12 @@ class EpochEnd(keras.callbacks.Callback):
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                     
                     ax = plt.subplot2grid((3,3), (vizSampleNum+1,1))
-                    #im = ax.imshow(RD, aspect='auto', vmin=0, vmax=1)
-                    im = ax.imshow(RD, aspect='auto', vmin=0)
+                    im = ax.imshow(squareRD, aspect='auto', vmin=0)
                     ax.set_title('RD', fontsize=15, fontweight='bold')
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                     
                     ax = plt.subplot2grid((3,3), (vizSampleNum+1,2))
-                    #im = ax.imshow(ERD, aspect='auto', vmin=0, vmax=1)
-                    im = ax.imshow(ERD, aspect='auto', vmin=0)
+                    im = ax.imshow(squareERD, aspect='auto', vmin=0)
                     ax.set_title('ERD - PSNR: ' + str(round(ERD_PSNR,4)) + ' SSIM: ' + str(round(ERD_SSIM,4)), fontsize=15, fontweight='bold')
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                     
@@ -122,7 +126,7 @@ def importInitialData(sortedSampleFolders):
     #Make sure sample mask initialization is consistent, particularly important for c value optimization
     #DO NOT RUN this section in parallel, makes optimizeC inconsistent, forcing seed in SampleData harms training generalization
     if consistentSeed: np.random.seed(0)
-    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPerc, 'pointwise', RDMethod, True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)], dtype='object')
+    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPerc, 'pointwise', True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)], dtype='object')
     
     #Save relevant images
     trainDataFlag, valDataFlag = True, False
@@ -153,18 +157,6 @@ def importInitialData(sortedSampleFolders):
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         plt.savefig(saveLocation, bbox_inches=extent)
         plt.close()
-        
-        #Save a visual of the normalization image used, if it was not the TIC
-        if sampleData.mzMonoValue!=-1:
-            if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'mzMono_' + sampleData.name + '.png'
-            if valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'mzMono_' + sampleData.name + '.png'
-            fig=plt.figure()
-            ax=fig.add_subplot(1,1,1)
-            plt.axis('off')
-            plt.imshow(sampleData.mzMono, cmap='hot', aspect='auto')
-            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            plt.savefig(saveLocation, bbox_inches=extent)
-            plt.close()
 
     #Save the samples database
     pickle.dump(trainingValidationSampleData, open(dir_TrainingResults + 'trainingValidationSampleData.p', 'wb'))
@@ -174,36 +166,49 @@ def importInitialData(sortedSampleFolders):
 #Given a set of samples, determine an optimal c value
 def optimizeC(trainingSampleData):
     
-    #If there are more than one c value, determine which minimizes the total distortion in the samples, force this optimization to be performed with pointwise scanning
+    #If there are more than one c value, determine which maximizes the progressive PSNR in the samples; force pointwise acquisition (done during initial import!)
     if len(cValues)>1:
-        
+        t0 = time.time()
         if parallelization:
-            t0 = time.time()
             futures = []
             for cNum in range(0, len(cValues)):
                 for sampleNum in range(0, len(trainingSampleData)):
-                    futures.append(runSLADS_parhelper.remote(trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False, None, False))
-            results = np.split(np.asarray(ray.get(futures), dtype='object'), len(cValues))
-            print('Completed in: '+str(time.time()-t0))
+                    futures.append((trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False, None, False, False, False))
+            p = Pool(numberCPUS)
+            results = p.starmap(runSampling, futures)
+            p.close()
+            p.join()
+            results = np.split(np.asarray(results, dtype='object'), len(cValues))
         else:
             results = []
             for cNum in tqdm(range(0, len(cValues)), desc='c Values', leave=True, ascii=True):
-                results.append([runSLADS(trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False, None, False) for sampleNum in tqdm(range(0, len(trainingSampleData)), desc='Samples', leave=False, ascii=True)])
-        areaUnderCurveList = []
+                results.append([runSampling(trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False, None, False, False, False) for sampleNum in tqdm(range(0, len(trainingSampleData)), desc='Samples', leave=False, ascii=True)])
+        print('Completed in: '+str(time.time()-t0))
         
+        areaUnderCurveList, allRDTimesList, dataPrintout = [], [], [['','Average', '', 'Standard Deviation']]
         for cNum in range(0, len(cValues)):
         
             #Double check that results were split correctly according to cValue
             if np.sum(np.diff([results[cNum][index].cValue for index in range(0, len(results[cNum]))]))>0: sys.exit('Error! - Results for c values were not split correctly.')
             
+            #Compute and save area under the PSNR curve
+            AUC = [np.trapz(result.cSelectionList, result.percsMeasured) for result in results[cNum]]
+            areaUnderCurveList.append(np.mean(AUC))
+            
+            #Extract RD computation times
+            allRDTimes = np.concatenate([result.computeRDTimes for result in results[cNum]])
+            
+            #Save information for output to file
+            dataPrintout.append(['c Value', cValues[cNum]])
+            dataPrintout.append(['mz PSNR Area Under Curve:', np.mean(AUC), '+/-', np.std(AUC)])
+            dataPrintout.append(['Average RD Compute Time (s)', np.mean(allRDTimes), '+/-', np.std(allRDTimes)])
+            dataPrintout.append([''])
+            
             #Extract percentage results at the specified precision
             percents, trainingmzMetric_mean = percResults([result.cSelectionList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
-
-            #Compute and save area under the PSNR curve
-            areaUnderCurveList.append(np.trapz(trainingmzMetric_mean, percents))
-        
-            #Save data and visualize/save the averaged curve for the given c value
-            np.savetxt(dir_TrainingResultsImages+'optimizationCurve_c_' + str(cValues[cNum]) + '.csv', np.transpose([percents, trainingmzMetric_mean]), delimiter=',')
+            
+            #Visualize/save the averaged curve for the given c value
+            np.savetxt(dir_TrainingResults+'optimizationCurve_c_' + str(cValues[cNum]) + '.csv', np.transpose([percents, trainingmzMetric_mean]), delimiter=',')
             font = {'size' : 18}
             plt.rc('font', **font)
             f = plt.figure(figsize=(20,8))
@@ -211,15 +216,17 @@ def optimizeC(trainingSampleData):
             ax1.plot(percents, trainingmzMetric_mean, color='black')
             ax1.set_xlabel('% Measured')
             ax1.set_ylabel('Average PSNR of mz Reconstructions (dB)')
-            #if legacyFlag: ax1.set_ylabel('Average Total Distortion of mz Reconstructions')
             ax1.set_title('Area Under Curve: ' + str(areaUnderCurveList[-1]), fontsize=15, fontweight='bold')
-            plt.savefig(dir_TrainingResultsImages + 'optimizationCurve_c_' + str(cValues[cNum]) + '.png')
+            plt.savefig(dir_TrainingResults + 'optimizationCurve_c_' + str(cValues[cNum]) + '.png')
             plt.close()
-            
+                
+        #Save the AUC scores and RD computation times
+        pd.DataFrame(dataPrintout).to_csv(dir_TrainingResults + 'cValueOptimization.csv')
+        
         #Select the c value and corresponding model that maximizes the PSNR across the samples' progression
         bestCIndex = np.argmax(areaUnderCurveList)
-    else:
-        bestCIndex = 0
+        
+    else: bestCIndex = 0
         
     #Save the final c value
     np.save(dir_TrainingResults + 'optimalC', cValues[bestCIndex])
@@ -227,19 +234,9 @@ def optimizeC(trainingSampleData):
     
     return cValues[bestCIndex]
 
-#Visualize multiple sample progression steps at once
-@ray.remote
-def visualizeTraining_parhelper(sample, result, maskNum, trainDataFlag, valDataFlag, parallel):
-    return visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag, parallel)
-
 #Visualize single sample progression step
-def visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag, parallel):
-
-    #If in a parallel thread, re-import libraries inside of thread to set plotting backend as non-interactive
-    if parallel:
-        import matplotlib
-        matplotlib.use('agg')
-
+def visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag):
+    
     if trainDataFlag: saveLocation = dir_TrainingResultsImages+ 'training_c_' + str(optimalC) + '_variation_' + str(maskNum) + '_' + result.sampleData.name + '_percentage_' + str(round(sample.percMeasured, 5))+ '.png'
     if valDataFlag: saveLocation = dir_ValidationTrainingResultsImages+ 'validation_c_' + str(optimalC) + '_variation_' + str(maskNum) + '_' + result.sampleData.name + '_percentage_' + str(round(sample.percMeasured, 5))+ '.png'
     
@@ -268,7 +265,7 @@ def visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag
     ax.set_title('Recon - PSNR: ' + str(round(compare_psnr(result.sampleData.mzAvgImage, sample.mzAvgReconImage, data_range=np.max(result.sampleData.mzAvgImage)), 5)), fontsize=15)
 
     ax = plt.subplot2grid(shape=(1,5), loc=(0,4))
-    ax.imshow((sample.RD-np.min(sample.RD))/(np.max(sample.RD)-np.min(sample.RD)), aspect='auto')
+    ax.imshow(sample.RD, aspect='auto')
     ax.set_title('RD', fontsize=15)
     plt.savefig(saveLocation)
     plt.close()
@@ -286,7 +283,7 @@ def visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag
     fig=plt.figure()
     ax=fig.add_subplot(1,1,1)
     plt.axis('off')
-    plt.imshow((sample.RD-np.min(sample.RD))/(np.max(sample.RD)-np.min(sample.RD)), aspect='auto')
+    plt.imshow(sample.RD, aspect='auto')
     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     if trainDataFlag: plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent)
     if valDataFlag: plt.savefig(dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent)
@@ -315,40 +312,46 @@ def visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag
 #Given a set of samples and a chosen c value, generate a training database
 def generateDatabases(trainingValidationSampleData, optimalC):
     
-    #Create holding location for training and validation samples
-    trainingDatabase, validationDatabase = [], []
-    
     if consistentSeed: np.random.seed(0)
-
+    
     #For the number of mask iterations specified, create new masks and scan them with the specified method
-    if parallelization: 
-        futures = []
-        print('Initializing Parallel Generation')
-        t0 = time.time()
-    else: results = []
-    maskNumList = []
+    t0 = time.time()
+    results, maskNumList, futures = [], [], []
     for index in tqdm(range(0, len(trainingValidationSampleData)), desc = 'Samples', leave=True, ascii=True, disable=parallelization):
         for maskNum in tqdm(range(0,numMasks), desc = 'Masks', leave=False, ascii=True, disable=parallelization):
-        
+            
+            #Make a copy of the sample
+            sample = copy.deepcopy(trainingValidationSampleData[index])
+            
             #Note mask number for visualizations
             maskNumList.append(maskNum)
         
             #Create new mask
-            trainingValidationSampleData[index].initialPercToScan = initialPercToScanTrain
-            trainingValidationSampleData[index].stopPerc = stopPercTrain
-            trainingValidationSampleData[index].generateInitialSets('random')
+            sample.initialPercToScan = initialPercToScanTrain
+            sample.stopPerc = stopPercTrain
+            sample.generateInitialSets('random')
             
             #If parallel, then add job to list, otherwise just run and collect the result
-            if parallelization: futures.append(runSLADS_parhelper.remote(copy.deepcopy(trainingValidationSampleData[index]), optimalC, False, 1, None, False, True, lineVisitAll, False, None, False))
-            else: results.append(runSLADS(copy.deepcopy(trainingValidationSampleData[index]), optimalC, False, 1, None, False, True, lineVisitAll, False, None, False))
+            if parallelization: futures.append((sample, optimalC, False, 1, None, False, True, lineVisitAll, False, None, True, False, False))
+            else: results.append(runSampling(sample, optimalC, False, 1, None, False, True, lineVisitAll, False, None, True, False, False))
     
     #If parallel, start queue and wait for results
     if parallelization: 
-        results = ray.get(futures)
-        print('Completed in: '+str(time.time()-t0))
+        p = Pool(numberCPUS)
+        results = p.starmap(runSampling, futures)
+        p.close()
+        p.join()
+    print('Completed in: '+str(time.time()-t0))
+    
+    #Get timing data for RD generation, average, and save
+    allRDTimes = np.concatenate([result.computeRDTimes for result in results])
+    dataPrintout = [['','Average', '', 'Standard Deviation']]
+    dataPrintout.append(['RD Compute Time (s)', np.mean(allRDTimes), '+/-', np.std(allRDTimes)])
+    pd.DataFrame(dataPrintout).to_csv(dir_TrainingResults + 'trainingValuation_RDTimes.csv')
     
     #Seperate training and validation data from results
     trainDataFlag, valDataFlag = True, False
+    trainingDatabase, validationDatabase = [], []
     for index in tqdm(range(0, len(results)), desc='Visualization/Set Separation', leave=True, ascii=True):
         
         #Determine if result data should go into training or validation sets
@@ -362,10 +365,10 @@ def generateDatabases(trainingValidationSampleData, optimalC):
         #Visualize and save data if desired, in parallel if specified
         if trainingDataPlot:
             if parallelization:
-                futures = [visualizeTraining_parhelper.remote(sample, results[index], maskNumList[index], trainDataFlag, valDataFlag, parallelization) for sample in results[index].samples]
+                futures = [visualizeTraining_parhelper.remote(sample, results[index], maskNumList[index], trainDataFlag, valDataFlag) for sample in results[index].samples]
                 _ = ray.get(futures)
             else:
-                _ = [visualizeTraining_serial(sample, results[index], maskNumList[index], trainDataFlag, valDataFlag, parallelization) for sample in tqdm(results[index].samples, desc='% Measured', leave=False, ascii=True)]
+                _ = [visualizeTraining_serial(sample, results[index], maskNumList[index], trainDataFlag, valDataFlag) for sample in tqdm(results[index].samples, desc='% Measured', leave=False, ascii=True)]
                 
     #Save the complete databases
     pickle.dump(trainingDatabase, open(dir_TrainingResults + 'trainingDatabase.p', 'wb'))
@@ -376,6 +379,8 @@ def generateDatabases(trainingValidationSampleData, optimalC):
 #Given a training database, train a regression model
 def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, optimalC):
     
+    if len(trainingDatabase) == 0: sys.exit('Error! - There was no training data supplied to train a model with; perhaps only one sample was provided?')
+
     #If consistentcy in the random generator is desired for comparisons, then reset seed
     if consistentSeed: 
         tf.random.set_seed(0)
@@ -384,8 +389,16 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
     
     if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net':
         
-        bigPolyFeatures = np.row_stack([sample.polyFeatures for sample in trainingDatabase])
-        bigRD = np.concatenate([sample.squareRDValues for sample in trainingDatabase])
+        #Extract polyFeatures and squareRDValues for each input channel in the sample
+        polyFeatureStack, squareRDValueStack = [], []
+        for sample in trainingDatabase:
+            for channelNum in range(0, len(sample.polyFeatures)):
+                polyFeatureStack.append(sample.polyFeatures[channelNum])
+                squareRDValueStack.append(sample.squareRDValues[channelNum])
+        
+        #Collapse the stacks for regression
+        bigPolyFeatures = np.row_stack(polyFeatureStack)
+        bigRD = np.concatenate(squareRDValueStack)
         
         #Create and save regression model based on user selection
         if erdModel == 'SLADS-LS': model = linear_model.LinearRegression()
@@ -398,8 +411,9 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         #Create lists of input/output images
         trainInputImages, trainOutputImages = [], []
         for sample in tqdm(trainingDatabase, desc = 'Training Data Setup', leave=True, ascii=True):
-            trainInputImages.append(prepareInput(sample))
-            trainOutputImages.append(sample.squareRD)
+            for mzNum in range(0, len(sample.squareRDs)):
+                trainInputImages.append(prepareInput(sample, mzNum))
+                trainOutputImages.append(sample.squareRDs[mzNum])
 
         #If there is a validation set then create respective lists
         if len(validationDatabase)<=0: 
@@ -408,11 +422,12 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             noValFlag = False
             valInputImages, valOutputImages = [], []
             for sample in tqdm(validationDatabase, desc = 'Validation Data Setup', leave=True, ascii=True):
-                valInputImages.append(prepareInput(sample))
-                valOutputImages.append(sample.squareRD)
-            
+                for mzNum in range(0, len(sample.squareRDs)):
+                    valInputImages.append(prepareInput(sample, mzNum))
+                    valOutputImages.append(sample.squareRDs[mzNum])
+                
             #Extract lowest and highest density from the first validation sample for visualization during training; assumes 1% spacing
-            vizSamples = [validationDatabase[0], validationDatabase[len(np.arange(initialPercToScanTrain,stopPercTrain))]]
+            vizSamples = [validationDatabase[0], validationDatabase[len(np.arange(initialPercToScanTrain, stopPercTrain))]]
             vizSampleData = validationSampleData[0]
         
         #Determine the number of channels in the input images
@@ -420,15 +435,15 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         else: numChannels = 1
 
         #Create generators/iterators for the training and validation sets
-        trainGen = DataGen(trainInputImages, trainOutputImages, numChannels, True)
-        valGen = DataGen(valInputImages, valOutputImages, numChannels, False)
+        trainGen = DataGen(trainInputImages, trainOutputImages, numChannels, True, batchSize)
+        valGen = DataGen(valInputImages, valOutputImages, numChannels, False, batchSize)
+
+        #strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
+        strategy = tf.distribute.MirroredStrategy()
 
         #While a model has not been trained, reinitialize
         trainingAttempts = 0
         while True:
-            
-            #Create model
-            model = unet(numStartFilters, numChannels, batchSize)
             
             #Select optimizer
             if optimizer == 'Nadam': trainOptimizer = tf.keras.optimizers.Nadam(learning_rate=learningRate)
@@ -436,9 +451,15 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             elif optimizer == 'RMSProp': trainOptimizer = tf.keras.optimizers.RMSprop(learning_rate=learningRate)
             elif optimizer == 'SGD': trainOptimizer = tf.keras.optimizers.SGD(learning_rate=learningRate)
             
-            #Select loss function
-            if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss='mean_absolute_error')
-            elif lossFunc == 'MSE': model.compile(optimizer=trainOptimizer, loss='mean_squared_error')
+            #Given the specified computational scope
+            with strategy.scope(): 
+
+                #Create model
+                model = unet(numStartFilters, numChannels, batchSize)
+
+                #Select loss function
+                if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss='mean_absolute_error')
+                elif lossFunc == 'MSE': model.compile(optimizer=trainOptimizer, loss='mean_squared_error')
 
             #Setup callback object
             epochEndCallback = EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizSamples, vizSampleData, dir_TrainingModelResults)
@@ -474,6 +495,7 @@ class DataGen(tf.keras.utils.Sequence):
         self.dataAug = dataAug
         self.batchSize = batchSize
         self.length = len(inputs)
+        self.splitIndexes = np.array_split(np.arange(0, self.length), int(self.length/batchSize))
         self.data_augmentation = tf.keras.Sequential([
         tf.keras.layers.RandomCrop(64,64),
         tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical"),
@@ -483,20 +505,35 @@ class DataGen(tf.keras.utils.Sequence):
         if self.dataAug: 
             self.comImages = [tf.expand_dims(np.dstack((self.origInputs[index], self.origOutputs[index])), 0) for index in range(0, self.length)]
             self.on_epoch_end()
-        else: self.inputs, self.outputs = [makeCompatible(inputImage) for inputImage in self.origInputs], [makeCompatible(outputImage) for outputImage in self.origOutputs]
+        else: 
+            if self.batchSize == 1: 
+                self.inputs = [makeCompatible(inputImage) for inputImage in self.origInputs]
+                self.outputs = [makeCompatible(outputImage) for outputImage in self.origOutputs]
+            else:
+                self.inputs, self.outputs = [], []
+                for indexes in self.splitIndexes:
+                    self.inputs.append(np.asarray([self.origInputs[index] for index in indexes]))
+                    self.outputs.append(np.asarray([self.origOutputs[index] for index in indexes]))
 
     def on_epoch_end(self):
         if self.dataAug: 
-            self.inputs, self.outputs = [], []
-            for index in range(0, self.length):
-                comImage = tf.squeeze(self.data_augmentation(self.comImages[index]), axis=0).numpy()
-                self.inputs.append(makeCompatible(comImage[:,:,:self.numChannels]))
-                self.outputs.append(makeCompatible(np.squeeze(comImage[:,:,self.numChannels:], axis=2)))
+
+            augImages = [tf.squeeze(self.data_augmentation(self.comImages[index]), axis=0).numpy() for index in range(0, self.length)]
+            augInputs = [comImage[:,:,:self.numChannels] for comImage in augImages]
+            augOutputs = [comImage[:,:,self.numChannels:] for comImage in augImages]
+
+            if self.batchSize == 1:
+                self.inputs = [makeCompatible(augInput) for augInput in augInputs]
+                self.outputs = [makeCompatible(augOutput) for augOutput in augOutputs]
+            else: 
+                self.inputs, self.outputs = [], []
+                for indexes in self.splitIndexes:
+                    self.inputs.append(np.asarray([augInputs[index] for index in indexes]))
+                    self.outputs.append(np.asarray([augOutputs[index] for index in indexes]))
 
     def __len__(self):
         return math.ceil(self.length/self.batchSize)
 
     def __getitem__(self, index):
         return self.inputs[index], self.outputs[index]
-
 

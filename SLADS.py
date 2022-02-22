@@ -5,211 +5,92 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    24 January 2021
+#DATE MODIFIED:	    22 February 2021
 #
-#VERSION NUM:	    0.8.9
+#VERSION NUM:	    0.9.0
 #
 #LICENSE:           GNU General Public License v3.0
 #
 #DESCRIPTION:	    Multichannel implementation of SLADS (Supervised Learning 
-#                   Algorithm for Dynamic Sampling with additional constraint to
-#                   select groups of points along a single axis.
+#                   Algorithm for Dynamic Sampling) and DLADS (Deep Learning
+#                   Approach for Dynamic Sampling)
 #
 #AUTHOR(S):         David Helminiak	EECE, Marquette University
 #ADVISOR(S):        Dong Hye Ye		EECE, Marquette University
 #
 #COLLABORATORS:	    Julia Laskin	CHEM, Purdue University
-#                   Hang Hu		CHEM, Purdue University
+#                   Hang Hu		    CHEM, Purdue University
 #
-#FUNDING:	    This project has received funding and was programmed for:
+#FUNDING:	        This project has received funding and was programmed for:
 #                   NIH Grant 1UG3HL145593-01
 #
 #GLOBAL
-#CHANGELOG:     0.1.0   Multithreading adjustments to pointwise SLADS
-#               0.1.1   Line constraints, concatenation, pruning, and results organization
-#               0.2.0   Line bounded constraints addition
-#               0.3.0   Complete code rewrite, computational improvements
-#               0.4.0   Class/function segmentation
-#               0.5.0   Overhead reduction; switch multiprocessing package
-#               0.6.0   Modifications for Nano-DESI microscope integration
-#               0.6.1   Model robustness and reduction of memory overhead
-#               0.6.2   Model loading and animation production patches
-#               0.6.3   Start/End point selection with Canny
-#               0.6.4   Custom knn metric, SSIM calc, init computations
-#               0.6.5   Clean variables and resize to physical
-#               0.6.6   SLADS-NET NN, PSNR, and multi-config
-#               0.6.7   Clean asymmetric implementation with density features
-#               0.6.8   Fixed RD generation, added metrics, and Windows compatible
-#               0.7.0   CNN/Unet/RBDN with dynamic window size
-#               0.7.1   c value selection performed before model training
-#               0.7.2   Remove custom pkg. dependency, use NN resize, recon+measured input
-#               0.7.3   Start/End line patch, SLADS(-Net) options, normalization optimization
-#               0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
-#               0.7.4   CPU compatibility patch, removal of NaN values
-#               0.7.5   c value selection performed before training database generation
-#               0.8.0   Raw MSI file integration (Thermo .raw, Agilent .d), only Windows compatible
-#               0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
-#               0.8.2   Multichannel, fixed groupwise, square pixels, accelerated RD, altered visuals/metrics
-#               0.8.3   Mask seed fix, normalization for sim. fix, non-Ray option, pad instead of resize
-#               0.8.4   Parallel c value selection fix, remove network resizing requirement, fix experimental
-#               0.8.5   Model optimization, enable batch processing, SLADS training fix, database acceleration
-#               0.8.6   Memory reduction, reconstruction vectorization, augmentation, global mz, mz window in ppm
-#               0.8.7   Recon. script, acq. rate, seq. names, live output, offsets, input scaling, Otsu segLine
-#               0.8.8   Interpolation limits, static graph, parallel inferencing, ray deployment, test of FAISS
-#               0.8.9   Simplification, disable TIC/monoistopic normalization
-#               ~0.+.+  GAN, Custom adversarial network, Multimodal integration
-#               ~1.0.0  Initial release
+#CHANGELOG:         0.1.0   Multithreading adjustments to pointwise SLADS
+#                   0.1.1   Line constraints, concatenation, pruning, and results organization
+#                   0.2.0   Line bounded constraints addition
+#                   0.3.0   Complete code rewrite, computational improvements
+#                   0.4.0   Class/function segmentation
+#                   0.5.0   Overhead reduction; switch multiprocessing package
+#                   0.6.0   Modifications for Nano-DESI microscope integration
+#                   0.6.1   Model robustness and reduction of memory overhead
+#                   0.6.2   Model loading and animation production patches
+#                   0.6.3   Start/End point selection with Canny
+#                   0.6.4   Custom knn metric, SSIM calc, init computations
+#                   0.6.5   Clean variables and resize to physical
+#                   0.6.6   SLADS-NET NN, PSNR, and multi-config
+#                   0.6.7   Clean asymmetric implementation with density features
+#                   0.6.8   Fixed RD generation, added metrics, and Windows compatible
+#                   0.7.0   CNN/Unet/RBDN with dynamic window size
+#                   0.7.1   c value selection performed before model training
+#                   0.7.2   Remove custom pkg. dependency, use NN resize, recon+measured input
+#                   0.7.3   Start/End line patch, SLADS(-Net) options, normalization optimization
+#                   0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
+#                   0.7.4   CPU compatibility patch, removal of NaN values
+#                   0.7.5   c value selection performed before training database generation
+#                   0.8.0   Raw MSI file integration (Thermo .raw, Agilent .d), only Windows compatible
+#                   0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
+#                   0.8.2   Multichannel, fixed groupwise, square pixels, accelerated RD, altered visuals/metrics
+#                   0.8.3   Mask seed fix, normalization for sim. fix, non-Ray option, pad instead of resize
+#                   0.8.4   Parallel c value selection fix, remove network resizing requirement, fix experimental
+#                   0.8.5   Model optimization, enable batch processing, SLADS training fix, database acceleration
+#                   0.8.6   Memory reduction, reconstruction vectorization, augmentation, global mz, mz window in ppm
+#                   0.8.7   Recon. script, acq. rate, seq. names, live output, offsets, input scaling, Otsu segLine
+#                   0.8.8   Interpolation limits, static graph, parallel inferencing, ray deployment, test of FAISS
+#                   0.8.9   Simplification
+#                   0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
+#                   ~0.+.+  GAN, Custom adversarial network, Multimodal integration
+#                   ~1.0.0  Initial release
 #====================================================================
 
 #==================================================================
-#MAIN PROGRAM
+#INITIALIZATION
 #==================================================================
+
 #Current version information
-versionNum='0.8.9'
+versionNum='0.9.0'
 
-#Import all involved external libraries
-exec(open("./CODE/EXTERNAL.py").read())
-
-#Import general method and class definitions
-exec(open("./CODE/DEFS.py").read())
+#Import needed libraries for subprocess initialization
+import glob
+import natsort
+import numpy as np
+import sys
+import signal
+import subprocess
 
 #Obtain list of configuration files
 configFileNames = natsort.natsorted(glob.glob('./CONFIG_*.py'))
 
 #If there is more than one configuration file, validate their syntax
-if len(configFileNames) > 1: [exec(open(configFileName).read()) for configFileName in configFileNames]
+if len(configFileNames) > 1: [exec(open(configFileName, encoding='utf-8').read()) for configFileName in configFileNames]
 
-#For each of the configuration files that are present, run SLADS
-for configFileName in configFileNames:
-
-    #Load in variable definitions from the configuration file
-    exec(open(configFileName).read())
-
-    #Setup directories and internal variables
-    exec(open("./CODE/INTERNAL.py").read())
-
-    sectionTitle("\
-      ▄▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄\n \
-    ▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌\n \
-    ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀\n \
-    ▐░▌          ▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌\n \
-    ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌          ▐░█▄▄▄▄▄▄▄█░▌▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄▄▄\n \
-    ▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░░▌\n \
-     ▀▀▀▀▀▀▀▀▀█░▌▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌ ▀▀▀▀▀▀▀▀▀█░▌\n \
-              ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌          ▐░▌\n \
-     ▄▄▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄█░▌ ▄▄▄▄▄▄▄▄▄█░▌\n \
-    ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌\n \
-     ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀\n \
-    Author(s):\t\tDavid Helminiak\t\tEECE Marquette University\n \
-    Advisor(s):\tDong Hye Ye\t\tEECE Marquette University\n \
-    Licence:\t\tGNU General Public License v3.0\n \
-    Version:\t\t"+versionNum+"\n \
-    Config:\t\t"+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0])
-
-    destResultsFolder = './RESULTS_'+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0]
-    
-    #If the destination exists, output an error, or delete the folder
-    if preventResultsOverwrite: sys.exit('Error! - The destination results folder already exists')
-    elif os.path.exists(destResultsFolder): shutil.rmtree(destResultsFolder)
-
-    #Obtain the file paths for the intended training data if needed
-    if trainingModel or validationModel: trainValidationSamplePaths = natsort.natsorted(glob.glob(dir_TrainingData + '/*'), reverse=False)
-    
-    #If a SLADS model needs to be trained
-    if trainingModel:
-        
-        #Import any specfic training function and class definitions
-        exec(open("./CODE/TRAINING.py").read())
-        
-        #If the dataset has not been generated then generate and find the best c for one, otherwise load the best c previously determined
-        if not loadTrainValDatasets:
-            
-            #Import training/validation data
-            sectionTitle('IMPORTING TRAINING/VALIDATION SAMPLES')
-            
-            #Perform import and setup for training and validation datasets
-            trainingValidationSampleData = importInitialData(trainValidationSamplePaths)
-            validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
-            trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
-        
-            #Optimize the c value
-            sectionTitle('OPTIMIZING C VALUE')
-            optimalC = optimizeC(trainingValidationSampleData)
-            
-            #Generate a training database for the optimal c value and training samples
-            sectionTitle('GENERATING TRAINING/VALIDATION DATASETS')
-            trainingDatabase, validationDatabase = generateDatabases(trainingValidationSampleData, optimalC)
-            
-        else:
-            trainingValidationSampleData = pickle.load(open(dir_TrainingResults + 'trainingValidationSampleData.p', "rb" ))
-            validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
-            trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
-            optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
-            trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase.p', "rb" ))
-            validationDatabase = pickle.load(open(dir_TrainingResults + 'validationDatabase.p', "rb" ))
-
-        #Train model(s) for the given database and c value
-        sectionTitle('PERFORMING TRAINING')
-        trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, optimalC)
-
-    #Load models and c value before testing, or implementation
-    optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
-
-    #If it is going to be employed, then start server, deploy, and get handle for model queries
-    if testingModel or validationModel or impModel:
-        serve.start()
-        if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': ModelServer.deploy(erdModel, dir_TrainingResults+'model_cValue_'+str(optimalC)+'.npy')
-        elif erdModel == 'DLADS': ModelServer.deploy(erdModel, dir_TrainingResults+'model_cValue_'+str(optimalC))
-        model = ModelServer.get_handle()
-
-    #If needed import any specific testing function and class definitions
-    if validationModel or testingModel: exec(open("./CODE/SIMULATION.py").read())
-
-    #If a model needs to be tested with validation data
-    if validationModel:
-        sectionTitle('PERFORMING SIMULATION ON VALIDATION SET')
-        
-        if not trainingModel: 
-            trainingValidationSampleData = pickle.load(open(dir_TrainingResults + 'trainingValidationSampleData.p', "rb" ))
-            validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
-            trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
-        
-        #Obtain the file paths for the intended simulation data
-        validationSamplePaths = [sampleData.sampleFolder for sampleData in validationSampleData]
-        
-        #Perform simulations
-        simulateSLADS(validationSamplePaths, dir_ValidationResults, model, optimalC)
-
-    #If a model needs to be tested
-    if testingModel:
-        sectionTitle('PERFORMING SIMULATION ON TESTING SET')
-        
-        #Obtain the file paths for the intended simulation data
-        testSamplePaths = natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False)
-        
-        #Perform simulations
-        simulateSLADS(testSamplePaths, dir_TestingResults, model, optimalC)
-
-    #If a model is to be used in an implementation
-    if impModel:
-        sectionTitle('IMPLEMENTING MODEL')
-
-        #Import any specific implementation function and class definitions
-        exec(open("./CODE/EXPERIMENTAL.py").read())
-
-        #Begin performing an implementation
-        performImplementation(model, optimalC)
-
-    #Copy the results folder and the config file into it
-    resultCopy = shutil.copytree('./RESULTS', destResultsFolder)
-    configCopy = shutil.copy(configFileName, destResultsFolder+'/'+os.path.basename(configFileName))
-
-    #Shutdown the ray and model server(s)
-    if parallelization: ray.shutdown()
-    if testingModel or validationModel or impModel: serve.shutdown()
-
-    #Notate the completion of intended operations
-    sectionTitle('PROGRAM COMPLETE')
+#Run each configuration sequentially as a subprocess (GPU VRAM not cleared by Tensorflow, leading to crash otherwise); pass interrupts to active subprocess
+for configFileName in configFileNames: 
+    process = subprocess.Popen(["python", "runConfig.py", configFileName, versionNum], shell=False)
+    try: process.wait()
+    except: 
+        process.send_signal(signal.SIGINT)
+        exit()
+print('ALL CONFIGURATIONS COMPLETE')
 
 #Shutdown python kernel
 exit()

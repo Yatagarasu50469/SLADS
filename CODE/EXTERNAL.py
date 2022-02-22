@@ -29,7 +29,6 @@ import PIL
 import PIL.ImageOps
 import platform
 import random
-import ray
 import re
 import requests
 import sys
@@ -50,7 +49,6 @@ from multiplierz.spectral_process import mz_range
 from numba import cuda
 from numba import jit
 from PIL import Image
-from ray import serve
 from scipy import misc
 from scipy import signal
 from scipy.io import loadmat
@@ -75,24 +73,27 @@ from skimage.transform import resize
 from sobol import *
 from tqdm.auto import tqdm
 
-matplotlib.use('agg') #Non-interactive plotting mode
+matplotlib.use('Agg') #Non-interactive plotting mode
 sys.coinit_flags = 0 #Change method of instantiation for COM objects
 
 #==================================================================
-#TENSORFLOW IMPORT AND SETUP
+#TENSORFLOW/RAY IMPORT AND SETUP
 #==================================================================
 
-#Make tensorflow only report errors (3), warnings (2), information (1), all (0)
+#Make tensorflow only report errors (3), warnings (2), information (1), all (0) (disable for debug)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 #Allocate memory for CUDA in an asynchronous manner, prevents GPU OOM when training multiple models
 os.environ["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
 
-import tensorflow as tf
-tf.get_logger().setLevel('ERROR')
-warnings.filterwarnings("ignore")
+#Tell Ray to not report unahndled errors (currently occurs with graceful shutdown) (disable for debug)
+os.environ["RAY_IGNORE_UNHANDLED_ERRORS"] = "1"
 
-#Import remaining needed tensorflow libraries
+#After enivronmental settings can finish imports
+import ray
+import tensorflow as tf
+from ray import serve
+from ray.util.multiprocessing import Pool
 from tensorflow import keras
 from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import *
@@ -105,6 +106,10 @@ from tensorflow.python.util.tf_export import keras_export
 from tensorflow.tools.docs import doc_controls
 from tensorflow.python.ops import array_ops
 from tensorflow.python.framework import constant_op
+
+#Further restrict logging levels to only report errors (disable for debug)
+tf.get_logger().setLevel('ERROR')
+warnings.filterwarnings("ignore")
 
 #==================================================================
 

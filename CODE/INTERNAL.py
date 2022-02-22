@@ -1,38 +1,47 @@
 #==================================================================
-#INTERNAL SLADS SETUP
+#INTERNAL SETUP
 #==================================================================
 
 #AESTHETIC SETUP
 #==================================================================
 #Determine console size if applicable
-if consoleRunning and systemOS != 'Windows':
+if systemOS != 'Windows':
     consoleRows, consoleColumns = os.popen('stty size', 'r').read().split()
-elif consoleRunning and systemOS == 'Windows':
+elif systemOS == 'Windows':
     h = windll.kernel32.GetStdHandle(-12)
     csbi = create_string_buffer(22)
     res = windll.kernel32.GetConsoleScreenBufferInfo(h, csbi)
     (bufx, bufy, curx, cury, wattr, left, top, right, bottom, maxx, maxy) = struct.unpack("hhhhHhhhhhh", csbi.raw)
     consoleRows = bottom-top
     consoleColumns = right-left
-else:
-    consoleRows, consoleColumns = 40, 40
-
+    
 #INTERNAL OBJECT SETUP
 #==================================================================
+
+#DELETE ME; TEMPORARY OVERRIDE FOR TYRELL!!!
+availableGPUs = '1, 2, 3'
 
 #Limit GPU(s) if indicated
 if availableGPUs != 'None': os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
 numGPUs = len(tf.config.experimental.list_physical_devices('GPU'))
 
-#Initialize multiprocessing pool; make sure a pool isn't still running from a ctl+c exit
+#Initialize ray instance; leave 1 processor thread free if possible; make sure a ray instance isn't already running
+ray.shutdown()
 if parallelization: 
-    ray.shutdown()
-    numberCPUS = multiprocessing.cpu_count()
-    if numberCPUS>2: numberCPUS = numberCPUS-2
-    ray.init(num_cpus=numberCPUS, logging_level=logging.ERROR)
+    numberCPUS = multiprocessing.cpu_count()-1
+    if numberCPUS == 1: parallelization = False
+else: numberCPUS = 1
+ray.init(num_cpus=numberCPUS, configure_logging=True, logging_level=logging.ERROR, include_dashboard=False)
 
 #Allow partial GPU memory allocation
-for gpu in tf.config.list_physical_devices('GPU'): tf.config.experimental.set_memory_growth(gpu, True)
+gpus = tf.config.list_physical_devices('GPU')
+for gpu in gpus: tf.config.experimental.set_memory_growth(gpu, True)
+
+#If the number of gpus to be used is greater thconfigure_logging an 1, then increase the batch size accordingly for distribution
+if len(gpus)>1: batchSize*=len(gpus)
+
+#RAY REMOTE METHOD DEFINITIONS
+#==================================================================
 
 #Define deployment for trained models
 @serve.deployment(route_prefix="/ModelServer", ray_actor_options={"num_gpus": numGPUs})
@@ -45,7 +54,43 @@ class ModelServer:
 
     def __call__(self, data):
         if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': return self.model.predict(data)
-        elif self.erdModel == 'DLADS': return self.model(data, training=False)[0,:,:,0].numpy()
+        elif self.erdModel == 'DLADS': return self.model(data, training=False)[:,:,:,0].numpy()
+
+#Function to generate metadata for multiple samples
+@ray.remote
+def SampleData_parhelper(sampleFolder, initialPercToScan, stopPerc, scanMethod, ignoreMissingLines, lineRevist, simulationFlag):
+    return SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, ignoreMissingLines, lineRevist, simulationFlag)
+
+#Visualize multiple sample progression steps at once; reimport matplotlib to set backend for non-interactive visualization
+@ray.remote
+def visualize_parhelper(samples, sampleNum, sampleData, dir_avgProgression, dir_mzProgressions):
+    import matplotlib
+    import matplotlib.pyplot as plt
+    matplotlib.use('Agg')
+    return visualize_serial(samples[sampleNum], sampleData, dir_avgProgression, dir_mzProgressions)
+
+#Perform gaussianGenerator for a set of sigma values
+@ray.remote
+def gaussian_parhelper(RDPP, idxs, sigmaValues, indexes):
+    return [computeRDValue(RDPP, idxs[index], sigmaValues[index]) for index in indexes]
+
+#Run multiple sampling instances in parallel
+@ray.remote
+def runSampling_parhelper(sampleData, cValue, model, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, liveOutputFlag, dir_Results, datagenFlag, impModel, tqdmHide):
+    return runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, liveOutputFlag, dir_Results, datagenFlag, impModel, tqdmHide)
+
+#Visualize multiple sample progression steps at once; reimport matplotlib to set backend for non-interactive visualization
+@ray.remote
+def visualizeTraining_parhelper(sample, result, maskNum, trainDataFlag, valDataFlag):
+    import matplotlib
+    import matplotlib.pyplot as plt
+    from matplotlib.pyplot import figure
+    matplotlib.use('Agg')
+    return visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag)
+
+#NUMBA SETUP - METHOD PRE-COMPILATION
+#==================================================================
+_ = secondComputeRDValue(np.empty((0,0)), [0,0], 0, 0, [0])
 
 #PATH/DIRECTORY SETUP
 #==================================================================
