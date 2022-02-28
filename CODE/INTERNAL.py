@@ -18,9 +18,6 @@ elif systemOS == 'Windows':
 #INTERNAL OBJECT SETUP
 #==================================================================
 
-#DELETE ME; TEMPORARY OVERRIDE FOR TYRELL!!!
-availableGPUs = '1, 2, 3'
-
 #Limit GPU(s) if indicated
 if availableGPUs != 'None': os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
 numGPUs = len(tf.config.experimental.list_physical_devices('GPU'))
