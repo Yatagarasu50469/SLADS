@@ -38,38 +38,30 @@ if trainingModel:
     #Import any specfic training function and class definitions
     exec(open("./CODE/TRAINING.py", encoding='utf-8').read())
     
-    #If the dataset has not been generated then generate and find the best c for one, otherwise load the best c previously determined
-    if not loadTrainValDatasets:
-        
-        #Import training/validation data
-        sectionTitle('IMPORTING TRAINING/VALIDATION SAMPLES')
-        
-        #Perform import and setup for training and validation datasets
-        trainingValidationSampleData = importInitialData(trainValidationSamplePaths)
-        validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
-        trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
+    #Import training/validation data
+    sectionTitle('IMPORTING TRAINING/VALIDATION SAMPLES')
     
-        #Optimize the c value
-        sectionTitle('OPTIMIZING C VALUE')
-        optimalC = optimizeC(trainingValidationSampleData)
-        
-        #Generate a training database for the optimal c value and training samples
-        sectionTitle('GENERATING TRAINING/VALIDATION DATASETS')
-        trainingDatabase, validationDatabase = generateDatabases(trainingValidationSampleData, optimalC)
-        
-    else:
-        trainingValidationSampleData = pickle.load(open(dir_TrainingResults + 'trainingValidationSampleData.p', "rb" ))
-        validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
-        trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
-        optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
-        trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase.p', "rb" ))
-        validationDatabase = pickle.load(open(dir_TrainingResults + 'validationDatabase.p', "rb" ))
+    #Perform import and setup for training and validation datasets
+    trainingValidationSampleData = importInitialData(trainValidationSamplePaths)
+    validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
+    trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
+
+    #Optimize the c value
+    sectionTitle('OPTIMIZING C VALUE')
+    optimalC = optimizeC(trainingValidationSampleData)
+    
+    #Generate a training database for the optimal c value and training samples
+    sectionTitle('GENERATING TRAINING/VALIDATION DATASETS')
+    trainingDatabase, validationDatabase = generateDatabases(trainingValidationSampleData, optimalC)
 
     #Train model(s) for the given database and c value
     sectionTitle('PERFORMING TRAINING')
-    trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, optimalC)
+    modelName += 'c_' + str(optimalC)
+    trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, modelName)
+    
 else: 
     optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
+    modelName += 'c_' + str(optimalC)
 
 #If needed import any specific testing function and class definitions
 if validationModel or testingModel: exec(open("./CODE/SIMULATION.py", encoding='utf-8').read())
@@ -87,7 +79,7 @@ if validationModel:
     validationSamplePaths = [sampleData.sampleFolder for sampleData in validationSampleData]
     
     #Perform simulations
-    simulateSLADS(validationSamplePaths, dir_ValidationResults, optimalC)
+    simulateSLADS(validationSamplePaths, dir_ValidationResults, optimalC, modelName)
 
 #If a model needs to be tested
 if testingModel:
@@ -97,7 +89,7 @@ if testingModel:
     testSamplePaths = natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False)
     
     #Perform simulations
-    simulateSLADS(testSamplePaths, dir_TestingResults, optimalC)
+    simulateSLADS(testSamplePaths, dir_TestingResults, optimalC, modelName)
 
 #If a model is to be used in an implementation
 if impModel:
@@ -107,7 +99,20 @@ if impModel:
     exec(open("./CODE/EXPERIMENTAL.py", encoding='utf-8').read())
 
     #Begin performing an implementation
-    performImplementation(optimalC)
+    performImplementation(optimalC, modelName)
+
+#If post-processing is to be performed
+if postModel:
+    sectionTitle('POST-PROCESSING SAMPLES')
+
+    #Obtain the file paths for the intended data
+    postSamplePaths = natsort.natsorted(glob.glob(dir_PostData + '/*'), reverse=False)
+
+    #Import any specific implementation function and class definitions
+    exec(open("./CODE/POSTPROCESS.py", encoding='utf-8').read())
+
+    #Begin performing an implementation
+    postprocess(postSamplePaths, optimalC, modelName)
 
 #Copy the results folder and the config file into it
 resultCopy = shutil.copytree('./RESULTS', destResultsFolder)

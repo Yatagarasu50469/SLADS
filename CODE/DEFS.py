@@ -4,16 +4,19 @@
 
 #Object for initializing and storing sample metadata
 class SampleData:
-    def __init__(self, sampleFolder, initialPercToScan, stopPerc, scanMethod, ignoreMissingLines, lineRevist, simulationFlag):
+    def __init__(self, sampleFolder, initialPercToScan, stopPerc, scanMethod, lineRevist, postFlag):
         
         #Save options as internal variables
         self.scanMethod = scanMethod
         self.initialPercToScan = initialPercToScan
         self.stopPerc = stopPerc
-        self.ignoreMissingLines = ignoreMissingLines
         self.lineRevist = lineRevist
-        self.simulationFlag = simulationFlag
+        self.postFlag = postFlag
         self.lineExt = None
+        self.mask=None
+        
+        #Set global variables to indicate that OOM error states have not yet occurred; limited handle for ERD inferencing limitations
+        self.OOM_multipleChannels, self.OOM_singleChannel = False, False
         
         #Store location of MSI data and sample name
         self.sampleFolder = sampleFolder
@@ -62,11 +65,20 @@ class SampleData:
         fileNumbering = int(sampleInfo[lineIndex].rstrip())
         lineIndex += 1
 
-        #Process the read information as needed for regular use cases
+        #Check if the sample is fully acquired for simulation, or partially (for/from implementation)
+        self.simulationFlag = int(sampleInfo[lineIndex].rstrip()) == 1
+        lineIndex += 1
+
+        #Process the read information as needed
+        self.ignoreMissingLines = self.simulationFlag
         self.ppmPos, self.ppmNeg = 1+self.ppm, 1-self.ppm
         if fileNumbering==0: self.unorderedNames = False
         elif fileNumbering==1: self.unorderedNames = True
         else: sys.exit('Error - File Numbering parameter used in sampleInfo is not an acceptable value.')
+
+        #If the filenames were sequentially generated, then load location mapping dictionary
+        if self.unorderedNames: 
+            for item in np.loadtxt(sampleFolder+os.path.sep+'physicalLineNums.csv', 'int', delimiter=','): self.physicalLineNums[item[0]] = item[1]
 
         #Get mz ranges to use for visualizations
         try: self.mzValues = np.loadtxt(self.sampleFolder+os.path.sep+'mz.csv', delimiter=',')
@@ -90,24 +102,27 @@ class SampleData:
                 self.finalDim[0] -= len(self.missingLines)
             else: self.missingLines = np.asarray([])
         
-        #Establish the total sample area; for determination of percMeasured
-        self.area = int(round(self.finalDim[0]*self.finalDim[1]))
-        
-        #Setup objects for storing raw MSI data
-        self.newTimes = np.linspace(0, ((self.sampleWidth*1e3)/self.scanRate)/60, self.finalDim[1])
-        self.mzImages = np.zeros((len(self.mzRanges), self.finalDim[0], self.finalDim[1]))
-        self.TIC = np.zeros((self.finalDim))
-        
         #Determine image dimensions that will produce square pixels (consistent vertical/horizontal resolution)
         if(self.finalDim[1]/self.sampleWidth) > (self.finalDim[0]/self.sampleHeight): self.squareDim = [int(round((self.finalDim[1]*self.sampleHeight)/self.sampleWidth)), self.finalDim[1]]
         elif (self.finalDim[1]/self.sampleWidth) < (self.finalDim[0]/self.sampleHeight): self.squareDim = [self.finalDim[0], int(round((self.finalDim[0]*self.sampleWidth)/self.sampleHeight))]
         else: self.squareDim = self.finalDim
-            
-        #Setup initial sets immediately
-        self.generateInitialSets(self.scanMethod)
         
-        #If a simulation, then just read all the data outright
-        if self.simulationFlag: self.readScanData()
+        #Establish the total sample area; for determination of percMeasured
+        self.area = int(round(self.finalDim[0]*self.finalDim[1]))
+        
+        #Setup objects for storing MSI data
+        self.newTimes = np.linspace(0, ((self.sampleWidth*1e3)/self.scanRate)/60, self.finalDim[1])
+        self.mzImages = np.zeros((len(self.mzRanges), self.finalDim[0], self.finalDim[1]))
+        self.TIC = np.zeros((self.finalDim))
+        
+        #If not just post-processing, setup initial sets
+        if not self.postFlag: self.generateInitialSets(self.scanMethod)
+        else:
+            try: self.mask = np.loadtxt(self.sampleFolder+os.path.sep+'measuredMask.csv', 'int', delimiter=',') 
+            except: sys.exit('Error - Unable to load measurement mask for sample: ' + self.name)
+            
+        #If a simulation or post-processing, then just read all the data outright
+        if self.simulationFlag or self.postFlag: self.readScanData()
         
     #Generate initial scanning mask; allows changing the scan method without rescanning all of the data
     def generateInitialSets(self, scanMethod):
@@ -151,8 +166,8 @@ class SampleData:
             #Add positions to initial list
             self.initialSets.append(newIdxs)
     
-    def readScanData(self, mask=None):
-    
+    def readScanData(self):
+        
         #Get the MSI file extension automatically if it isn't already known
         if self.lineExt == None:
             extensions = list(map(lambda x:x, np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
@@ -166,47 +181,57 @@ class SampleData:
         scanFiles = natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'+self.lineExt), reverse=False)
         
         #Identify which files have not yet been scanned, if line revisiting is disabled (update not replace)
-        if self.lineRevist == False: scanFiles = list(set(scanFiles)-set(self.readScanFiles))
+        if self.lineRevist == False: scanFiles = natsort.natsorted(list(set(scanFiles)-set(self.readScanFiles)), reverse=False)
         
-        #For each of the MSI files identified
-        for scanFileName in scanFiles:
+        #Read in specified mz ranges for each of the MSI files, interpolating to new times
+        if parallelization:
+            dataResults = ray.get([scanData_parhelper.remote(self, scanFileName) for scanFileName in scanFiles])
+            for result in dataResults: 
+                if result != None:
+                    for mzRangeNum in range(0, len(self.mzRanges)): self.mzImages[mzRangeNum, result[0], :] = result[1][mzRangeNum]
+                    self.TIC[result[0]] = result[2]
+                    self.readLines.append(result[0])
+            for scanFileName in scanFiles: self.readScanFiles.append(scanFileName) 
+        else:
+            for scanFileName in scanFiles:
 
-            #Establish file pointer and line number (1 indexed) for the specific scan; flag indicates 'good'/'bad' data file (primarily checking for files without data)
-            readErrorFlag = False
-            try: data = mzFile(scanFileName)
-            except: readErrorFlag = True
-            
-            #If the data file is 'good' then continue processing
-            if not readErrorFlag:
-            
-                #Add file name to those already scanned
-                self.readScanFiles.append(scanFileName)
+                #Establish file pointer and line number (1 indexed) for the specific scan; flag indicates 'good'/'bad' data file (primarily checking for files without data)
+                readErrorFlag = False
+                try: data = mzFile(scanFileName)
+                except: readErrorFlag = True
                 
-                #Extract line number from the filename, removing leading zeros, subtract 1 for zero indexing
-                lineNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
+                #If the data file is 'good' then continue processing
+                if not readErrorFlag:
                 
-                #If the line numbers are not the physical row numbers, then obtain correct number from stored LUT
-                if self.unorderedNames and impModel and scanMethod == 'linewise': lineNum = self.physicalLineNums[lineNum+1]
-                
-                #Record that the line number specified has been read previously
-                self.readLines.append(lineNum)
-                
-                #If ignoring missing lines, then determine the offset for correct indexing
-                if self.ignoreMissingLines and len(self.missingLines) > 0: lineNum -= int(np.sum(lineNum > self.missingLines))
-                
-                #Obtain the total ion chromatogram and extract original times
-                ticData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
-                origTimes, TICData = ticData[:,0], ticData[:,1]
-                
-                #If the data is being sparesly acquired, then the listed times in the file need to be shifted; convert np.float to float for method compatability
-                if impModel and impOffset and scanMethod == 'linewise' and lineMethod == 'segLine': origTimes += (np.argwhere(mask[lineNum]==1).min()/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
-                elif impModel and impOffset: sys.exit('Error - Using implementation mode with an offset but not segmented-linewise operation is not a supported configuration.')
-                         
-                #Read in specified mz ranges, interpolating to new times; convert np.float to float for method compatability
-                for mzRangeNum in range(0, len(self.mzRanges)): self.mzImages[mzRangeNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(self.mzRanges[mzRangeNum][0]), float(self.mzRanges[mzRangeNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0)
-                
-                #Interpolate TIC to final new times
-                self.TIC[lineNum] = np.interp(self.newTimes, origTimes, TICData) 
+                    #Add file name to those already scanned
+                    self.readScanFiles.append(scanFileName)
+                    
+                    #Extract line number from the filename, removing leading zeros, subtract 1 for zero indexing
+                    lineNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
+                    
+                    #If the line numbers are not the physical row numbers, then obtain correct number from stored LUT
+                    if (impModel or postModel) and self.unorderedNames: lineNum = self.physicalLineNums[lineNum+1]
+                    
+                    #Record that the line number specified has been read previously
+                    self.readLines.append(lineNum)
+                    
+                    #If ignoring missing lines, then determine the offset for correct indexing
+                    if self.ignoreMissingLines and len(self.missingLines) > 0: lineNum -= int(np.sum(lineNum > self.missingLines))
+                    
+                    #Obtain the total ion chromatogram and extract original times
+                    ticData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
+                    origTimes, TICData = ticData[:,0], ticData[:,1]
+                    
+                    #If the data is being sparesly acquired, then the listed times in the file need to be shifted; convert np.float to float for method compatability
+                    #For impOffset compatability with percent-linewise or pointwise: np.argwhere(mask[lineNum]==1).min() must be improved...
+                    #Where physicalLineNums is updated, add another dictionary of physicalColumnNums mapping number in filename to time offset
+                    #Remember to make modifications to corresponding parhelper method
+                    if (impModel or postModel) and impOffset and scanMethod == 'linewise' and lineMethod == 'segLine': origTimes += (np.argwhere(self.mask[lineNum]==1).min()/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
+                    elif (impModel or postModel) and impOffset: sys.exit('Error - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
+                    for mzRangeNum in range(0, len(self.mzRanges)): self.mzImages[mzRangeNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(self.mzRanges[mzRangeNum][0]), float(self.mzRanges[mzRangeNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0).astype('float32')
+                    
+                    #Interpolate TIC to final new times
+                    self.TIC[lineNum] = np.interp(self.newTimes, origTimes, TICData).astype('float32')
         
         #Find the maximum value in each mz image for easy referencing
         self.mzImagesMax = np.max(self.mzImages, axis=(1,2))
@@ -232,13 +257,15 @@ class Sample:
         self.percMeasured = 0
         self.iteration = 0
         
+        #If post-processing, link to the sampled mask
+        if sampleData.postFlag: self.mask = sampleData.mask
+        
     def performMeasurements(self, sampleData, result, newIdxs, model, cValue, bestCFlag, oracleFlag, datagenFlag, fromRecon):
 
-        #Ensure newIdxs are indexible in 2 dimensions
-        newIdxs = np.atleast_2d(newIdxs)
-        
-        #Update mask of measured locations
-        self.mask[newIdxs[:,0], newIdxs[:,1]] = 1
+        #Ensure newIdxs are indexible in 2 dimensions and update mask; post-processing will send empty set
+        if not sampleData.postFlag:
+            newIdxs = np.atleast_2d(newIdxs)
+            self.mask[newIdxs[:,0], newIdxs[:,1]] = 1
         
         #Update which positions have not yet been measured
         self.unMeasuredIdxs = np.transpose(np.where(self.mask==0))
@@ -246,15 +273,17 @@ class Sample:
         #If not taking values from a reconstruction, get from equipment or ground-truth; else get from the reconstruction
         if not fromRecon:
             #If not simulation, then read from equipment; mask images by what should have been scanned
-            if not sampleData.simulationFlag:
+            if not sampleData.simulationFlag and not sampleData.postFlag:
                 print('Writing UNLOCK')
                 with open(dir_ImpDataFinal + 'UNLOCK', 'w') as filehandle: _ = [filehandle.writelines(str(tuple([pos[0]+1, (pos[1]*sampleData.scanRate)/sampleData.acqRate]))+'\n') for pos in newIdxs.tolist()]
                 if sampleData.unorderedNames and impModel and scanMethod == 'linewise': sampleData.physicalLineNums[len(sampleData.physicalLineNums.keys())+1] = int(newIdxs[0][0])
                 equipWait()
                 sampleData.readScanData(self.mask)
             self.mzImages = copy.deepcopy(sampleData.mzImages)*self.mask
+            #self.TIC = copy.deepcopy(sampleData.TIC)*self.mask
         else:
             self.mzImages[:, newIdxs[:,0], newIdxs[:,1]] = self.mzReconImages[:, newIdxs[:,0], newIdxs[:,1]]
+            #self.TIC[:, newIdxs[:,0], newIdxs[:,1]] = self.TICReconImage[newIdxs[:,0], newIdxs[:,1]]
         
         #Update the average image
         self.mzAvgImage = np.mean(self.mzImages, axis=0)
@@ -344,7 +373,7 @@ class Result:
         self.dir_Results = dir_Results
         self.computeRDTimes, self.computeERDTimes = [], []
         
-        if animationGen and dir_Results != None:
+        if dir_Results != None:
 
             #Setup/clean base sample directory
             self.dir_sampleResults = self.dir_Results + self.sampleData.name + os.path.sep
@@ -360,8 +389,9 @@ class Result:
                 except: print('Folder already exists')
             self.dir_avgProgression = self.dir_sampleResults + 'Average' + os.path.sep
             os.makedirs(self.dir_avgProgression)
-            self.dir_videos= self.dir_sampleResults + 'Videos' + os.path.sep
-            os.makedirs(self.dir_videos)
+            if not self.sampleData.postFlag:
+                self.dir_videos= self.dir_sampleResults + 'Videos' + os.path.sep
+                os.makedirs(self.dir_videos)
         
     def update(self, sample):
     
@@ -409,12 +439,12 @@ class Result:
         sample.ERDPSNR = compare_psnr(sample.squareRD, sample.squareERD, data_range=maxRangeValue)
         sample.ERDSSIM = compare_ssim(sample.squareRD, sample.squareERD, data_range=maxRangeValue)
         
-        #Resize E/RD(s) for final visualization
+        #Resize RD(s) for final visualization
         sample.RD = resize(sample.squareRD, tuple(self.sampleData.finalDim), order=0)*(1-sample.mask)
-        sample.ERD = resize(sample.squareERD, tuple(self.sampleData.finalDim), order=0)*(1-sample.mask)
         sample.RDs = np.moveaxis(resize(np.moveaxis(sample.squareRDs , 0, -1), tuple(self.sampleData.finalDim), order=0), -1, 0)*(1-sample.mask)
+        sample.ERD = resize(sample.squareERD, tuple(self.sampleData.finalDim), order=0)*(1-sample.mask)
         sample.ERDs = np.moveaxis(resize(np.moveaxis(sample.squareERDs , 0, -1), tuple(self.sampleData.finalDim), order=0), -1, 0)*(1-sample.mask)
-    
+        
     #Generate visualiations/metrics as needed at the end of scanning
     def complete(self):
         
@@ -427,7 +457,7 @@ class Result:
         #Save a copy of the final measurement mask
         np.savetxt(self.dir_sampleResults+'measuredMask.csv', self.samples[-1].mask, delimiter=',', fmt='%d')
         
-        #If this is a simulation, then can compare against ground-truth information
+        #If this is a simulation, then can compare against ground-truth information, otherwise resize ERD(s) for final visualization
         if self.sampleData.simulationFlag:
             
             #If not done during acquisiton, then for each of the measurement steps find PSNR/SSIM of reconstructions, compute the RD, find PSNR of ERD
@@ -440,20 +470,22 @@ class Result:
             self.mzAvgSSIMList = [np.mean(sample.mzImageSSIMList) for sample in self.samples]
             self.avgSSIMList = [sample.avgmzImageSSIM for sample in self.samples]
             self.ERDSSIMList = [sample.ERDSSIM for sample in self.samples]
+        else:         
+            for sample in self.samples:
+                sample.ERD = resize(sample.squareERD, tuple(self.sampleData.finalDim), order=0)*(1-sample.mask)
+                sample.ERDs = np.moveaxis(resize(np.moveaxis(sample.squareERDs , 0, -1), tuple(self.sampleData.finalDim), order=0), -1, 0)*(1-sample.mask)
         
-        #If an animation will be produced and the run has completed
-        if animationGen:
+        #Generate visualizations if they are not created during operation
+        if not self.liveOutputFlag:
+            if parallelization:
+                samples_id, sampleData_id = ray.put(self.samples), ray.put(self.sampleData)
+                _ = ray.get([visualize_parhelper.remote(samples_id, sampleData_id, self.dir_avgProgression, self.dir_mzProgressions, indexes) for indexes in np.array_split(np.arange(0, len(self.samples)), numberCPUS)])
+            else:
+                _ = [visualize_serial(sample, self.sampleData, self.dir_avgProgression, self.dir_mzProgressions) for sample in tqdm(self.samples, desc='Steps', leave=False, ascii=True)]
+        
+        #Combine progression images into animations
+        if not self.sampleData.postFlag:
             
-            #Generate visualizations if they are not created during operation
-            if not self.liveOutputFlag:
-                if parallelization:
-                    samples_id, sampleData_id = ray.put(self.samples), ray.put(self.sampleData)
-                    futures = [visualize_parhelper.remote(samples_id, sampleNum, sampleData_id, self.dir_avgProgression, self.dir_mzProgressions) for sampleNum in range(0, len(self.samples))]
-                    _ = ray.get(futures)
-                else:
-                    _ = [visualize_serial(sample, self.sampleData, self.dir_avgProgression, self.dir_mzProgressions) for sample in tqdm(self.samples, desc='Steps', leave=False, ascii=True)]
-            
-            #Combine mz images into animations
             for mzNum in tqdm(range(0, len(self.sampleData.mzRanges)), desc='mz Videos', leave = False, ascii=True): 
                 dataFileNames = natsort.natsorted(glob.glob(self.dir_mzProgressions[mzNum] + 'progression_*.png'))
                 height, width, layers = cv2.imread(dataFileNames[0]).shape
@@ -462,7 +494,6 @@ class Result:
                 animation.release()
                 animation = None
 
-            #Combine average images into animation
             dataFileNames = natsort.natsorted(glob.glob(self.dir_avgProgression + 'progression_*.png'))
             height, width, layers = cv2.imread(dataFileNames[0]).shape
             animation = cv2.VideoWriter(self.dir_videos + 'average.avi', cv2.VideoWriter_fourcc(*'MJPG'), 1, (width, height))
@@ -691,7 +722,7 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions)
     plt.close()
     
     if sampleData.simulationFlag:
-        saveLocation = dir_avgProgression + 'RD_iter_' + str(sample.iteration) + 'perc_' + str(sample.percMeasured) + '.png'
+        saveLocation = dir_avgProgression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
         fig=plt.figure()
         ax=fig.add_subplot(1,1,1)
         plt.axis('off')
@@ -915,7 +946,8 @@ def computePolyFeatures(sampleData, reconImage, squareMeasuredIdxs, squareUnMeas
 
 #Prepare data for DLADS model input
 def prepareInput(sample, mzChannel):
-    return np.dstack((sample.squareMask, sample.squaremzReconImages[mzChannel]*(1-sample.squareMask), sample.squaremzReconImages[mzChannel]*sample.squareMask))
+    if erdModel == 'DLADS': return np.dstack((sample.squareMask, sample.squaremzReconImages[mzChannel]*(1-sample.squareMask), sample.squaremzReconImages[mzChannel]*sample.squareMask))
+    elif erdModel == 'GLANDS': return np.dstack((sample.squareMask, sample.squaremzReconImages[mzChannel]*sample.squareMask))
 
 #Determine the Estimated Reduction in Distortion
 def computeERD(sample, sampleData, model, squareUnMeasuredIdxs, squareMeasuredIdxs):
@@ -924,12 +956,32 @@ def computeERD(sample, sampleData, model, squareUnMeasuredIdxs, squareMeasuredId
     if not mzSingle:
         if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
             for mzNum in range(0, len(sample.squareERDs)): sample.squareERDs[mzNum, squareUnMeasuredIdxs[:, 0], squareUnMeasuredIdxs[:, 1]] = ray.get(model.remote(sample.polyFeatures[mzNum]))
-        elif erdModel == 'DLADS': sample.squareERDs = ray.get(model.remote(makeCompatible([prepareInput(sample, mzNum) for mzNum in range(0, len(sample.squareERDs))]))).copy()
+        elif erdModel == 'DLADS': 
+        
+            #First try inferencing all m/z channels at the same time 
+            if not sampleData.OOM_multipleChannels:
+                try: sample.squareERDs = ray.get(model.remote(makeCompatible([prepareInput(sample, mzNum) for mzNum in range(0, len(sample.squareERDs))]))).copy()
+                except: 
+                    sampleData.OOM_multipleChannels = True
+                    if (len(availableGPUs) > 0): print('Warning - Could not inference ERD for all channels of sample '+sampleData.name+' simultaneously on system GPU; will try processing channels iteratively.')
+                    if (len(availableGPUs) == 0): print('Warning - Could not inference ERD for all channels of sample '+sampleData.name+' simultaneously on system; will try processing channels iteratively.')
+            
+            #If multiple channels causes an OOM, then try running each channel through on its own
+            if sampleData.OOM_multipleChannels and not sampleData.OOM_singleChannel:
+                try: sample.squareERDs = np.asarray([ray.get(model.remote(makeCompatible(prepareInput(sample, mzNum))))[0,:,:].copy() for mzNum in range(0, len(sample.squareERDs))])
+                except: sampleData.OOM_singleChannel = True
+            
+            #If an OOM occured for both mutiple and single channel inferencing, then exit; need to either restart program with no GPUs, or there isn't enough system RAM
+            if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(availableGPUs) > 0): sys.exit('Error - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on system GPU; please try disabling the GPU in the CONFIG.')
+            if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(availableGPUs) == 0): sys.exit('Error - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on this system by the loaded model.')
+            
     else:
         if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
             ERDValues = ray.get(model.remote(sample.polyFeatures[0]))
             for mzNum in range(0, len(sample.squareERDs)): sample.squareERDs[mzNum, squareUnMeasuredIdxs[:, 0], squareUnMeasuredIdxs[:, 1]] = ERDValues
-        elif erdModel == 'DLADS': sample.squareERDs = ray.get(model.remote(makeCompatible([prepareInput(sample, 0) for mzNum in range(0, len(sample.squareERDs))]))).copy()
+        elif erdModel == 'DLADS': 
+            sample.squareERDs[0] = ray.get(model.remote(makeCompatible(prepareInput(sample, 0))))[0,:,:].copy()
+            for mzNum in range(1, len(sample.squareERDs)): sample.squareERDs[mzNum] = sample.squareERDs[0]
     
     #Remove any negative values, measured locations, nan, or inf values
     sample.squareERDs[sample.squareERDs<0] = 0

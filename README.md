@@ -1,5 +1,5 @@
 
-     ▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄ 
+      ▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄ 
 	▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌
 	▐░█▀▀▀▀▀▀▀▀▀ ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ 
 	▐░▌          ▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌          
@@ -15,7 +15,7 @@
 
 
     NAME: 		SLADS
-    VERSION NUM:	0.9.0
+    VERSION NUM:	0.9.1
     LICENSE:    	GNU General Public License v3.0
     DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
 			for Dynamic Sampling with additional constraint to select groups of 
@@ -64,6 +64,7 @@
                     0.8.8   Interpolation limits, static graph, parallel inferencing, ray deployment, test of FAISS
                     0.8.9   Simplification
                     0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
+                    0.9.1   Parallel sample loading, unique model names, post-processing mode
                     ~0.+.+  Custom adversarial network, Multimodal integration
                     ~1.0.0  Initial release
 
@@ -102,27 +103,48 @@
     	|	|------->TEST
     	|	|	|------->TEST_SAMPLE_1
     	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->mz.csv
     	|	|	|	|------->sampleName-line-0001.RAW
     	|	|	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->...
     	|	|	|------->TEST_SAMPLE_2
     	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->mz.csv
     	|	|	|	|------->sampleName-line-0001.RAW
     	|	|	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->...
     	|	|------->TRAIN
     	|	|	|------->TRAIN_SAMPLE_1
     	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->mz.csv
     	|	|	|	|------->sampleName-line-0001.RAW
     	|	|	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->...
-    	|	|	|------->TEST_SAMPLE_2
+    	|	|	|------->TRAIN_SAMPLE_2
     	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->mz.csv
+    	|	|	|	|------->sampleName-line-0001.RAW
+    	|	|	|	|------->sampleName-line-0002.RAW
+    	|	|	|	|------->...
+    	|	|------->POST
+    	|	|	|------->POST_SIMULATION_SAMPLE_1
+    	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->mz.csv
+    	|	|	|	|------->measuredMask.csv
+    	|	|	|	|------->sampleName-line-0001.RAW
+    	|	|	|	|------->sampleName-line-0002.RAW
+    	|	|	|	|------->...
+    	|	|	|------->POST_EXPERIMENTAL_SAMPLE_2
+    	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->mz.csv
+    	|	|	|	|------->measuredMask.csv
+    	|	|	|	|------->physicalLineNums.csv
     	|	|	|	|------->sampleName-line-0001.RAW
     	|	|	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->...
     	|	|------->IMP
     	|	|	|------->sampleInfo.txt
+    	|	|	|------->mz.csv
     	|	|	|------->physicalLineNums.csv
     	|	|	|------->sampleName-line-0001.RAW
     	|	|	|------->sampleName-line-0002.RAW
@@ -133,21 +155,32 @@
     	|------->RESULTS
     	|	|------->IMP
     	|	|	|-------IMP_SAMPLE_1
-    	|	|	|	|------->Average
+    	|	|	|	|------->TIC
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
     	|	|	|	|------->physicalLineNums.csv
+    	|	|------->POST
+    	|	|	|-------POST_SIMULATION_SAMPLE_1
+    	|	|	|	|------->TIC
+    	|	|	|	|------->mz
+    	|	|	|	|------->Videos
+    	|	|	|	|------->measuredMask.csv
+    	|	|	|-------POST_EXPERIMENTAL_SAMPLE_2
+    	|	|	|	|------->TIC
+    	|	|	|	|------->mz
+    	|	|	|	|------->Videos
+    	|	|	|	|------->measuredMask.csv
     	|	|------->TEST
     	|	|	|-------dataPrintout.csv
     	|	|	|-------PSNR and SSIM Results (.csv and .png)
     	|	|	|-------TEST_SAMPLE_1
-    	|	|	|	|------->Average
+    	|	|	|	|------->TIC
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
     	|	|	|-------TEST_SAMPLE_2
-    	|	|	|	|------->Average
+    	|	|	|	|------->TIC
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
@@ -155,12 +188,12 @@
     	|	|	|-------dataPrintout.csv
     	|	|	|-------PSNR and SSIM Results (.csv and .png)
     	|	|	|-------VALIDATION_SAMPLE_1
-    	|	|	|	|------->Average
+    	|	|	|	|------->TIC
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
     	|	|	|-------VALIDATION_SAMPLE_2
-    	|	|	|	|------->Average
+    	|	|	|	|------->TIC
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
@@ -175,7 +208,6 @@
     	|	|	|------->trainingDatabase.npy
     	|	|	|------->trainingSamples.npy
     	|	|	|------->model_cValue_
-
 
 # INSTALLATION
 This implementation of SLADS is generally only functional within Windows 10, given a reliance on vendor provided .dll's, as utilized by the multiplierz package. The package versions do not necessarily need to match with those listed. However, should the program produce unexpected errors, installing a specific version of a package might be able to resolve the issue. Note that the multiplierz pacakage, must be installed from the provided link under the installation commands.
@@ -202,7 +234,7 @@ This implementation of SLADS is generally only functional within Windows 10, giv
 		pandas		1.3.5
 		Pillow		9.0.0
 		psutil		5.9.0
-		ray		1.9.2
+		ray		1.11.0
 		scikit-image	0.19.1
 		scikit-learn	0.23.2                 
 		scipy		1.7.3
@@ -213,11 +245,18 @@ This implementation of SLADS is generally only functional within Windows 10, giv
 		tensorflow	2.8.0
 		tqdm		4.62.3
 
-### **Installation on Windows 10**
+### **Installation on Windows 10 and 11**
 
 If GPU acceleration is to be used, a compatible CUDA Toolkit and cuDNN must be installed on the system. Installation instructions may be found through NVIDIA: https://docs.nvidia.com/deeplearning/cudnn/install-guide/
 
-Install Visual Studio Community 2019, with the additional options: "Desktop development with C++" and "Python development":  https://visualstudio.microsoft.com/downloads/
+First enable ".Net Framework 3.5 (includes .NET 2.0 and 3.0)" under "Windows Features" (search for in the Windows Start Menu)
+
+Then install 2019 Visual Studio Build Tools, checking boxes for "Desktop development with C++" and "Universal Windows Platform development": https://visualstudio.microsoft.com/vs/older-downloads/
+
+Next install Visual Studio Community 2019, with the additional options: "Desktop development with C++" , "Universal Windows Platform development", and "Python development"
+
+Any version more recent than 2019 will not be able to compile dependencies for reading MSI files with "multiplierz" package. 
+
 Also install the "Build Tools for Visual Studio 2019", under "All downloads"/"Tools for Visual Studio 2019"
 
 Install Python 3.8.0+: choosing to install with advanced options, selecting to install for all users, and add python to environment variables
@@ -230,12 +269,15 @@ Note that the actual location of the specified file may vary depending on potent
 	$ SET DISTUTILS_USE_SDK=1
 	$ "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
 
-Navigate inside the command prompt to the SLADS base directory then enter the following commands:
+Open a new command prompt (critically, not as an administrator!) and enter the following commands:
 
 	$ python -m pip install --upgrade pip
 	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tensorflow-addons tqdm opencv-python pydot graphviz aiorwlock
 	$ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
-	$ python -c 'from multiplierz.mzAPI.management import registerInterfaces; registerInterfaces()'
+	
+Either switch back to, or open a new command prompt as an administrator and enter the following command:
+	
+	$ python -c "from multiplierz.mzAPI.management import registerInterfaces; registerInterfaces()"
 
 If the final printout indicates actions relating to the MSI file format intended for use, then follow through as neccessary. 
 
@@ -277,6 +319,8 @@ One file must be included in each of the sample folders (specifically within the
 		Number of decimal places used when considering spectrum locations/values
 	- Sequential filenames (1 indicates sequential, 0 for physical row location)
 		Indicates whether the filename line numbers going to be labeled sequentially rather than by physical row number
+	- Data Completeness (1 for fully acquired, 0 for partially acquired)
+		Indicates whether the MSI files contain all of the sample data, or only some of it, as produced during implementation
 
 Each piece of information should be on its own line without additional description, as shown in the EXAMPLE sample directory. 
 
@@ -294,7 +338,7 @@ After configuration, to run the program perform the following command in the roo
 	$ python ./SLADS
 
 ###  **RESULTS**
-All results will be placed in ./RESULTS/ (in the case of testing, at the conclusion of a sample's scan) as follows:
+All results will be placed in ./RESULTS/ as follows:
 
 	TRAIN: Training results
 		optimalC.npy: Determined optimal c value determined in training
@@ -307,7 +351,7 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 		model_cValue_: Trained model corresponding to the indicated c value (.npy for SLADS-LS and SLADS-Net)
 
 	TEST: Testing results
-		TEST_SAMPLE_1: Folder of frames for a sample's scan
+		TEST_SAMPLE_1
 			Average: Individual and overall images of the progressive scanning for averaged m/z
 			mz: Individual and overall images of the progressive scanning for each specified m/z
 			Videos: Videos of final scan progression
@@ -321,7 +365,14 @@ All results will be placed in ./RESULTS/ (in the case of testing, at the conclus
 		mzAvgSSIM_Percentage.csv(.png) Progressive averaged SSIM for reconstructions of all m/z
 
 	VALIDATION: Validation results
-		Note: Identical structure to TEST
+		Identical structure to TEST
+		
+	POST: Post-Processing results
+		POST_EXPERIMENTAL_SAMPLE_2
+			Average: Individual and overall images of the progressive scanning for averaged m/z
+			mz: Individual and overall images of the progressive scanning for each specified m/z
+			physicalLineNums.csv: Mapping from sequential filename numbering to physical row number
+			measuredMask.csv: Final measurement mask; 1 for measured, 0 for unmeasured
 
 In the case that multiple configuration files are provided in the form of: CONFIG_*descriptor*.py, the RESULTS folder will be duplicated with the same suffix for ease of testing. Configuration file will be copied into the results directory at the termination of the program. 
 
@@ -365,7 +416,7 @@ While it does not currently function for some MSI formats, (verified operational
 	$ sudo apt-get install -y mono-devel
 	$ pip3 install git+https://github.com/pythonnet/pythonnet.git@master
 	$ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
-	$ python -c 'from multiplierz.mzAPI.management import registerInterfaces; registerInterfaces()'
+	$ python -c "from multiplierz.mzAPI.management import registerInterfaces; registerInterfaces()"
 
 The last line may produce a warning that module 'ctypes' has no attribute 'windll'; this should be safe to ignore for use with XCalibur .RAW files. 
 
@@ -394,7 +445,10 @@ Some common outputs that can safely be ignored are produced from Ray during mode
 	$ core_worker_process.cc:348: The global worker has already been shutdown. This happens when the language frontend accesses the Ray's worker after it is shutdown. The process will exit
 	$ INFO deployment_state.py:940 -- Removing 1 replicas from deployment 'ModelServer'. component=serve deployment=ModelServer
 	
-	
+###  **Cannot load Agilent .d files, when running on Windows**
+
+Previous install guides had the multiplierz package installed with pip3 as an administrator, which causes issues when running the program as a non-administrator. As an administrator, uninstall multiplierz (pip3 uninstall multiplierz), then install as per the updated instructions. Note that following the installation, the registerInterfaces command still needs to be performed as an administrator.
+
 
 
 

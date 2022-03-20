@@ -44,27 +44,57 @@ if len(gpus)>1: batchSize*=len(gpus)
 @serve.deployment(route_prefix="/ModelServer", ray_actor_options={"num_gpus": numGPUs})
 class ModelServer:
 
-    def __init__(self, erdModel, model_path):
+    def __init__(self, erdModel, modelPath):
         self.erdModel = erdModel
-        if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': self.model = np.load(model_path, allow_pickle=True).item()
-        elif self.erdModel == 'DLADS': self.model = tf.function(tf.keras.models.load_model(model_path, compile=False), experimental_relax_shapes=True)
+        if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': self.model = np.load(modelPath+'.npy', allow_pickle=True).item()
+        elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': self.model = tf.function(tf.keras.models.load_model(modelPath, compile=False), experimental_relax_shapes=True)
 
     def __call__(self, data):
         if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': return self.model.predict(data)
-        elif self.erdModel == 'DLADS': return self.model(data, training=False)[:,:,:,0].numpy()
+        elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': return self.model(data, training=False)[:,:,:,0].numpy()
 
-#Function to generate metadata for multiple samples
+#Load m/z and TIC data from a specified MSI file
 @ray.remote
-def SampleData_parhelper(sampleFolder, initialPercToScan, stopPerc, scanMethod, ignoreMissingLines, lineRevist, simulationFlag):
-    return SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, ignoreMissingLines, lineRevist, simulationFlag)
+def scanData_parhelper(sampleData, scanFileName):
+
+    #Establish file pointer and line number (1 indexed) for the specific scan; flag indicates 'good'/'bad' data file (primarily checking for files without data)
+    readErrorFlag = False
+    try: data = mzFile(scanFileName)
+    except: readErrorFlag = True
+    
+    #If the data file is 'good' then continue processing
+    if not readErrorFlag:
+        
+        #Extract line number from the filename, removing leading zeros, subtract 1 for zero indexing
+        lineNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
+        
+        #If the line numbers are not the physical row numbers, then obtain correct number from stored LUT
+        if (impModel or postModel) and sampleData.unorderedNames: lineNum = sampleData.physicalLineNums[lineNum+1]
+        
+        #If ignoring missing lines, then determine the offset for correct indexing
+        if sampleData.ignoreMissingLines and len(sampleData.missingLines) > 0: lineNum -= int(np.sum(lineNum > sampleData.missingLines))
+
+        #Obtain the total ion chromatogram and extract original times
+        ticData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
+        origTimes, TICData = ticData[:,0], ticData[:,1]
+        
+        #If the data is being sparesly acquired, then the listed times in the file need to be shifted; convert np.float to float for method compatability
+        if (impModel or postModel) and impOffset and scanMethod == 'linewise' and lineMethod == 'segLine': origTimes += (np.argwhere(sampleData.mask[lineNum]==1).min()/sampleData.finalDim[1])*(((sampleData.sampleWidth*1e3)/sampleData.scanRate)/60)
+        elif (impModel or postModel) and impOffset: sys.exit('Error - Using implementation mode with an offset but not segmented-linewise operation is not a supported configuration.')
+        mzData = [np.interp(sampleData.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(sampleData.mzRanges[mzRangeNum][0]), float(sampleData.mzRanges[mzRangeNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0).astype('float32') for mzRangeNum in range(0, len(sampleData.mzRanges))]
+        
+        #Interpolate TIC to final new times
+        TICData = np.interp(sampleData.newTimes, origTimes, TICData).astype('float32')
+        
+        return lineNum, mzData, TICData
 
 #Visualize multiple sample progression steps at once; reimport matplotlib to set backend for non-interactive visualization
 @ray.remote
-def visualize_parhelper(samples, sampleNum, sampleData, dir_avgProgression, dir_mzProgressions):
+def visualize_parhelper(samples, sampleData, dir_avgProgression, dir_mzProgressions, indexes):
     import matplotlib
     import matplotlib.pyplot as plt
     matplotlib.use('Agg')
-    return visualize_serial(samples[sampleNum], sampleData, dir_avgProgression, dir_mzProgressions)
+    for index in indexes: visualize_serial(samples[index], sampleData, dir_avgProgression, dir_mzProgressions)
 
 #Perform gaussianGenerator for a set of sigma values
 @ray.remote
@@ -78,12 +108,11 @@ def runSampling_parhelper(sampleData, cValue, model, percToScan, percToViz, best
 
 #Visualize multiple sample progression steps at once; reimport matplotlib to set backend for non-interactive visualization
 @ray.remote
-def visualizeTraining_parhelper(sample, result, maskNum, trainDataFlag, valDataFlag):
+def visualizeTraining_parhelper(result, maskNum, trainDataFlag, valDataFlag, indexes):
     import matplotlib
     import matplotlib.pyplot as plt
-    from matplotlib.pyplot import figure
     matplotlib.use('Agg')
-    return visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag)
+    for index in indexes: visualizeTraining_serial(result.samples[index], result, maskNum, trainDataFlag, valDataFlag)
 
 #NUMBA SETUP - METHOD PRE-COMPILATION
 #==================================================================
@@ -92,10 +121,21 @@ _ = secondComputeRDValue(np.empty((0,0)), [0,0], 0, 0, [0])
 #PATH/DIRECTORY SETUP
 #==================================================================
 
+#Set a base model name for the specified configuration; must specify/append c value during run
+modelName = 'model_'
+if erdModel == 'SLADS-LS': modelName += 'SLADS-LS_'
+elif erdModel == 'SLADS-Net': modelName += 'SLADS-Net_'
+elif erdModel == 'DLADS': modelName += 'DLADS_'
+if mzSingle: modelName += 'mzSingle_'
+else: modelName += 'mzMultiple_'
+if staticWindow: modelName += 'statWin_' + str(staticWindowSize) + '_'
+if not staticWindow: modelName += 'dynWin_' + str(dynWindowSigMult) + '_'
+
 #Data input directories
 dir_InputData = '.' + os.path.sep + 'INPUT' + os.path.sep
 dir_TrainingData = dir_InputData + 'TRAIN' + os.path.sep
 dir_TestingData = dir_InputData + 'TEST' + os.path.sep
+dir_PostData = dir_InputData + 'POST' + os.path.sep
 if impInputDir == None:  dir_ImpData = dir_InputData + 'IMP' + os.path.sep
 else: dir_ImpData = impInputDir
 
@@ -108,6 +148,7 @@ dir_ValidationTrainingResultsImages = dir_TrainingResults + 'Validation Data Ima
 dir_ValidationResults = dir_Results + 'VALIDATION' + os.path.sep
 dir_TestingResults = dir_Results + 'TEST' + os.path.sep
 dir_ImpResults = dir_Results + 'IMP'+ os.path.sep
+dir_PostResults = dir_Results + 'POST'+ os.path.sep
 
 #Check that the result directory exists for cases where existing training data/model are to be used
 if (not os.path.exists(dir_Results)) and (not trainingModel): 
@@ -120,18 +161,15 @@ if not os.path.exists(dir_InputData): sys.exit('Error - dir_InputData: ./INPUT/ 
 if not os.path.exists(dir_TrainingData) and trainingModel: sys.exit('Error - dir_TrainingData: ./INPUT/TRAIN/ does not exist')
 if not os.path.exists(dir_TestingData) and testingModel: sys.exit('Error - dir_InputData: ./INPUT/TEST/ does not exist')
 if not os.path.exists(dir_ImpData) and impModel: sys.exit('Error - dir_ImpData: ./INPUT/IMP/ does not exist')
+if not os.path.exists(dir_PostData) and postModel: sys.exit('Error - dir_PostData: ./INPUT/POST/ does not exist')
 
 #As needed, reset the training directories
-if trainingModel and not loadTrainValDatasets:
+if trainingModel:
     if os.path.exists(dir_TrainingResults): shutil.rmtree(dir_TrainingResults)
     os.makedirs(dir_TrainingResults)
     os.makedirs(dir_TrainingModelResults)
     os.makedirs(dir_TrainingResultsImages)
     os.makedirs(dir_ValidationTrainingResultsImages)
-
-if trainingModel and loadTrainValDatasets:
-    if os.path.exists(dir_TrainingModelResults): shutil.rmtree(dir_TrainingModelResults)
-    os.makedirs(dir_TrainingModelResults)
 
 #Clear validation, testing, and implementation directories 
 if os.path.exists(dir_ValidationResults): shutil.rmtree(dir_ValidationResults)
@@ -141,6 +179,8 @@ os.makedirs(dir_TestingResults)
 dir_ImpDataFinal = dir_ImpData + impSampleName + os.path.sep
 if os.path.exists(dir_ImpDataFinal): shutil.rmtree(dir_ImpDataFinal)
 os.makedirs(dir_ImpDataFinal)
+if os.path.exists(dir_PostResults): shutil.rmtree(dir_PostResults)
+os.makedirs(dir_PostResults)
 
 #Clear the screen
 os.system('cls' if os.name=='nt' else 'clear')

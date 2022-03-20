@@ -11,20 +11,17 @@
 #Is training of a model to be performed
 trainingModel = False
 
-#If trainingModel, should existing database/cValue in RESULTS be loaded instad of creating a new one
-loadTrainValDatasets = False
-
 #If validation dataset should be simulated
 validationModel = False
 
 #Is testing of a model to be performed
-testingModel = True
-
-#If testingModel, should existing database in RESULTS be loaded instad of creating a new one
-loadTestDataset = False
+testingModel = False
 
 #Is this an implementation run
 impModel = False
+
+#Is post-processing to be performed
+postModel = True
 
 ##################################################################
 
@@ -38,7 +35,7 @@ impModel = False
 erdModel = 'DLADS'
 
 #Which scanning method shoud be used: pointwise or linewise
-scanMethod = 'pointwise'
+scanMethod = 'linewise'
 
 #Override specified m/z and use TIC as the scanning target
 #overrideTIC = True
@@ -159,9 +156,6 @@ featDistCutoff = 0.25
 #DLADS MODEL PARAMETERS (disregard if using SLADS-LS or SLADS-Net)
 #==================================================================
 
-#What inputs should be used to the network besides a mask of unmeasured locations (allChannels or avgChannels)
-inputMethod = 'allChannels'
-
 #Which model should be used for training (unet)
 modelDef = 'unet'
 
@@ -234,9 +228,6 @@ preventResultsOverwrite = False
 
 #If consistency in the random generator is desired for inter-code comparisons
 consistentSeed = True
-
-#Should animations be generated during testing/implementation
-animationGen = True
 
 #Define precision of the percentage averaging (as percentage is inconsistent between acquistion steps)
 precision = 0.001

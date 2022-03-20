@@ -122,11 +122,11 @@ class EpochEnd(keras.callbacks.Callback):
 
 #Read in training and validation data
 def importInitialData(sortedSampleFolders):
-        
+    
     #Make sure sample mask initialization is consistent, particularly important for c value optimization
     #DO NOT RUN this section in parallel, makes optimizeC inconsistent, forcing seed in SampleData harms training generalization
     if consistentSeed: np.random.seed(0)
-    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPerc, 'pointwise', True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)], dtype='object')
+    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPerc, 'pointwise', lineRevist, False) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)], dtype='object')
     
     #Save relevant images
     trainDataFlag, valDataFlag = True, False
@@ -157,10 +157,7 @@ def importInitialData(sortedSampleFolders):
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         plt.savefig(saveLocation, bbox_inches=extent)
         plt.close()
-
-    #Save the samples database
-    pickle.dump(trainingValidationSampleData, open(dir_TrainingResults + 'trainingValidationSampleData.p', 'wb'))
-    
+        
     return trainingValidationSampleData
 
 #Given a set of samples, determine an optimal c value
@@ -365,19 +362,16 @@ def generateDatabases(trainingValidationSampleData, optimalC):
         #Visualize and save data if desired, in parallel if specified
         if trainingDataPlot:
             if parallelization:
-                futures = [visualizeTraining_parhelper.remote(sample, results[index], maskNumList[index], trainDataFlag, valDataFlag) for sample in results[index].samples]
-                _ = ray.get(futures)
+                results_id = ray.put(results[index])
+                _ = ray.get([visualizeTraining_parhelper.remote(results_id, maskNumList[index], trainDataFlag, valDataFlag, indexes) for indexes in np.array_split(np.arange(0, len(results[index].samples)), numberCPUS)])
+                
             else:
                 _ = [visualizeTraining_serial(sample, results[index], maskNumList[index], trainDataFlag, valDataFlag) for sample in tqdm(results[index].samples, desc='% Measured', leave=False, ascii=True)]
-                
-    #Save the complete databases
-    pickle.dump(trainingDatabase, open(dir_TrainingResults + 'trainingDatabase.p', 'wb'))
-    pickle.dump(validationDatabase, open(dir_TrainingResults + 'validationDatabase.p', 'wb'))
 
     return trainingDatabase, validationDatabase
 
 #Given a training database, train a regression model
-def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, optimalC):
+def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, modelName):
     
     if len(trainingDatabase) == 0: sys.exit('Error! - There was no training data supplied to train a model with; perhaps only one sample was provided?')
 
@@ -404,9 +398,9 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         if erdModel == 'SLADS-LS': model = linear_model.LinearRegression()
         elif erdModel == 'SLADS-Net': model = nnr(activation='identity', solver='adam', alpha=1e-4, hidden_layer_sizes=(50, 5), random_state=1, max_iter=500)
         model.fit(bigPolyFeatures, bigRD)
-        np.save(dir_TrainingResults+'model_cValue_'+str(optimalC), model)
+        np.save(dir_TrainingResults + modelName, model)
             
-    elif erdModel == 'DLADS':
+    elif erdModel == 'DLADS' or erdModel == 'GLANDS':
         
         #Create lists of input/output images
         trainInputImages, trainOutputImages = [], []
@@ -438,7 +432,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         trainGen = DataGen(trainInputImages, trainOutputImages, numChannels, True, batchSize)
         valGen = DataGen(valInputImages, valOutputImages, numChannels, False, batchSize)
 
-        #strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
+        #Setup for distributed GPU training
         strategy = tf.distribute.MirroredStrategy()
 
         #While a model has not been trained, reinitialize
@@ -481,7 +475,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         print('Model Training Time: ' + str(datetime.timedelta(seconds=(time.time()-t0))))
         
         #Save the final model and weights; do not include optimizer to save space
-        model.save(dir_TrainingResults+'model_cValue_'+str(optimalC), include_optimizer=False)
+        model.save(dir_TrainingResults + modelName, include_optimizer=False)
         
         #Write out the training history to a .csv
         pd.DataFrame(history.history).to_csv(dir_TrainingResults+'history.csv')

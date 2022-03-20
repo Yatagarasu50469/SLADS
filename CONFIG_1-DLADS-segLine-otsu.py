@@ -11,20 +11,17 @@
 #Is training of a model to be performed
 trainingModel = False
 
-#If trainingModel, should existing database/cValue in RESULTS be loaded instad of creating a new one
-loadTrainValDatasets = False
-
 #If validation dataset should be simulated
 validationModel = False
 
 #Is testing of a model to be performed
-testingModel = True
-
-#If testingModel, should existing database in RESULTS be loaded instad of creating a new one
-loadTestDataset = False
+testingModel = False
 
 #Is this an implementation run
 impModel = False
+
+#Is post-processing to be performed
+postModel = False
 
 ##################################################################
 
@@ -158,9 +155,6 @@ featDistCutoff = 0.25
 #PARAMETERS: L2-2
 #DLADS MODEL PARAMETERS (disregard if using SLADS-LS or SLADS-Net)
 #==================================================================
-
-#What inputs should be used to the network besides a mask of unmeasured locations (allChannels or avgChannels)
-inputMethod = 'allChannels'
 
 #Which model should be used for training (unet)
 modelDef = 'unet'

@@ -3,24 +3,23 @@
 #==================================================================
 
 #Given a set of sample paths, perform simulations using a trained SLADS Model
-def simulateSLADS(sortedSampleFolders, dir_Results, optimalC):
+def simulateSLADS(sortedSampleFolders, dir_Results, optimalC, modelName):
 
-    #Start server, deploy, and get handle for model queries; run Tensorflow model once for pre-compilation (otherwise affects reported timings)
-    serve.start()
-
-    if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': ModelServer.deploy(erdModel, dir_TrainingResults+'model_cValue_'+str(optimalC)+'.npy')
-    elif erdModel == 'DLADS': ModelServer.deploy(erdModel, dir_TrainingResults+'model_cValue_'+str(optimalC))
-    model = ModelServer.get_handle()
-    if erdModel == 'DLADS': _ = ray.get(model.remote(np.empty((1,64,64,3)))).copy()
-    
     #If consistency in the random generator is desired for comparisons, then reset seed
     if consistentSeed: 
         tf.random.set_seed(0)
         np.random.seed(0)
         random.seed(0)
     
-    sampleDataset = [SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, True, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)]
+    #Load the samples
+    sampleDataset = [SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, lineRevist, False) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)]
 
+    #Start server, deploy, and get handle for model queries; run Tensorflow model once for pre-compilation (otherwise affects reported timings)
+    serve.start()
+    ModelServer.deploy(erdModel, dir_TrainingResults+modelName)
+    model = ModelServer.get_handle()
+    if erdModel == 'DLADS': _ = ray.get(model.remote(np.empty((1,64,64,3))))
+    
     #Run algorithm for each of the samples, timing and storing metric progression for each; (1 less CPU in pool for server deployment)
     if parallelization: 
         futures = [(sampleDataset[sampleNum], optimalC, model, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False, False, False) for sampleNum in range(0,len(sampleDataset))]
