@@ -32,27 +32,38 @@ elif os.path.exists(destResultsFolder): shutil.rmtree(destResultsFolder)
 #Obtain the file paths for the intended training data if needed
 if trainingModel or validationModel: trainValidationSamplePaths = natsort.natsorted(glob.glob(dir_TrainingData + '/*'), reverse=False)
 
-#Train model if not already done so; otherwise load optimal c value
+#Train model if not already done so; otherwise load optimal c value and modify expected model name accordingly
 if trainingModel:
     
     #Import any specfic training function and class definitions
     exec(open("./CODE/TRAINING.py", encoding='utf-8').read())
     
-    #Import training/validation data
-    sectionTitle('IMPORTING TRAINING/VALIDATION SAMPLES')
+    #If the dataset has not been generated then generate and find the best c for one, otherwise load the best c previously determined
+    if not loadTrainValDatasets:
     
-    #Perform import and setup for training and validation datasets
-    trainingValidationSampleData = importInitialData(trainValidationSamplePaths)
-    validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
-    trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
+        #Import training/validation data
+        sectionTitle('IMPORTING TRAINING/VALIDATION SAMPLES')
+        
+        #Perform import and setup for training and validation datasets
+        trainingValidationSampleData = importInitialData(trainValidationSamplePaths)
+        validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
+        trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
 
-    #Optimize the c value
-    sectionTitle('OPTIMIZING C VALUE')
-    optimalC = optimizeC(trainingValidationSampleData)
-    
-    #Generate a training database for the optimal c value and training samples
-    sectionTitle('GENERATING TRAINING/VALIDATION DATASETS')
-    trainingDatabase, validationDatabase = generateDatabases(trainingValidationSampleData, optimalC)
+        #Optimize the c value
+        sectionTitle('OPTIMIZING C VALUE')
+        optimalC = optimizeC(trainingValidationSampleData)
+        
+        #Generate a training database for the optimal c value and training samples
+        sectionTitle('GENERATING TRAINING/VALIDATION DATASETS')
+        trainingDatabase, validationDatabase = generateDatabases(trainingValidationSampleData, optimalC)
+
+    else:
+        trainingValidationSampleData = pickle.load(open(dir_TrainingResults + 'trainingValidationSampleData.p', "rb" ))
+        validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
+        trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
+        trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase.p', "rb" ))
+        validationDatabase = pickle.load(open(dir_TrainingResults + 'validationDatabase.p', "rb" ))
+        optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
 
     #Train model(s) for the given database and c value
     sectionTitle('PERFORMING TRAINING')

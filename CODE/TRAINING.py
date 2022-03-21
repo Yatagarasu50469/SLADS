@@ -158,6 +158,9 @@ def importInitialData(sortedSampleFolders):
         plt.savefig(saveLocation, bbox_inches=extent)
         plt.close()
         
+        #Save the samples database
+        pickle.dump(trainingValidationSampleData, open(dir_TrainingResults + 'trainingValidationSampleData.p', 'wb'))
+        
     return trainingValidationSampleData
 
 #Given a set of samples, determine an optimal c value
@@ -368,6 +371,10 @@ def generateDatabases(trainingValidationSampleData, optimalC):
             else:
                 _ = [visualizeTraining_serial(sample, results[index], maskNumList[index], trainDataFlag, valDataFlag) for sample in tqdm(results[index].samples, desc='% Measured', leave=False, ascii=True)]
 
+    #Save the complete databases
+    pickle.dump(trainingDatabase, open(dir_TrainingResults + 'trainingDatabase.p', 'wb'))
+    pickle.dump(validationDatabase, open(dir_TrainingResults + 'validationDatabase.p', 'wb'))
+
     return trainingDatabase, validationDatabase
 
 #Given a training database, train a regression model
@@ -449,7 +456,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             with strategy.scope(): 
 
                 #Create model
-                model = unet(numStartFilters, numChannels, batchSize)
+                model = unet(numStartFilters, numChannels)
 
                 #Select loss function
                 if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss='mean_absolute_error')

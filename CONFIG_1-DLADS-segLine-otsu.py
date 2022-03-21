@@ -11,6 +11,9 @@
 #Is training of a model to be performed
 trainingModel = False
 
+#If trainingModel, should existing database/cValue in RESULTS be loaded instad of creating a new one
+loadTrainValDatasets = False
+
 #If validation dataset should be simulated
 validationModel = False
 

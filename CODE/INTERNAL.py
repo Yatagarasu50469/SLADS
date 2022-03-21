@@ -90,11 +90,11 @@ def scanData_parhelper(sampleData, scanFileName):
 
 #Visualize multiple sample progression steps at once; reimport matplotlib to set backend for non-interactive visualization
 @ray.remote
-def visualize_parhelper(samples, sampleData, dir_avgProgression, dir_mzProgressions, indexes):
+def visualize_parhelper(samples, sampleData, dir_progression, dir_mzProgressions, indexes):
     import matplotlib
     import matplotlib.pyplot as plt
     matplotlib.use('Agg')
-    for index in indexes: visualize_serial(samples[index], sampleData, dir_avgProgression, dir_mzProgressions)
+    for index in indexes: visualize_serial(samples[index], sampleData, dir_progression, dir_mzProgressions)
 
 #Perform gaussianGenerator for a set of sigma values
 @ray.remote

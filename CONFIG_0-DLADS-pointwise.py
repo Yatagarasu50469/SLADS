@@ -11,6 +11,9 @@
 #Is training of a model to be performed
 trainingModel = False
 
+#If trainingModel, should existing database/cValue in RESULTS be loaded instad of creating a new one
+loadTrainValDatasets = False
+
 #If validation dataset should be simulated
 validationModel = False
 
@@ -21,7 +24,7 @@ testingModel = False
 impModel = False
 
 #Is post-processing to be performed
-postModel = True
+postModel = False
 
 ##################################################################
 
@@ -35,7 +38,7 @@ postModel = True
 erdModel = 'DLADS'
 
 #Which scanning method shoud be used: pointwise or linewise
-scanMethod = 'linewise'
+scanMethod = 'pointwise'
 
 #Override specified m/z and use TIC as the scanning target
 #overrideTIC = True
@@ -228,6 +231,9 @@ preventResultsOverwrite = False
 
 #If consistency in the random generator is desired for inter-code comparisons
 consistentSeed = True
+
+#Should animations be generated during testing/implementation
+animationGen = True
 
 #Define precision of the percentage averaging (as percentage is inconsistent between acquistion steps)
 precision = 0.001

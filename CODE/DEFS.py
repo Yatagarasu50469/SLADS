@@ -280,10 +280,10 @@ class Sample:
                 equipWait()
                 sampleData.readScanData(self.mask)
             self.mzImages = copy.deepcopy(sampleData.mzImages)*self.mask
-            #self.TIC = copy.deepcopy(sampleData.TIC)*self.mask
+            self.TIC = copy.deepcopy(sampleData.TIC)*self.mask
         else:
             self.mzImages[:, newIdxs[:,0], newIdxs[:,1]] = self.mzReconImages[:, newIdxs[:,0], newIdxs[:,1]]
-            #self.TIC[:, newIdxs[:,0], newIdxs[:,1]] = self.TICReconImage[newIdxs[:,0], newIdxs[:,1]]
+            self.TIC[:, newIdxs[:,0], newIdxs[:,1]] = self.TICReconImage[newIdxs[:,0], newIdxs[:,1]]
         
         #Update the average image
         self.mzAvgImage = np.mean(self.mzImages, axis=0)
@@ -308,10 +308,11 @@ class Sample:
             self.iteration += 1
         
             #Compute reconstructions, resize to physical dimensions and average for visualization
+            self.squareTICRecon = computeRecon(resize(self.TIC, tuple(sampleData.squareDim), order=0), squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborWeights)
             self.squaremzReconImages = computeRecon(np.moveaxis(resize(np.moveaxis(self.mzImages, 0, -1), tuple(sampleData.squareDim), order=0), -1, 0), squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborWeights)
+            self.TICReconImage = resize(self.squareTICRecon, tuple(sampleData.finalDim), order=0)
             self.mzReconImages = np.moveaxis(resize(np.moveaxis(self.squaremzReconImages , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)        
-            self.mzAvgReconImage = np.mean(self.mzReconImages, axis=0)
-            self.squaremzAvgReconImage = np.mean(self.squaremzReconImages, axis=0)
+            #self.mzAvgReconImage = np.mean(self.mzReconImages, axis=0)
 
             #Compute feature information for SLADS models; not needed for DLADS
             if (datagenFlag or ((erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net')) and not bestCFlag) and len(squareUnMeasuredIdxs) > 0: 
@@ -387,8 +388,8 @@ class Result:
             for dir_mzProgressionSub in self.dir_mzProgressions: 
                 try: os.makedirs(dir_mzProgressionSub)
                 except: print('Folder already exists')
-            self.dir_avgProgression = self.dir_sampleResults + 'Average' + os.path.sep
-            os.makedirs(self.dir_avgProgression)
+            self.dir_progression = self.dir_sampleResults + 'Progression' + os.path.sep
+            os.makedirs(self.dir_progression)
             if not self.sampleData.postFlag:
                 self.dir_videos= self.dir_sampleResults + 'Videos' + os.path.sep
                 os.makedirs(self.dir_videos)
@@ -402,7 +403,7 @@ class Result:
         #If outputs should be produced at every update step, then do so, determining related metrics as needed
         if self.liveOutputFlag: 
             if self.sampleData.simulationFlag: self.extractSimulationData(sample)
-            visualize_serial(sample, self.sampleData, self.dir_avgProgression, self.dir_mzProgressions)
+            visualize_serial(sample, self.sampleData, self.dir_progression, self.dir_mzProgressions)
         
         #If evaluating a c parameter, then find the PSNR of the current reconstructions, otherwise save a copy of the measurement step for later evaluation
         if self.bestCFlag: 
@@ -422,10 +423,12 @@ class Result:
         else: neighborIndices, neighborWeights, neighborDistances = [], [], []
         
         sample.mzImagePSNRList = [compare_psnr(self.sampleData.mzImages[index], sample.mzReconImages[index], data_range=self.sampleData.mzImagesMax[index]) for index in range(0, len(self.sampleData.mzImages))]
-        sample.avgmzImagePSNR = compare_psnr(self.sampleData.mzAvgImage, sample.mzAvgReconImage, data_range=np.max(self.sampleData.mzAvgImage))
+        #sample.avgmzImagePSNR = compare_psnr(self.sampleData.mzAvgImage, sample.mzAvgReconImage, data_range=np.max(self.sampleData.mzAvgImage))
+        sample.TICImagePSNR = compare_psnr(self.sampleData.TIC, sample.TICReconImage, data_range=np.max(self.sampleData.TIC))
         sample.mzImageSSIMList = [compare_ssim(self.sampleData.mzImages[index], sample.mzReconImages[index], data_range=self.sampleData.mzImagesMax[index]) for index in range(0, len(self.sampleData.mzImages))]
-        sample.avgmzImageSSIM = compare_ssim(self.sampleData.mzAvgImage, sample.mzAvgReconImage, data_range=np.max(self.sampleData.mzAvgImage))
-        
+        #sample.avgmzImageSSIM = compare_ssim(self.sampleData.mzAvgImage, sample.mzAvgReconImage, data_range=np.max(self.sampleData.mzAvgImage))
+        sample.TICImageSSIM = compare_ssim(self.sampleData.TIC, sample.TICReconImage, data_range=np.max(self.sampleData.TIC))
+
         #Compute RD; if every location has been scanned all positions are zero
         if len(squareUnMeasuredIdxs) == 0: 
             sample.squareRD = np.zeros(self.sampleData.squareDim)
@@ -465,10 +468,12 @@ class Result:
 
             #Summarize scores for testing printout
             self.mzAvgPSNRList = [np.mean(sample.mzImagePSNRList) for sample in self.samples]
-            self.avgPSNRList = [sample.avgmzImagePSNR for sample in self.samples]
+            #self.avgPSNRList = [sample.avgmzImagePSNR for sample in self.samples]
+            self.TICPSNRList = [sample.TICImagePSNR for sample in self.samples]
             self.ERDPSNRList = [sample.ERDPSNR for sample in self.samples]
             self.mzAvgSSIMList = [np.mean(sample.mzImageSSIMList) for sample in self.samples]
-            self.avgSSIMList = [sample.avgmzImageSSIM for sample in self.samples]
+            #self.avgSSIMList = [sample.avgmzImageSSIM for sample in self.samples]
+            self.TICSSIMList = [sample.TICImageSSIM for sample in self.samples]
             self.ERDSSIMList = [sample.ERDSSIM for sample in self.samples]
         else:         
             for sample in self.samples:
@@ -479,9 +484,9 @@ class Result:
         if not self.liveOutputFlag:
             if parallelization:
                 samples_id, sampleData_id = ray.put(self.samples), ray.put(self.sampleData)
-                _ = ray.get([visualize_parhelper.remote(samples_id, sampleData_id, self.dir_avgProgression, self.dir_mzProgressions, indexes) for indexes in np.array_split(np.arange(0, len(self.samples)), numberCPUS)])
+                _ = ray.get([visualize_parhelper.remote(samples_id, sampleData_id, self.dir_progression, self.dir_mzProgressions, indexes) for indexes in np.array_split(np.arange(0, len(self.samples)), numberCPUS)])
             else:
-                _ = [visualize_serial(sample, self.sampleData, self.dir_avgProgression, self.dir_mzProgressions) for sample in tqdm(self.samples, desc='Steps', leave=False, ascii=True)]
+                _ = [visualize_serial(sample, self.sampleData, self.dir_progression, self.dir_mzProgressions) for sample in tqdm(self.samples, desc='Steps', leave=False, ascii=True)]
         
         #Combine progression images into animations
         if not self.sampleData.postFlag:
@@ -494,7 +499,7 @@ class Result:
                 animation.release()
                 animation = None
 
-            dataFileNames = natsort.natsorted(glob.glob(self.dir_avgProgression + 'progression_*.png'))
+            dataFileNames = natsort.natsorted(glob.glob(self.dir_progression + 'progression_*.png'))
             height, width, layers = cv2.imread(dataFileNames[0]).shape
             animation = cv2.VideoWriter(self.dir_videos + 'average.avi', cv2.VideoWriter_fourcc(*'MJPG'), 1, (width, height))
             for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
@@ -502,15 +507,17 @@ class Result:
             animation = None
 
 #Visualize single sample progression step
-def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions):
+def visualize_serial(sample, sampleData, dir_progression, dir_mzProgressions):
 
     #Turn percent measured into a string
     percMeasured = "{:.2f}".format(sample.percMeasured)
     
     #Turn metrics into strings
     if sampleData.simulationFlag: 
-        avgmzImagePSNR = "{:.2f}".format(sample.avgmzImagePSNR)
-        avgmzImageSSIM = "{:.2f}".format(sample.avgmzImageSSIM)
+        #avgmzImagePSNR = "{:.2f}".format(sample.avgmzImagePSNR)
+        #avgmzImageSSIM = "{:.2f}".format(sample.avgmzImageSSIM)
+        TICImagePSNR = "{:.2f}".format(sample.TICImagePSNR)
+        TICImageSSIM = "{:.2f}".format(sample.TICImageSSIM)
         erdPSNR = "{:.2f}".format(sample.ERDPSNR)
         erdSSIM = "{:.2f}".format(sample.ERDSSIM)
         mzImageAvgPSNR = "{:.2f}".format(np.mean(sample.mzImagePSNRList))
@@ -529,7 +536,7 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions)
         if sampleData.simulationFlag: f = plt.figure(figsize=(20,10))
         else: f = plt.figure(figsize=(20,5.3865))
         
-        if sampleData.simulationFlag: plt.suptitle(r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ mz:\ }$" + massRange + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured + '\n' + r"$\bf{PSNR - mz\ Recon:\ }$" + mzImagePSNR + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + avgmzImagePSNR+ '\n' + r"$\bf{SSIM - mz\ Recon:\ }$" + mzImageSSIM + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + avgmzImageSSIM)
+        if sampleData.simulationFlag: plt.suptitle(r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ mz:\ }$" + massRange + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured + '\n' + r"$\bf{PSNR - Average\ mz\ Recon:\ }$" + mzImageAvgPSNR + r"$\bf{\ \ mz\ Recon:\ }$" + mzImagePSNR+ '\n' + r"$\bf{SSIM - Average\ mz\ Recon:\ }$" + mzImageAvgSSIM + r"$\bf{\ \ mz\ Recon:\ }$" + mzImageSSIM)
         else: plt.suptitle(r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ mz:\ }$" + massRange + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured)
 
         if sampleData.simulationFlag: 
@@ -628,32 +635,40 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions)
         plt.savefig(saveLocation, bbox_inches=extent)
         plt.close()
         
-    #For the average, generate visual
-    avgMinValue, avgMaxValue, avgLinThreshValue = np.min(sampleData.mzAvgImage), np.max(sampleData.mzAvgImage), np.mean(sampleData.mzAvgImage)+3*np.std(sampleData.mzAvgImage)
+    #For the overall progression , generate visual
+    #avgMinValue, avgMaxValue, avgLinThreshValue = np.min(sampleData.mzAvgImage), np.max(sampleData.mzAvgImage), np.mean(sampleData.mzAvgImage)+3*np.std(sampleData.mzAvgImage)
+    TICMinValue, TICMaxValue, TICLinThreshValue = np.min(sampleData.TIC), np.max(sampleData.TIC), np.mean(sampleData.TIC)+3*np.std(sampleData.TIC)
     if sampleData.simulationFlag: f = plt.figure(figsize=(20,10))
     else: f = plt.figure(figsize=(20,5.3865))
-    
-    if sampleData.simulationFlag: plt.suptitle(r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured + '\n' + r"$\bf{PSNR - Average\ Recon: }$" + avgmzImagePSNR + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + mzImageAvgPSNR + r"$\bf{\ \ ERD:\ }$" + erdPSNR + '\n' + r"$\bf{SSIM - Average\ Recon: }$" + avgmzImageSSIM + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + mzImageAvgSSIM + r"$\bf{\ \ ERD:\ }$" + erdSSIM)
+
+    #if sampleData.simulationFlag: plt.suptitle(r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured + '\n' + r"$\bf{PSNR - Average\ Recon: }$" + avgmzImagePSNR + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + mzImageAvgPSNR + r"$\bf{\ \ ERD:\ }$" + erdPSNR + '\n' + r"$\bf{SSIM - Average\ Recon: }$" + avgmzImageSSIM + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + mzImageAvgSSIM + r"$\bf{\ \ ERD:\ }$" + erdSSIM)
+    if sampleData.simulationFlag: plt.suptitle(r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured + '\n' + r"$\bf{PSNR - TIC\ Recon: }$" + TICImagePSNR + r"$\bf{\ \ Average \ mz\ Recon:\ }$" + mzImageAvgPSNR + r"$\bf{\ \ ERD:\ }$" + erdPSNR + '\n' + r"$\bf{SSIM - TIC\ Recon: }$" + TICImageSSIM + r"$\bf{\ \ Average\ mz\ Recon:\ }$" + mzImageAvgSSIM + r"$\bf{\ \ ERD:\ }$" + erdSSIM)
     else: plt.suptitle(r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured)
     
     if sampleData.simulationFlag: 
         ax = plt.subplot2grid(shape=(2,3), loc=(0,0))
-        if not sysLogNorm: im = ax.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
-        if sysLogNorm: im = ax.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+        #if not sysLogNorm: im = ax.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
+        #if sysLogNorm: im = ax.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+        if not sysLogNorm: im = ax.imshow(sampleData.TIC, cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
+        if sysLogNorm: im = ax.imshow(sampleData.TIC, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=TICLinThreshValue, base=10, vmin=TICMinValue, vmax=TICaxValue))
         ax.set_title('Ground-Truth')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
     if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (0,1))
     else: ax = plt.subplot2grid((1,3), (0,0))
-    if not sysLogNorm: im = ax.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
-    if sysLogNorm: im = ax.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+    #if not sysLogNorm: im = ax.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
+    #if sysLogNorm: im = ax.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+    if not sysLogNorm: im = ax.imshow(sample.TICReconImage, cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
+    if sysLogNorm: im = ax.imshow(sample.TICReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=TICLinThreshValue, base=10, vmin=TICMinValue, vmax=TICMaxValue))
     ax.set_title('Reconstruction')
     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
     if sampleData.simulationFlag: 
         ax = plt.subplot2grid((2,3), (0,2))
-        if not sysLogNorm: im = ax.imshow(abs(sampleData.mzAvgImage-sample.mzAvgReconImage), cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
-        if sysLogNorm: im = ax.imshow(abs(sampleData.mzAvgImage-sample.mzAvgReconImage), cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+        #if not sysLogNorm: im = ax.imshow(abs(sampleData.mzAvgImage-sample.mzAvgReconImage), cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
+        #if sysLogNorm: im = ax.imshow(abs(sampleData.mzAvgImage-sample.mzAvgReconImage), cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+        if not sysLogNorm: im = ax.imshow(abs(sampleData.TIC-sample.TICReconImage), cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
+        if sysLogNorm: im = ax.imshow(abs(sampleData.TIC-sample.TICReconImage), cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=TICLinThreshValue, base=10, vmin=TICMinValue, vmax=TICMaxValue))
         ax.set_title('Absolute Difference')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
@@ -678,22 +693,25 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions)
     #Save
     f.tight_layout()
     f.subplots_adjust(top = 0.85)
-    saveLocation = dir_avgProgression + 'progression' + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '_avg.png'
+    saveLocation = dir_progression + 'progression' + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '_avg.png'
     plt.savefig(saveLocation)
     plt.close()
 
     #Borderless saves
-    saveLocation = dir_avgProgression + 'reconstruction' + '_iter_' + str(sample.iteration) +  '_perc_' + str(sample.percMeasured) + '.png'
+    #saveLocation = dir_progression + 'reconstruction_Avg' + '_iter_' + str(sample.iteration) +  '_perc_' + str(sample.percMeasured) + '.png'
+    saveLocation = dir_progression + 'reconstruction_TIC' + '_iter_' + str(sample.iteration) +  '_perc_' + str(sample.percMeasured) + '.png'
     fig=plt.figure()
     ax=fig.add_subplot(1,1,1)
     plt.axis('off')
-    if not sysLogNorm: plt.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
-    if sysLogNorm: plt.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+    #if not sysLogNorm: plt.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
+    #if sysLogNorm: plt.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+    if not sysLogNorm: plt.imshow(sample.TICReconImage, cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
+    if sysLogNorm: plt.imshow(sample.TICReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=TICLinThreshValue, base=10, vmin=TICMinValue, vmax=TICMaxValue))
     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     plt.savefig(saveLocation, bbox_inches=extent)
     plt.close()
     
-    saveLocation = dir_avgProgression + 'mask_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
+    saveLocation = dir_progression + 'mask_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
     fig=plt.figure()
     ax=fig.add_subplot(1,1,1)
     plt.axis('off')
@@ -702,7 +720,7 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions)
     plt.savefig(saveLocation, bbox_inches=extent)
     plt.close()
     
-    saveLocation = dir_avgProgression + 'ERD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
+    saveLocation = dir_progression + 'ERD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
     fig=plt.figure()
     ax=fig.add_subplot(1,1,1)
     plt.axis('off')
@@ -711,18 +729,21 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions)
     plt.savefig(saveLocation, bbox_inches=extent)
     plt.close()
     
-    saveLocation = dir_avgProgression + 'measured_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
+    #saveLocation = dir_progression + 'measured_Avg_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
+    saveLocation = dir_progression + 'measured_TIC_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
     fig=plt.figure()
     ax=fig.add_subplot(1,1,1)
     plt.axis('off')
-    if not sysLogNorm: plt.imshow(sample.mzAvgReconImage*sample.mask, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
-    if sysLogNorm: plt.imshow(sample.mzAvgReconImage*sample.mask, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+    #if not sysLogNorm: plt.imshow(sample.mzAvgReconImage*sample.mask, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
+    #if sysLogNorm: plt.imshow(sample.mzAvgReconImage*sample.mask, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+    if not sysLogNorm: plt.imshow(sample.TICReconImage*sample.mask, cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
+    if sysLogNorm: plt.imshow(sample.TICReconImage*sample.mask, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=TICLinThreshValue, base=10, vmin=TICMinValue, vmax=TICMaxValue))
     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     plt.savefig(saveLocation, bbox_inches=extent)
     plt.close()
     
     if sampleData.simulationFlag:
-        saveLocation = dir_avgProgression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
+        saveLocation = dir_progression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
         fig=plt.figure()
         ax=fig.add_subplot(1,1,1)
         plt.axis('off')
@@ -731,12 +752,15 @@ def visualize_serial(sample, sampleData, dir_avgProgression, dir_mzProgressions)
         plt.savefig(saveLocation, bbox_inches=extent)
         plt.close()
         
-        saveLocation = dir_avgProgression + 'avgGroundTruth.png'
+        #saveLocation = dir_progression + 'groundTruth_Avg.png'
+        saveLocation = dir_progression + 'groundTruth_TIC.png'
         fig=plt.figure()
         ax=fig.add_subplot(1,1,1)
         plt.axis('off')
-        if not sysLogNorm: plt.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
-        if sysLogNorm: plt.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+        #if not sysLogNorm: plt.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
+        #if sysLogNorm: plt.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+        if not sysLogNorm: plt.imshow(sampleData.TIC, cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
+        if sysLogNorm: plt.imshow(sampleData.TIC, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=TICLinThreshValue, base=10, vmin=TICMinValue, vmax=TICMaxValue))
         extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
         plt.savefig(saveLocation, bbox_inches=extent)
         plt.close()
@@ -1135,9 +1159,9 @@ def downConv(numFilters, inputs):
 def upConv(numFilters, inputs):
     return Conv2D(numFilters, 3, activation='relu', padding='same')(Conv2D(numFilters, 1, activation='relu', padding='same')(inputs))
 
-def unet(numFilters, numChannels, batchSize):
+def unet(numFilters, numChannels):
 
-    inputs = Input(shape=(None,None,numChannels), batch_size=batchSize)
+    inputs = Input(shape=(None,None,numChannels), batch_size=None)
 
     conv0 = downConv(numFilters, inputs)
 

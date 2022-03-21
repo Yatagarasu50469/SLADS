@@ -64,7 +64,7 @@
                     0.8.8   Interpolation limits, static graph, parallel inferencing, ray deployment, test of FAISS
                     0.8.9   Simplification
                     0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
-                    0.9.1   Parallel sample loading, unique model names, post-processing mode
+                    0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
                     ~0.+.+  Custom adversarial network, Multimodal integration
                     ~1.0.0  Initial release
 
@@ -155,14 +155,14 @@
     	|------->RESULTS
     	|	|------->IMP
     	|	|	|-------IMP_SAMPLE_1
-    	|	|	|	|------->TIC
+    	|	|	|	|------->Progression
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
     	|	|	|	|------->physicalLineNums.csv
     	|	|------->POST
     	|	|	|-------POST_SIMULATION_SAMPLE_1
-    	|	|	|	|------->TIC
+    	|	|	|	|------->Progression
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
@@ -175,12 +175,12 @@
     	|	|	|-------dataPrintout.csv
     	|	|	|-------PSNR and SSIM Results (.csv and .png)
     	|	|	|-------TEST_SAMPLE_1
-    	|	|	|	|------->TIC
+    	|	|	|	|------->Progression
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
     	|	|	|-------TEST_SAMPLE_2
-    	|	|	|	|------->TIC
+    	|	|	|	|------->Progression
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
@@ -189,12 +189,12 @@
     	|	|	|-------PSNR and SSIM Results (.csv and .png)
     	|	|	|-------VALIDATION_SAMPLE_1
     	|	|	|	|------->TIC
-    	|	|	|	|------->mz
+    	|	|	|	|------->Progression
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
     	|	|	|-------VALIDATION_SAMPLE_2
     	|	|	|	|------->TIC
-    	|	|	|	|------->mz
+    	|	|	|	|------->Progression
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
     	|	|------->TRAIN

@@ -95,6 +95,7 @@ import tensorflow as tf
 from ray import serve
 from ray.util.multiprocessing import Pool
 from tensorflow import keras
+from tensorflow.keras import mixed_precision
 from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import *
 from tensorflow.keras.utils import *
@@ -110,6 +111,9 @@ from tensorflow.python.framework import constant_op
 #Further restrict logging levels to only report errors (disable for debug)
 tf.get_logger().setLevel('ERROR')
 warnings.filterwarnings("ignore")
+
+#Set tensorflow to use mixed model precision to save memory and improve performance
+#mixed_precision.set_global_policy('mixed_float16')
 
 #==================================================================
 

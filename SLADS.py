@@ -5,7 +5,7 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    20 March 2021
+#DATE MODIFIED:	    21 March 2021
 #
 #VERSION NUM:	    0.9.1
 #
@@ -58,7 +58,7 @@
 #                   0.8.8   Interpolation limits, static graph, parallel inferencing, ray deployment, test of FAISS
 #                   0.8.9   Simplification
 #                   0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
-#                   0.9.1   Parallel sample loading, unique model names, post-processing mode
+#                   0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
 #                   ~0.+.+  GAN, Custom adversarial network, Multimodal integration
 #                   ~1.0.0  Initial release
 #====================================================================
