@@ -228,10 +228,10 @@ class SampleData:
                     #Remember to make modifications to corresponding parhelper method
                     if (impModel or postModel) and impOffset and scanMethod == 'linewise' and lineMethod == 'segLine': origTimes += (np.argwhere(self.mask[lineNum]==1).min()/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
                     elif (impModel or postModel) and impOffset: sys.exit('Error - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
-                    for mzRangeNum in range(0, len(self.mzRanges)): self.mzImages[mzRangeNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(self.mzRanges[mzRangeNum][0]), float(self.mzRanges[mzRangeNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0).astype('float32')
+                    for mzRangeNum in range(0, len(self.mzRanges)): self.mzImages[mzRangeNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(self.mzRanges[mzRangeNum][0]), float(self.mzRanges[mzRangeNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0)
                     
                     #Interpolate TIC to final new times
-                    self.TIC[lineNum] = np.interp(self.newTimes, origTimes, TICData).astype('float32')
+                    self.TIC[lineNum] = np.interp(self.newTimes, origTimes, TICData)
         
         #Find the maximum value in each mz image for easy referencing
         self.mzImagesMax = np.max(self.mzImages, axis=(1,2))
