@@ -308,9 +308,9 @@ class Sample:
             self.iteration += 1
         
             #Compute reconstructions, resize to physical dimensions and average for visualization
-            self.squareTICRecon = computeRecon(resize(self.TIC, tuple(sampleData.squareDim), order=0), squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborWeights)
+            self.squareTICReconImage = computeRecon(resize(self.TIC, tuple(sampleData.squareDim), order=0), squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborWeights)
             self.squaremzReconImages = computeRecon(np.moveaxis(resize(np.moveaxis(self.mzImages, 0, -1), tuple(sampleData.squareDim), order=0), -1, 0), squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborWeights)
-            self.TICReconImage = resize(self.squareTICRecon, tuple(sampleData.finalDim), order=0)
+            self.TICReconImage = resize(self.squareTICReconImage, tuple(sampleData.finalDim), order=0)
             self.mzReconImages = np.moveaxis(resize(np.moveaxis(self.squaremzReconImages , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)        
             #self.mzAvgReconImage = np.mean(self.mzReconImages, axis=0)
 
@@ -1227,6 +1227,15 @@ def sizeFunc(num, suffix='B'):
 #Determine absolute difference between two arrays
 def computeDifference(array1, array2):
     return abs(array1-array2)
+
+def borderlessPlot(image, cmap, saveLocation):
+    fig=plt.figure()
+    ax=fig.add_subplot(1,1,1)
+    plt.axis('off')
+    plt.imshow(image, cmap=cmap, aspect='auto')
+    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    plt.savefig(saveLocation, bbox_inches=extent)
+    plt.close()
 
 #Quick print for titles in UI 
 def sectionTitle(title):

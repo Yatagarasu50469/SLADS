@@ -40,9 +40,6 @@ erdModel = 'DLADS'
 #Which scanning method shoud be used: pointwise or linewise
 scanMethod = 'pointwise'
 
-#Override specified m/z and use TIC as the scanning target
-#overrideTIC = True
-
 #Should only a single mz be used as the network input (allows evaluation over multiple, uses first mz in mz.csv local/global file)
 mzSingle = False
 
