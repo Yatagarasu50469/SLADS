@@ -193,7 +193,7 @@ def optimizeC(trainingSampleData):
             dataPrintout.append(['c Value', cValues[cNum]])
             dataPrintout.append(['mz PSNR Area Under Curve:', np.mean(AUC), '+/-', np.std(AUC)])
             dataPrintout.append(['Average RD Compute Time (s)', np.mean(allRDTimes), '+/-', np.std(allRDTimes)])
-            dataPrintout.append([''])
+            dataPrintout.append([])
             
             #Extract percentage results at the specified precision
             percents, trainingmzMetric_mean = percResults([result.cSelectionList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
@@ -260,21 +260,21 @@ def visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag
     plt.close()
     
     #Borderless saves
-    if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
-    elif valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
+    if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png'
+    elif valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png'
     borderlessPlot(sample.mask, saveLocation, 'gray')
     
-    if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
-    elif valDataFlag: dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
+    if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png'
+    elif valDataFlag: dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png'
     borderlessPlot(sample.RD, saveLocation)
     
-    if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
-    elif valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
+    if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png'
+    elif valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png'
     #borderlessPlot(result.sampleData.mzAvgImage, saveLocation, 'hot')
-    borderlessPlot(result.sampleData.TIC, saveLocation, 'hot'))
+    borderlessPlot(result.sampleData.TIC, saveLocation, 'hot')
     
-    if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
-    elif valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
+    if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png'
+    elif valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png'
     #borderlessPlot(sample.mzAvgReconImage, saveLocation)
     borderlessPlot(sample.TICReconImage, saveLocation)
 

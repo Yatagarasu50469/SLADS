@@ -604,8 +604,8 @@ def visualize_serial(sample, sampleData, dir_progression, dir_mzProgressions):
         borderlessPlot(sample.mzImages[mzNum], saveLocation, cmap='hot', vmin=mzMinValue, vmax=mzMaxValue)
         
     #For the overall progression , generate visual
-    #avgMinValue, avgMaxValue, avgLinThreshValue = np.min(sampleData.mzAvgImage), np.max(sampleData.mzAvgImage), np.mean(sampleData.mzAvgImage)+3*np.std(sampleData.mzAvgImage)
-    TICMinValue, TICMaxValue, TICLinThreshValue = np.min(sampleData.TIC), np.max(sampleData.TIC), np.mean(sampleData.TIC)+3*np.std(sampleData.TIC)
+    #avgMinValue, avgMaxValue = np.min(sampleData.mzAvgImage), np.max(sampleData.mzAvgImage)
+    TICMinValue, TICMaxValue = np.min(sampleData.TIC), np.max(sampleData.TIC)
     if sampleData.simulationFlag: f = plt.figure(figsize=(20,10))
     else: f = plt.figure(figsize=(20,5.3865))
 
@@ -662,7 +662,7 @@ def visualize_serial(sample, sampleData, dir_progression, dir_mzProgressions):
     #Borderless saves
     #saveLocation = dir_progression + 'reconstruction_Avg' + '_iter_' + str(sample.iteration) +  '_perc_' + str(sample.percMeasured) + '.png'
     saveLocation = dir_progression + 'reconstruction_TIC' + '_iter_' + str(sample.iteration) +  '_perc_' + str(sample.percMeasured) + '.png'
-    #borderlessPlot(sample.mzAvgReconImage, saveLocation, cmap='hot'', vmin=avgMinValue, vmax=avgMaxValue)
+    #borderlessPlot(sample.mzAvgReconImage, saveLocation, cmap='hot', vmin=avgMinValue, vmax=avgMaxValue)
     borderlessPlot(sample.TICReconImage, saveLocation, cmap='hot', vmin=TICMinValue, vmax=TICMaxValue)
     
     saveLocation = dir_progression + 'mask_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
@@ -673,8 +673,8 @@ def visualize_serial(sample, sampleData, dir_progression, dir_mzProgressions):
     
     #saveLocation = dir_progression + 'measured_Avg_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
     saveLocation = dir_progression + 'measured_TIC_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-    #borderlessPlot(sample.mzAvgReconImage*sample.mask, saveLocation, cmap='hot'', vmin=avgMinValue, vmax=avgMaxValue)
-    borderlessPlot(sample.ERD, saveLocation, cmap='viridis'', vmin=TICMinValue, vmax=TICMaxValue)
+    #borderlessPlot(sample.mzAvgReconImage*sample.mask, saveLocation, cmap='hot', vmin=avgMinValue, vmax=avgMaxValue)
+    borderlessPlot(sample.ERD, saveLocation, cmap='viridis', vmin=TICMinValue, vmax=TICMaxValue)
     
     if sampleData.simulationFlag:
         saveLocation = dir_progression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
@@ -688,8 +688,8 @@ def visualize_serial(sample, sampleData, dir_progression, dir_mzProgressions):
         
         #saveLocation = dir_progression + 'groundTruth_Avg.png'
         saveLocation = dir_progression + 'groundTruth_TIC.png'
-        #borderlessPlot(sampleData.mzAvgImage, saveLocation, cmap='hot'', vmin=avgMinValue, vmax=avgMaxValue)
-        borderlessPlot(sampleData.TIC, saveLocation, cmap='hot'', vmin=TICMinValue, vmax=TICMaxValue)
+        #borderlessPlot(sampleData.mzAvgImage, saveLocation, cmap='hot', vmin=avgMinValue, vmax=avgMaxValue)
+        borderlessPlot(sampleData.TIC, saveLocation, cmap='hot', vmin=TICMinValue, vmax=TICMaxValue)
 
 def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, liveOutputFlag, dir_Results, datagenFlag, impModel, tqdmHide):
 
@@ -1150,7 +1150,7 @@ def borderlessPlot(image, saveLocation, cmap='viridis', vmin=None, vmax=None):
     plt.savefig(saveLocation, bbox_inches=extent)
     plt.close()
 
-def basicPlot(xData, yData, saveLocation, xLabel='', yLabel='')
+def basicPlot(xData, yData, saveLocation, xLabel='', yLabel=''):
     font = {'size' : 18}
     plt.rc('font', **font)
     f = plt.figure(figsize=(20,8))

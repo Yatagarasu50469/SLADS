@@ -110,7 +110,6 @@ def simulateSLADS(sortedSampleFolders, dir_Results, optimalC, modelName):
     np.savetxt(dir_Results+'SSIM_TIC.csv', np.transpose([quantityMeasured, TICSSIM_Results_mean]), delimiter=',')
     np.savetxt(dir_Results+'SSIM_ERD.csv', np.transpose([quantityMeasured, ERDSSIM_Results_mean]), delimiter=',')
 
-    
     #Export plots of averaged results
     basicPlot(quantityMeasured, mzAvgPSNR_Results_mean, dir_Results+'PSNR_mzAvg'+'.png', xLabel=xLabel, yLabel='Average PSNR (dB)')
     basicPlot(quantityMeasured, TICPSNR_Results_mean, dir_Results+'PSNR_TIC'+'.png', xLabel=xLabel, yLabel='Average PSNR (dB)')
