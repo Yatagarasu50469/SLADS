@@ -99,11 +99,9 @@ class EpochEnd(keras.callbacks.Callback):
                         self.nanValue = True
                     
                     ax = plt.subplot2grid((3,3), (vizSampleNum+1,0))
-                    #if not sysLogNorm: im = ax.imshow(vizSample.squaremzAvgReconImage, aspect='auto', cmap='hot', vmin=0, vmax=np.max(vizSample.squaremzAvgReconImage))
-                    #if sysLogNorm: im = ax.imshow(vizSample.squaremzAvgReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(self.vizSampleData.squaremzAvgReconImage)+3*np.std(self.vizSampleData.squaremzAvgReconImage), base=10, vmin=np.min(self.vizSampleData.squaremzAvgReconImage), vmax=np.max(self.vizSampleData.squaremzAvgReconImage)))
+                    #im = ax.imshow(vizSample.squaremzAvgReconImage, aspect='auto', cmap='hot', vmin=0, vmax=np.max(vizSample.squaremzAvgReconImage))
                     #ax.set_title('Average Reconstruction', fontsize=15, fontweight='bold')
-                    if not sysLogNorm: im = ax.imshow(vizSample.squareTICReconImage, aspect='auto', cmap='hot', vmin=0, vmax=np.max(vizSample.squareTICReconImage))
-                    if sysLogNorm: im = ax.imshow(vizSample.squareTICReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(self.vizSampleData.squareTICReconImage)+3*np.std(self.vizSampleData.squareTICReconImage), base=10, vmin=np.min(self.vizSampleData.squareTICReconImage), vmax=np.max(self.vizSampleData.squareTICReconImage)))
+                    im = ax.imshow(vizSample.squareTICReconImage, aspect='auto', cmap='hot', vmin=0, vmax=np.max(vizSample.squareTICReconImage))
                     ax.set_title('TIC Reconstruction', fontsize=15, fontweight='bold')
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                     
@@ -144,12 +142,12 @@ def importInitialData(sortedSampleFolders):
             massRange = str(sampleData.mzRanges[mzNum][0]) + '-' + str(sampleData.mzRanges[mzNum][1])
             if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'groundTruth_' + sampleData.name + '_mz_' + massRange + '.png'
             if valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'groundTruth_' + sampleData.name + '_mz_'+ massRange + '.png'
-            borderlessPlot(sampleData.mzImages[mzNum], 'hot', saveLocation)
+            borderlessPlot(sampleData.mzImages[mzNum], saveLocation, 'hot')
             
         #Save a visual of the TIC
         if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'TIC_' + sampleData.name + '.png'
         if valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'TIC_' + sampleData.name + '.png'
-        borderlessPlot(sampleData.TIC, 'hot', saveLocation)
+        borderlessPlot(sampleData.TIC, saveLocation, 'hot')
         
         #Save the samples database
         pickle.dump(trainingValidationSampleData, open(dir_TrainingResults + 'trainingValidationSampleData.p', 'wb'))
@@ -243,22 +241,17 @@ def visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag
     ax.set_title('Mask', fontsize=15)
 
     ax = plt.subplot2grid(shape=(1,5), loc=(0,1))
-    if not sysLogNorm: ax.imshow(sample.mzAvgImage, cmap='hot', aspect='auto')
-    if sysLogNorm: ax.imshow(sample.mzAvgImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(result.sampleData.mzAvgImage)+3*np.std(result.sampleData.mzAvgImage), base=10, vmin=np.min(result.sampleData.mzAvgImage), vmax=np.max(result.sampleData.mzAvgImage)))
+    ax.imshow(sample.mzAvgImage, cmap='hot', aspect='auto')
     ax.set_title('Measured', fontsize=15)
 
     ax = plt.subplot2grid(shape=(1,5), loc=(0,2))
-    #if not sysLogNorm: ax.imshow(result.sampleData.mzAvgImage, cmap='hot', aspect='auto')
-    #if sysLogNorm: ax.imshow(result.sampleData.mzAvgImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(result.sampleData.mzAvgImage)+3*np.std(result.sampleData.mzAvgImage), base=10, vmin=np.min(result.sampleData.mzAvgImage), vmax=np.max(result.sampleData.mzAvgImage)))
-    if not sysLogNorm: ax.imshow(result.sampleData.TIC, cmap='hot', aspect='auto')
-    if sysLogNorm: ax.imshow(result.sampleData.TIC, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(result.sampleData.TIC)+3*np.std(result.sampleData.TIC), base=10, vmin=np.min(result.sampleData.TIC), vmax=np.max(result.sampleData.TIC)))
+    #ax.imshow(result.sampleData.mzAvgImage, cmap='hot', aspect='auto')
+    ax.imshow(result.sampleData.TIC, cmap='hot', aspect='auto')
     ax.set_title('Ground-Truth', fontsize=15)
 
     ax = plt.subplot2grid(shape=(1,5), loc=(0,3))
-    #if not sysLogNorm: plt.imshow(sample.mzAvgReconImage, aspect='auto', cmap='hot')
-    #if sysLogNorm: plt.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(result.sampleData.mzAvgImage)+3*np.std(result.sampleData.mzAvgImage), base=10, vmin=np.min(result.sampleData.mzAvgImage), vmax=np.max(result.sampleData.mzAvgImage)))
-    if not sysLogNorm: ax.imshow(sample.TICReconImage, cmap='hot', aspect='auto')
-    if sysLogNorm: ax.imshow(sample.TICReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(result.sampleData.TIC)+3*np.std(result.sampleData.TIC), base=10, vmin=np.min(result.sampleData.TIC), vmax=np.max(result.sampleData.TIC)))
+    #ax.imshow(sample.mzAvgReconImage, aspect='auto', cmap='hot')
+    ax.imshow(sample.TICReconImage, cmap='hot', aspect='auto')
     ax.set_title('Recon - PSNR: ' + str(round(compare_psnr(result.sampleData.TIC, sample.TICReconImage, data_range=np.max(result.sampleData.TIC)), 5)), fontsize=15)
     ax = plt.subplot2grid(shape=(1,5), loc=(0,4))
     ax.imshow(sample.RD, aspect='auto')
@@ -267,47 +260,23 @@ def visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag
     plt.close()
     
     #Borderless saves
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
-    plt.axis('off')
-    plt.imshow(sample.mask, aspect='auto', cmap='gray')
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    if trainDataFlag: plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent)
-    if valDataFlag: plt.savefig(dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent)
-    plt.close()
+    if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
+    elif valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_mask_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
+    borderlessPlot(sample.mask, saveLocation, 'gray')
     
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
-    plt.axis('off')
-    plt.imshow(sample.RD, aspect='auto')
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    if trainDataFlag: plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent)
-    if valDataFlag: plt.savefig(dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent)
-    plt.close()
+    if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
+    elif valDataFlag: dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_rd_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
+    borderlessPlot(sample.RD, saveLocation)
     
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
-    plt.axis('off')
-    #if not sysLogNorm: ax.imshow(result.sampleData.mzAvgImage, cmap='hot', aspect='auto')
-    #if sysLogNorm: ax.imshow(result.sampleData.mzAvgImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(result.sampleData.mzAvgImage)+3*np.std(result.sampleData.mzAvgImage), base=10, vmin=np.min(result.sampleData.mzAvgImage), vmax=np.max(result.sampleData.mzAvgImage)))
-    if not sysLogNorm: ax.imshow(result.sampleData.TIC, cmap='hot', aspect='auto')
-    if sysLogNorm: ax.imshow(result.sampleData.TIC, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(result.sampleData.TIC)+3*np.std(result.sampleData.TIC), base=10, vmin=np.min(result.sampleData.TIC), vmax=np.max(result.sampleData.TIC)))
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    if trainDataFlag: plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent)
-    if valDataFlag: plt.savefig(dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent)
-    plt.close()
+    if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
+    elif valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
+    #borderlessPlot(result.sampleData.mzAvgImage, saveLocation, 'hot')
+    borderlessPlot(result.sampleData.TIC, saveLocation, 'hot'))
     
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
-    plt.axis('off')
-    #if not sysLogNorm: plt.imshow(sample.mzAvgReconImage, aspect='auto', cmap='hot')
-    #if sysLogNorm: plt.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(result.sampleData.mzAvgImage)+3*np.std(result.sampleData.mzAvgImage), base=10, vmin=np.min(result.sampleData.mzAvgImage), vmax=np.max(result.sampleData.mzAvgImage)))
-    if not sysLogNorm: ax.imshow(sample.TICReconImage, cmap='hot', aspect='auto')
-    if sysLogNorm: ax.imshow(sample.TICReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=np.mean(result.sampleData.TIC)+3*np.std(result.sampleData.TIC), base=10, vmin=np.min(result.sampleData.TIC), vmax=np.max(result.sampleData.TIC)))
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    if trainDataFlag: plt.savefig(dir_TrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent)
-    if valDataFlag: plt.savefig(dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent)
-    plt.close()
+    if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
+    elif valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png', bbox_inches=extent
+    #borderlessPlot(sample.mzAvgReconImage, saveLocation)
+    borderlessPlot(sample.TICReconImage, saveLocation)
 
 #Given a set of samples and a chosen c value, generate a training database
 def generateDatabases(trainingValidationSampleData, optimalC):

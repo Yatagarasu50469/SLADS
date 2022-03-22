@@ -36,8 +36,17 @@ def simulateSLADS(sortedSampleFolders, dir_Results, optimalC, modelName):
     mzAvgPSNR_Results, avgPSNR_Results, TICPSNR_Results, ERDPSNR_Results = [], [], [], []
     mzAvgSSIM_Results, avgSSIM_Results, TICSSIM_Results, ERDSSIM_Results = [], [], [], []
     quantityMeasured_Results, timeResults, allERDTimes = [], [], []
+    
+    #Set the quantity measured metric for labeling the x axes
+    xLabel = '% Measured'
+    #elif scanMethod == 'linewise': xLabel = '% Lines Measured'
+    
     for result in tqdm(results, desc='Visualization', position=0, leave=True, ascii=True):
+    
+        #Export metrics and perform final analysis for the result
         result.complete()
+        
+        #Add individual results to rolling lists for averaging
         timeResults.append(result.finalTime)
         allERDTimes.append(result.computeERDTimes)
         mzAvgPSNR_Results.append(result.mzAvgPSNRList)
@@ -49,7 +58,29 @@ def simulateSLADS(sortedSampleFolders, dir_Results, optimalC, modelName):
         TICSSIM_Results.append(result.TICSSIMList)
         ERDSSIM_Results.append(result.ERDSSIMList)
         
+        #Save individual results
+        np.savetxt(result.dir_sampleResults+'PSNR_mzAvg.csv', np.transpose([result.percsMeasured, result.mzAvgPSNRList]), delimiter=',')
+        np.savetxt(result.dir_sampleResults+'PSNR_TIC.csv', np.transpose([result.percsMeasured, result.TICPSNRList]), delimiter=',')
+        #np.savetxt(result.dir_sampleResults+'PSNR_avgmz.csv', np.transpose([result.percsMeasured, result.avgPSNRList]), delimiter=',')
+        np.savetxt(result.dir_sampleResults+'PSNR_ERD.csv', np.transpose([result.percsMeasured, result.ERDPSNRList]), delimiter=',')
+        np.savetxt(result.dir_sampleResults+'SSIM_mzAvg.csv', np.transpose([result.percsMeasured, result.mzAvgSSIMList]), delimiter=',')
+        np.savetxt(result.dir_sampleResults+'SSIM_TIC.csv', np.transpose([result.percsMeasured, result.TICSSIMList]), delimiter=',')
+        #np.savetxt(result.dir_sampleResults+'SSIM_avgmz.csv', np.transpose([result.percsMeasured, result.avgSSIMList]), delimiter=',')
+        np.savetxt(result.dir_sampleResults+'SSIM_ERD.csv', np.transpose([result.percsMeasured, result.ERDSSIMList]), delimiter=',')
+        
+        #Save individual result plots
+        basicPlot(result.percsMeasured, result.mzAvgPSNRList, result.dir_sampleResults+'PSNR_mzAvg'+'.png', xLabel=xLabel, yLabel='Average PSNR (dB)')
+        basicPlot(result.percsMeasured, result.TICPSNRList, result.dir_sampleResults+'PSNR_TIC'+'.png', xLabel=xLabel, yLabel='Average PSNR (dB)')
+        #basicPlot(result.percsMeasured, result.avgPSNRList, result.dir_sampleResults+'PSNR_avgmz'+'.png', xLabel=xLabel, yLabel='Average PSNR (dB)')
+        basicPlot(result.percsMeasured, result.ERDPSNRList, result.dir_sampleResults+'PSNR_ERD'+'.png', xLabel=xLabel, yLabel='Average PSNR (dB)')
+        basicPlot(result.percsMeasured, result.mzAvgSSIMList, result.dir_sampleResults+'SSIM_mzAvg'+'.png', xLabel=xLabel, yLabel='Average SSIM')
+        basicPlot(result.percsMeasured, result.TICSSIMList, result.dir_sampleResults+'SSIM_TIC'+'.png', xLabel=xLabel, yLabel='Average SSIM')
+        #basicPlot(result.percsMeasured, result.avgSSIMList, result.dir_sampleResults+'SSIM_avgmz'+'.png', xLabel=xLabel, yLabel='Average SSIM')
+        basicPlot(result.percsMeasured, result.ERDSSIMList, result.dir_sampleResults+'SSIM_ERD'+'.png', xLabel=xLabel, yLabel='Average SSIM')
+            
+        
         #If pointwise, then consider the percentage measured at each step; if linewise then consider the number of lines scanned
+        #Since number of points on each line is different, this approach is not as descriptive as hoped and was therefore disabled.
         quantityMeasured_Results.append([sample.percMeasured for sample in result.samples])
         #if scanMethod == 'pointwise': quantityMeasured_Results.append([sample.percMeasured for sample in result.samples])
         #elif scanMethod == 'linewise': quantityMeasured_Results.append([(np.sum(np.sum(sample.mask, axis=1)>0)/sample.mask.shape[0])*100 for sample in result.samples])
@@ -69,91 +100,27 @@ def simulateSLADS(sortedSampleFolders, dir_Results, optimalC, modelName):
     mzAvgSSIM_AreaUnderCurve = np.trapz(mzAvgSSIM_Results_mean, quantityMeasured)
     ERDPSNR_AreaUnderCurve = np.trapz(ERDPSNR_Results_mean, quantityMeasured)
     
-    #Save average results per percentage data
-    np.savetxt(dir_Results+'mzAvgPSNR.csv', np.transpose([quantityMeasured, mzAvgPSNR_Results_mean]), delimiter=',')
-    #np.savetxt(dir_Results+'avgPSNR.csv', np.transpose([quantityMeasured, avgPSNR_Results_mean]), delimiter=',')
-    np.savetxt(dir_Results+'TICPSNR.csv', np.transpose([quantityMeasured, TICPSNR_Results_mean]), delimiter=',')
-    np.savetxt(dir_Results+'ERDPSNR.csv', np.transpose([quantityMeasured, ERDPSNR_Results_mean]), delimiter=',')
-    np.savetxt(dir_Results+'mzAvgSSIM.csv', np.transpose([quantityMeasured, mzAvgSSIM_Results_mean]), delimiter=',')
-    #np.savetxt(dir_Results+'avgSSIM.csv', np.transpose([quantityMeasured, avgSSIM_Results_mean]), delimiter=',')
-    np.savetxt(dir_Results+'TICSSIM.csv', np.transpose([quantityMeasured, TICSSIM_Results_mean]), delimiter=',')
-    np.savetxt(dir_Results+'ERDSSIM.csv', np.transpose([quantityMeasured, ERDSSIM_Results_mean]), delimiter=',')
+    #Save averaged results per quantity measured metric
+    np.savetxt(dir_Results+'PSNR_mzAvg.csv', np.transpose([quantityMeasured, mzAvgPSNR_Results_mean]), delimiter=',')
+    #np.savetxt(dir_Results+'PSNR_avgmz.csv', np.transpose([quantityMeasured, avgPSNR_Results_mean]), delimiter=',')
+    np.savetxt(dir_Results+'PSNR_TIC.csv', np.transpose([quantityMeasured, TICPSNR_Results_mean]), delimiter=',')
+    np.savetxt(dir_Results+'PSNR_ERD.csv', np.transpose([quantityMeasured, ERDPSNR_Results_mean]), delimiter=',')
+    np.savetxt(dir_Results+'SSIM_mzAvg.csv', np.transpose([quantityMeasured, mzAvgSSIM_Results_mean]), delimiter=',')
+    #np.savetxt(dir_Results+'SSIM_avgmz.csv', np.transpose([quantityMeasured, avgSSIM_Results_mean]), delimiter=',')
+    np.savetxt(dir_Results+'SSIM_TIC.csv', np.transpose([quantityMeasured, TICSSIM_Results_mean]), delimiter=',')
+    np.savetxt(dir_Results+'SSIM_ERD.csv', np.transpose([quantityMeasured, ERDSSIM_Results_mean]), delimiter=',')
 
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(quantityMeasured, mzAvgPSNR_Results_mean, color='black')
-    ax1.set_xlabel('% Measured')
-    #if scanMethod == 'pointwise': ax1.set_xlabel('% Measured')
-    #elif scanMethod == 'linewise': ax1.set_xlabel('% Lines Measured')
-    ax1.set_ylabel('Average PSNR (dB)')
-    plt.savefig(dir_Results + 'PSNR_mzAvg' + '.png')
-    plt.close()
+    
+    #Export plots of averaged results
+    basicPlot(quantityMeasured, mzAvgPSNR_Results_mean, dir_Results+'PSNR_mzAvg'+'.png', xLabel=xLabel, yLabel='Average PSNR (dB)')
+    basicPlot(quantityMeasured, TICPSNR_Results_mean, dir_Results+'PSNR_TIC'+'.png', xLabel=xLabel, yLabel='Average PSNR (dB)')
+    #basicPlot(quantityMeasured, avgPSNR_Results_mean, dir_Results+'PSNR_avgmz'+'.png', xLabel=xLabel, yLabel='Average PSNR (dB)')
+    basicPlot(quantityMeasured, ERDPSNR_Results_mean, dir_Results+'PSNR_ERD'+'.png', xLabel=xLabel, yLabel='Average PSNR (dB)')
+    basicPlot(quantityMeasured, mzAvgSSIM_Results_mean, dir_Results+'SSIM_mzAvg'+'.png', xLabel=xLabel, yLabel='Average SSIM')
+    basicPlot(quantityMeasured, TICSSIM_Results_mean, dir_Results+'SSIM_TIC'+'.png', xLabel=xLabel, yLabel='Average SSIM')
+    #basicPlot(quantityMeasured, avgSSIM_Results_mean, dir_Results+'SSIM_avgmz'+'.png', xLabel=xLabel, yLabel='Average SSIM')
+    basicPlot(quantityMeasured, ERDSSIM_Results_mean, dir_Results+'SSIM_ERD'+'.png', xLabel=xLabel, yLabel='Average SSIM')
 
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)    
-    #ax1.plot(quantityMeasured, avgPSNR_Results_mean, color='black')
-    ax1.plot(quantityMeasured, TICPSNR_Results_mean, color='black')
-    ax1.set_xlabel('% Measured')
-    #if scanMethod == 'pointwise': ax1.set_xlabel('% Measured')
-    #elif scanMethod == 'linewise': ax1.set_xlabel('% Lines Measured')
-    ax1.set_ylabel('Average PSNR (dB)')
-    #plt.savefig(dir_Results + 'PSNR_avgmz' + '.png')
-    plt.savefig(dir_Results + 'PSNR_TIC' + '.png')
-    plt.close()
-    
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(quantityMeasured, ERDPSNR_Results_mean, color='black')
-    if scanMethod == 'pointwise': ax1.set_xlabel('% Measured')
-    elif scanMethod == 'linewise': ax1.set_xlabel('% Lines Measured')
-    ax1.set_ylabel('Average PSNR (dB)')
-    plt.savefig(dir_Results + 'PSNR_ERD' + '.png')
-    plt.close()
-    
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(quantityMeasured, mzAvgSSIM_Results_mean, color='black')
-    ax1.set_xlabel('% Measured')
-    #if scanMethod == 'pointwise': ax1.set_xlabel('% Measured')
-    #elif scanMethod == 'linewise': ax1.set_xlabel('% Lines Measured')
-    ax1.set_ylabel('Average SSIM')
-    plt.savefig(dir_Results + 'SSIM_mzAvg' + '.png')
-    plt.close()
-
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)    
-    #ax1.plot(quantityMeasured, avgSSIM_Results_mean, color='black')
-    ax1.plot(quantityMeasured, TICSSIM_Results_mean, color='black')
-    ax1.set_xlabel('% Measured')
-    #if scanMethod == 'pointwise': ax1.set_xlabel('% Measured')
-    #elif scanMethod == 'linewise': ax1.set_xlabel('% Lines Measured')
-    ax1.set_ylabel('Average SSIM')
-    #plt.savefig(dir_Results + 'SSIM_avgmz' + '.png')
-    plt.savefig(dir_Results + 'SSIM_TIC' + '.png')
-    plt.close()
-    
-    font = {'size' : 18}
-    plt.rc('font', **font)
-    f = plt.figure(figsize=(20,8))
-    ax1 = f.add_subplot(1,1,1)    
-    ax1.plot(quantityMeasured, ERDSSIM_Results_mean, color='black')
-    ax1.set_xlabel('% Measured')
-    #if scanMethod == 'pointwise': ax1.set_xlabel('% Measured')
-    #elif scanMethod == 'linewise': ax1.set_xlabel('% Lines Measured')
-    ax1.set_ylabel('Average SSIM')
-    plt.savefig(dir_Results + 'SSIM_ERD' + '.png')
-    plt.close()
-    
     #Find the final results for each image
     lastQuantityMeasured = [quantityMeasured_Results[i][-1] for i in range(0, len(sampleDataset))]
     lastmzAvgPSNR = [mzAvgPSNR_Results[i][-1] for i in range(0, len(sampleDataset))]
@@ -166,10 +133,9 @@ def simulateSLADS(sortedSampleFolders, dir_Results, optimalC, modelName):
     lastERDSSIM = [ERDSSIM_Results[i][-1] for i in range(0, len(sampleDataset))]
     allERDTimes = np.concatenate(allERDTimes)
     
-    #Printout final results 
+    #Print out final results 
     dataPrintout = [['','Average', '', 'Standard Deviation']]
     dataPrintout.append(['Final %:', np.mean(lastQuantityMeasured), '+/-', np.std(lastQuantityMeasured)])
-    #if scanMethod == 'pointwise': dataPrintout.append(['Final %:', np.mean(lastQuantityMeasured), '+/-', np.std(lastQuantityMeasured)])
     #elif scanMethod == 'linewise': dataPrintout.append(['Final % of Lines:', np.mean(lastQuantityMeasured), '+/-', np.std(lastQuantityMeasured)])
     dataPrintout.append(['mz PSNR:', np.mean(lastmzAvgPSNR), '+/-', np.std(lastmzAvgPSNR)])
     dataPrintout.append(['mz PSNR Area Under Curve:', mzAvgPSNR_AreaUnderCurve])

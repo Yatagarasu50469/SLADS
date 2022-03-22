@@ -38,7 +38,19 @@ if trainingModel:
     #Import any specfic training function and class definitions
     exec(open("./CODE/TRAINING.py", encoding='utf-8').read())
     
-    #If the dataset has not been generated then generate and find the best c for one, otherwise load the best c previously determined
+    #If configured, try loading existing training/validation datasets, else generate such and optimize the c value from scratch
+    if loadTrainValDatasets:
+        try:
+            trainingValidationSampleData = pickle.load(open(dir_TrainingResults + 'trainingValidationSampleData.p', "rb" ))
+            validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
+            trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
+            trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase.p', "rb" ))
+            validationDatabase = pickle.load(open(dir_TrainingResults + 'validationDatabase.p', "rb" ))
+            optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
+        except:
+            loadTrainValDatasets = False
+            print('Warning - Unable to load existing training/validation data files; will now construct from scratch.')
+
     if not loadTrainValDatasets:
     
         #Import training/validation data
@@ -57,13 +69,6 @@ if trainingModel:
         sectionTitle('GENERATING TRAINING/VALIDATION DATASETS')
         trainingDatabase, validationDatabase = generateDatabases(trainingValidationSampleData, optimalC)
 
-    else:
-        trainingValidationSampleData = pickle.load(open(dir_TrainingResults + 'trainingValidationSampleData.p', "rb" ))
-        validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
-        trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
-        trainingDatabase = pickle.load(open(dir_TrainingResults + 'trainingDatabase.p', "rb" ))
-        validationDatabase = pickle.load(open(dir_TrainingResults + 'validationDatabase.p', "rb" ))
-        optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
 
     #Train model(s) for the given database and c value
     sectionTitle('PERFORMING TRAINING')

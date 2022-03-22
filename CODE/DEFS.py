@@ -207,10 +207,13 @@ class SampleData:
                     self.readScanFiles.append(scanFileName)
                     
                     #Extract line number from the filename, removing leading zeros, subtract 1 for zero indexing
-                    lineNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
+                    fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
                     
-                    #If the line numbers are not the physical row numbers, then obtain correct number from stored LUT
+                    #If the file numbers are not the physical row numbers, then obtain correct number from stored LUT
                     if (impModel or postModel) and self.unorderedNames: lineNum = self.physicalLineNums[lineNum+1]
+                    else: lineNum = fileNum
+                    #if (impModel or postModel) and self.unorderedNames: lineNum, columnNum = self.physicalLineNums[fileNum+1], self.physicalColumnNums[fileNum+1]
+                    #else: lineNum, columnNum = fileNum #Unknown how MALDI data stores physical position...
                     
                     #Record that the line number specified has been read previously
                     self.readLines.append(lineNum)
@@ -226,6 +229,7 @@ class SampleData:
                     #For impOffset compatability with percent-linewise or pointwise: np.argwhere(mask[lineNum]==1).min() must be improved...
                     #Where physicalLineNums is updated, add another dictionary of physicalColumnNums mapping number in filename to time offset
                     #Remember to make modifications to corresponding parhelper method
+                    #if (impModel or postModel) and impOffset and scanMethod == 'linewise' and lineMethod == 'segLine': origTimes += (columnNum/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
                     if (impModel or postModel) and impOffset and scanMethod == 'linewise' and lineMethod == 'segLine': origTimes += (np.argwhere(self.mask[lineNum]==1).min()/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
                     elif (impModel or postModel) and impOffset: sys.exit('Error - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
                     for mzRangeNum in range(0, len(self.mzRanges)): self.mzImages[mzRangeNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(self.mzRanges[mzRangeNum][0]), float(self.mzRanges[mzRangeNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0)
@@ -501,7 +505,7 @@ class Result:
 
             dataFileNames = natsort.natsorted(glob.glob(self.dir_progression + 'progression_*.png'))
             height, width, layers = cv2.imread(dataFileNames[0]).shape
-            animation = cv2.VideoWriter(self.dir_videos + 'average.avi', cv2.VideoWriter_fourcc(*'MJPG'), 1, (width, height))
+            animation = cv2.VideoWriter(self.dir_videos + 'progression.avi', cv2.VideoWriter_fourcc(*'MJPG'), 1, (width, height))
             for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
             animation.release()
             animation = None
@@ -526,7 +530,7 @@ def visualize_serial(sample, sampleData, dir_progression, dir_mzProgressions):
     #For each of the mz ranges, generate visuals
     for mzNum in range(0, len(sampleData.mzRanges)):
         
-        mzMinValue, mzMaxValue, mzLinThreshValue = np.min(sampleData.mzImages[mzNum]), np.max(sampleData.mzImages[mzNum]), np.mean(sampleData.mzImages[mzNum])+3*np.std(sampleData.mzImages[mzNum])
+        mzMinValue, mzMaxValue = np.min(sampleData.mzImages[mzNum]), np.max(sampleData.mzImages[mzNum])
         
         #Turn metrics into strings
         massRange = str(sampleData.mzRanges[mzNum][0]) + '-' + str(sampleData.mzRanges[mzNum][1])
@@ -541,22 +545,19 @@ def visualize_serial(sample, sampleData, dir_progression, dir_mzProgressions):
 
         if sampleData.simulationFlag: 
             ax = plt.subplot2grid(shape=(2,3), loc=(0,0))
-            if not sysLogNorm: im = ax.imshow(sampleData.mzImages[mzNum], cmap='hot', aspect='auto', vmin=mzMinValue, vmax=mzMaxValue)
-            if sysLogNorm: im = ax.imshow(sampleData.mzImages[mzNum], cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=mzLinThreshValue, base=10, vmin=mzMinValue, vmax=mzMaxValue))
+            im = ax.imshow(sampleData.mzImages[mzNum], cmap='hot', aspect='auto', vmin=mzMinValue, vmax=mzMaxValue)
             ax.set_title('Ground-Truth')
             cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
         if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (0,1))
         else: ax = plt.subplot2grid((1,3), (0,0))
-        if not sysLogNorm: im = ax.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', vmin=mzMinValue, vmax=mzMaxValue)
-        if sysLogNorm: im = ax.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=mzLinThreshValue, base=10, vmin=mzMinValue, vmax=mzMaxValue))
+        im = ax.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', vmin=mzMinValue, vmax=mzMaxValue)
         ax.set_title('Reconstruction')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
         if sampleData.simulationFlag: 
             ax = plt.subplot2grid((2,3), (0,2))
-            if not sysLogNorm: im = ax.imshow(abs(sampleData.mzImages[mzNum]-sample.mzReconImages[mzNum]), cmap='hot', aspect='auto', vmin=mzMinValue, vmax=mzMaxValue)
-            if sysLogNorm: im = ax.imshow(abs(sampleData.mzImages[mzNum]-sample.mzReconImages[mzNum]), cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=mzLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
+            im = ax.imshow(abs(sampleData.mzImages[mzNum]-sample.mzReconImages[mzNum]), cmap='hot', aspect='auto', vmin=mzMinValue, vmax=mzMaxValue)
             ax.set_title('Absolute Difference')
             cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
@@ -585,55 +586,22 @@ def visualize_serial(sample, sampleData, dir_progression, dir_mzProgressions):
         plt.savefig(saveLocation)
         plt.close()
 
-        #Do borderless saves for each mz image here; mask will be the same as produced in the average output
+        #Do borderless saves for each mz image here; mask will be the same as produced in the progression output
         saveLocation = dir_mzProgressions[mzNum] + 'erd_mz_' + massRange + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        fig=plt.figure()
-        ax=fig.add_subplot(1,1,1)
-        plt.axis('off')
-        plt.imshow(sample.ERDs[mzNum], cmap='viridis', vmin=0, aspect='auto')
-        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-        plt.savefig(saveLocation, bbox_inches=extent)
-        plt.close()
+        borderlessPlot(sample.ERDs[mzNum], saveLocation, cmap='viridis', vmin=0)
         
         if sampleData.simulationFlag:
             saveLocation = dir_mzProgressions[mzNum] + 'rd_mz_' + massRange + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-            fig=plt.figure()
-            ax=fig.add_subplot(1,1,1)
-            plt.axis('off')
-            plt.imshow(sample.RDs[mzNum], cmap='viridis', vmin=0, aspect='auto')
-            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            plt.savefig(saveLocation, bbox_inches=extent)
-            plt.close()
+            borderlessPlot(sample.RDs[mzNum], saveLocation, cmap='viridis', vmin=0)
             
             saveLocation = dir_mzProgressions[mzNum] + 'groundTruth_mz_' + massRange + '.png'
-            fig=plt.figure()
-            ax=fig.add_subplot(1,1,1)
-            plt.axis('off')
-            if not sysLogNorm: plt.imshow(sampleData.mzImages[mzNum], cmap='hot', aspect='auto', vmin=mzMinValue, vmax=mzMaxValue)
-            if sysLogNorm: plt.imshow(sampleData.mzImages[mzNum], cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=mzLinThreshValue, base=10, vmin=mzMinValue, vmax=mzMaxValue))
-            extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-            plt.savefig(saveLocation, bbox_inches=extent)
-            plt.close()
+            borderlessPlot(sample.mzImages[mzNum], saveLocation, cmap='hot', vmin=mzMinValue, vmax=mzMaxValue)
 
         saveLocation = dir_mzProgressions[mzNum] + 'reconstruction_mz_' + massRange + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        fig=plt.figure()
-        ax=fig.add_subplot(1,1,1)
-        plt.axis('off')
-        if not sysLogNorm: plt.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', vmin=mzMinValue, vmax=mzMaxValue)
-        if sysLogNorm: plt.imshow(sample.mzReconImages[mzNum], cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=mzLinThreshValue, base=10, vmin=mzMinValue, vmax=mzMaxValue))
-        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-        plt.savefig(saveLocation, bbox_inches=extent)
-        plt.close()
+        borderlessPlot(sample.mzReconImages[mzNum], saveLocation, cmap='hot', vmin=mzMinValue, vmax=mzMaxValue)
         
         saveLocation = dir_mzProgressions[mzNum] + 'measured_mz_' + massRange + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        fig=plt.figure()
-        ax=fig.add_subplot(1,1,1)
-        plt.axis('off')
-        if not sysLogNorm: plt.imshow(sample.mzImages[mzNum], cmap='hot', aspect='auto', vmin=mzMinValue, vmax=mzMaxValue)
-        if sysLogNorm: plt.imshow(sample.mzImages[mzNum], cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=mzLinThreshValue, base=10, vmin=mzMinValue, vmax=mzMaxValue))
-        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-        plt.savefig(saveLocation, bbox_inches=extent)
-        plt.close()
+        borderlessPlot(sample.mzImages[mzNum], saveLocation, cmap='hot', vmin=mzMinValue, vmax=mzMaxValue)
         
     #For the overall progression , generate visual
     #avgMinValue, avgMaxValue, avgLinThreshValue = np.min(sampleData.mzAvgImage), np.max(sampleData.mzAvgImage), np.mean(sampleData.mzAvgImage)+3*np.std(sampleData.mzAvgImage)
@@ -647,28 +615,22 @@ def visualize_serial(sample, sampleData, dir_progression, dir_mzProgressions):
     
     if sampleData.simulationFlag: 
         ax = plt.subplot2grid(shape=(2,3), loc=(0,0))
-        #if not sysLogNorm: im = ax.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
-        #if sysLogNorm: im = ax.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
-        if not sysLogNorm: im = ax.imshow(sampleData.TIC, cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
-        if sysLogNorm: im = ax.imshow(sampleData.TIC, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=TICLinThreshValue, base=10, vmin=TICMinValue, vmax=TICaxValue))
+        #im = ax.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
+        im = ax.imshow(sampleData.TIC, cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
         ax.set_title('Ground-Truth')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
     if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (0,1))
     else: ax = plt.subplot2grid((1,3), (0,0))
-    #if not sysLogNorm: im = ax.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
-    #if sysLogNorm: im = ax.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
-    if not sysLogNorm: im = ax.imshow(sample.TICReconImage, cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
-    if sysLogNorm: im = ax.imshow(sample.TICReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=TICLinThreshValue, base=10, vmin=TICMinValue, vmax=TICMaxValue))
+    #im = ax.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
+    im = ax.imshow(sample.TICReconImage, cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
     ax.set_title('Reconstruction')
     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
     if sampleData.simulationFlag: 
         ax = plt.subplot2grid((2,3), (0,2))
-        #if not sysLogNorm: im = ax.imshow(abs(sampleData.mzAvgImage-sample.mzAvgReconImage), cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
-        #if sysLogNorm: im = ax.imshow(abs(sampleData.mzAvgImage-sample.mzAvgReconImage), cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
-        if not sysLogNorm: im = ax.imshow(abs(sampleData.TIC-sample.TICReconImage), cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
-        if sysLogNorm: im = ax.imshow(abs(sampleData.TIC-sample.TICReconImage), cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=TICLinThreshValue, base=10, vmin=TICMinValue, vmax=TICMaxValue))
+        #im = ax.imshow(abs(sampleData.mzAvgImage-sample.mzAvgReconImage), cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
+        im = ax.imshow(abs(sampleData.TIC-sample.TICReconImage), cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
         ax.set_title('Absolute Difference')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
@@ -700,47 +662,19 @@ def visualize_serial(sample, sampleData, dir_progression, dir_mzProgressions):
     #Borderless saves
     #saveLocation = dir_progression + 'reconstruction_Avg' + '_iter_' + str(sample.iteration) +  '_perc_' + str(sample.percMeasured) + '.png'
     saveLocation = dir_progression + 'reconstruction_TIC' + '_iter_' + str(sample.iteration) +  '_perc_' + str(sample.percMeasured) + '.png'
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
-    plt.axis('off')
-    #if not sysLogNorm: plt.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
-    #if sysLogNorm: plt.imshow(sample.mzAvgReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
-    if not sysLogNorm: plt.imshow(sample.TICReconImage, cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
-    if sysLogNorm: plt.imshow(sample.TICReconImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=TICLinThreshValue, base=10, vmin=TICMinValue, vmax=TICMaxValue))
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    plt.savefig(saveLocation, bbox_inches=extent)
-    plt.close()
+    #borderlessPlot(sample.mzAvgReconImage, saveLocation, cmap='hot'', vmin=avgMinValue, vmax=avgMaxValue)
+    borderlessPlot(sample.TICReconImage, saveLocation, cmap='hot', vmin=TICMinValue, vmax=TICMaxValue)
     
     saveLocation = dir_progression + 'mask_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
-    plt.axis('off')
-    plt.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    plt.savefig(saveLocation, bbox_inches=extent)
-    plt.close()
+    borderlessPlot(sample.mask, saveLocation, cmap='gray')
     
     saveLocation = dir_progression + 'ERD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
-    plt.axis('off')
-    plt.imshow(sample.ERD, aspect='auto', vmin=0)
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    plt.savefig(saveLocation, bbox_inches=extent)
-    plt.close()
+    borderlessPlot(sample.ERD, saveLocation, cmap='viridis')
     
     #saveLocation = dir_progression + 'measured_Avg_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
     saveLocation = dir_progression + 'measured_TIC_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
-    plt.axis('off')
-    #if not sysLogNorm: plt.imshow(sample.mzAvgReconImage*sample.mask, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
-    #if sysLogNorm: plt.imshow(sample.mzAvgReconImage*sample.mask, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
-    if not sysLogNorm: plt.imshow(sample.TICReconImage*sample.mask, cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
-    if sysLogNorm: plt.imshow(sample.TICReconImage*sample.mask, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=TICLinThreshValue, base=10, vmin=TICMinValue, vmax=TICMaxValue))
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-    plt.savefig(saveLocation, bbox_inches=extent)
-    plt.close()
+    #borderlessPlot(sample.mzAvgReconImage*sample.mask, saveLocation, cmap='hot'', vmin=avgMinValue, vmax=avgMaxValue)
+    borderlessPlot(sample.ERD, saveLocation, cmap='viridis'', vmin=TICMinValue, vmax=TICMaxValue)
     
     if sampleData.simulationFlag:
         saveLocation = dir_progression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
@@ -754,16 +688,8 @@ def visualize_serial(sample, sampleData, dir_progression, dir_mzProgressions):
         
         #saveLocation = dir_progression + 'groundTruth_Avg.png'
         saveLocation = dir_progression + 'groundTruth_TIC.png'
-        fig=plt.figure()
-        ax=fig.add_subplot(1,1,1)
-        plt.axis('off')
-        #if not sysLogNorm: plt.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', vmin=avgMinValue, vmax=avgMaxValue)
-        #if sysLogNorm: plt.imshow(sampleData.mzAvgImage, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=avgLinThreshValue, base=10, vmin=avgMinValue, vmax=avgMaxValue))
-        if not sysLogNorm: plt.imshow(sampleData.TIC, cmap='hot', aspect='auto', vmin=TICMinValue, vmax=TICMaxValue)
-        if sysLogNorm: plt.imshow(sampleData.TIC, cmap='hot', aspect='auto', norm=matplotlib.colors.SymLogNorm(linthresh=TICLinThreshValue, base=10, vmin=TICMinValue, vmax=TICMaxValue))
-        extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-        plt.savefig(saveLocation, bbox_inches=extent)
-        plt.close()
+        #borderlessPlot(sampleData.mzAvgImage, saveLocation, cmap='hot'', vmin=avgMinValue, vmax=avgMaxValue)
+        borderlessPlot(sampleData.TIC, saveLocation, cmap='hot'', vmin=TICMinValue, vmax=TICMaxValue)
 
 def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, liveOutputFlag, dir_Results, datagenFlag, impModel, tqdmHide):
 
@@ -1160,37 +1086,24 @@ def upConv(numFilters, inputs):
     return Conv2D(numFilters, 3, activation='relu', padding='same')(Conv2D(numFilters, 1, activation='relu', padding='same')(inputs))
 
 def unet(numFilters, numChannels):
-
     inputs = Input(shape=(None,None,numChannels), batch_size=None)
-
     conv0 = downConv(numFilters, inputs)
-
     conv1 = downConv(numFilters*2, MaxPool2D(pool_size=(2,2))(conv0))
-
     conv2 = downConv(numFilters*4, MaxPool2D(pool_size=(2,2))(conv1))
-
     conv3 = downConv(numFilters*8, MaxPool2D(pool_size=(2,2))(conv2))
-
     conv4 = downConv(numFilters*16, MaxPool2D(pool_size=(2,2))(conv3))
-
     up1 = Conv2D(numFilters*16, 2, activation='relu', padding='same')(customResize(conv4, conv3))
     conv5 = upConv(numFilters*8, concatenate([conv3, up1]))
-
     up2 = Conv2D(numFilters*8, 2, activation='relu', padding='same')(customResize(conv5, conv2))
     conv6 = upConv(numFilters*4, concatenate([conv2, up2]))
-
     up3 = Conv2D(numFilters*4, 2, activation='relu', padding='same')(customResize(conv6, conv1))
     conv7 = upConv(numFilters*2, concatenate([conv1, up3]))
-
     up4 = Conv2D(numFilters*2, 2, activation='relu', padding='same')(customResize(conv7, conv0))
     conv8 = upConv(numFilters, concatenate([conv0, up4]))
-
     outputs = Conv2D(1, 1, activation='relu', padding='same')(conv8)
-
     return tf.keras.Model(inputs=inputs, outputs=outputs)
 
-
-#NEAREST_NEIGHBOR, BILINEAR
+#Rescale spatial dimensions of tensor x to match to those of tensor y
 def customResize(x, y):
     x = image_ops.resize_images_v2(x, array_ops.shape(y)[1:3], method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
     nshape = tuple(y.shape.as_list())
@@ -1228,13 +1141,24 @@ def sizeFunc(num, suffix='B'):
 def computeDifference(array1, array2):
     return abs(array1-array2)
 
-def borderlessPlot(image, cmap, saveLocation):
+def borderlessPlot(image, saveLocation, cmap='viridis', vmin=None, vmax=None):
     fig=plt.figure()
     ax=fig.add_subplot(1,1,1)
     plt.axis('off')
-    plt.imshow(image, cmap=cmap, aspect='auto')
+    plt.imshow(image, cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax)
     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     plt.savefig(saveLocation, bbox_inches=extent)
+    plt.close()
+
+def basicPlot(xData, yData, saveLocation, xLabel='', yLabel='')
+    font = {'size' : 18}
+    plt.rc('font', **font)
+    f = plt.figure(figsize=(20,8))
+    ax1 = f.add_subplot(1,1,1)    
+    ax1.plot(xData, yData, color='black')
+    ax1.set_xlabel(xLabel)
+    ax1.set_ylabel(yLabel)
+    plt.savefig(saveLocation)
     plt.close()
 
 #Quick print for titles in UI 

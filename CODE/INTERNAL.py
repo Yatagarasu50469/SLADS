@@ -164,13 +164,16 @@ if not os.path.exists(dir_ImpData) and impModel: sys.exit('Error - dir_ImpData: 
 if not os.path.exists(dir_PostData) and postModel: sys.exit('Error - dir_PostData: ./INPUT/POST/ does not exist')
 
 #As needed, reset the training directories
-if trainingModel:
+if trainingModel and not loadTrainValDatasets:
     if os.path.exists(dir_TrainingResults): shutil.rmtree(dir_TrainingResults)
     os.makedirs(dir_TrainingResults)
     os.makedirs(dir_TrainingModelResults)
     os.makedirs(dir_TrainingResultsImages)
     os.makedirs(dir_ValidationTrainingResultsImages)
-
+if trainingModel and loadTrainValDatasets:
+    if os.path.exists(dir_TrainingModelResults): shutil.rmtree(dir_TrainingModelResults)
+    os.makedirs(dir_TrainingModelResults)
+    
 #Clear validation, testing, and implementation directories 
 if os.path.exists(dir_ValidationResults): shutil.rmtree(dir_ValidationResults)
 os.makedirs(dir_ValidationResults)

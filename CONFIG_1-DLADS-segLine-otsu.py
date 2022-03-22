@@ -211,7 +211,7 @@ trainingVizSteps = 10
 #GENERALLY NOT CHANGED
 ##################################################################
 
-#Should output visualizations be generated during acquisition? (Not recommended for simulation)
+#Should output visualizations be generated during acquisition? (Not recommended; substantially reduces performance)
 liveOutputFlag = False
 
 #Should parallelization calls be used (True); if memory overflow issues develop, set to False
@@ -226,17 +226,11 @@ trainingDataPlot = True
 #Should existing results folders not be allowed to be overwritten?
 preventResultsOverwrite = False
 
-#If consistency in the random generator is desired for inter-code comparisons
+#If consistency in the random generator is desired for inter-code comparisons (does not affect DLADS training)
 consistentSeed = True
-
-#Should animations be generated during testing/implementation
-animationGen = True
 
 #Define precision of the percentage averaging (as percentage is inconsistent between acquistion steps)
 precision = 0.001
-
-#Should mz images be shown with log normalized colorbars 
-sysLogNorm = False
 
 ##################################################################
 
