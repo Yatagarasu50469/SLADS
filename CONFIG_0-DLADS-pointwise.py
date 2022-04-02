@@ -169,7 +169,7 @@ optimizer = 'Nadam'
 lossFunc = 'MAE'
 
 #What should the learning rate of the model's optimizer be
-learningRate = 1e-5
+learningRate = 1e-4
 
 #What should the batch size for pushing data through the network be
 batchSize = 1

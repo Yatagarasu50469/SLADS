@@ -77,7 +77,7 @@ class SampleData:
         else: sys.exit('Error - File Numbering parameter used in sampleInfo is not an acceptable value.')
 
         #If the filenames were sequentially generated, then load location mapping dictionary
-        if self.unorderedNames: 
+        if self.unorderedNames and not impModel: 
             for item in np.loadtxt(sampleFolder+os.path.sep+'physicalLineNums.csv', 'int', delimiter=','): self.physicalLineNums[item[0]] = item[1]
 
         #Get mz ranges to use for visualizations
@@ -210,7 +210,7 @@ class SampleData:
                     fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
                     
                     #If the file numbers are not the physical row numbers, then obtain correct number from stored LUT
-                    if (impModel or postModel) and self.unorderedNames: lineNum = self.physicalLineNums[lineNum+1]
+                    if self.unorderedNames: lineNum = self.physicalLineNums[lineNum+1]
                     else: lineNum = fileNum
                     #if (impModel or postModel) and self.unorderedNames: lineNum, columnNum = self.physicalLineNums[fileNum+1], self.physicalColumnNums[fileNum+1]
                     #else: lineNum, columnNum = fileNum #Unknown how MALDI data stores physical position...
