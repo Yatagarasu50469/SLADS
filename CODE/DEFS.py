@@ -356,7 +356,9 @@ class Sample:
             result.computeERDTimes.append((t1-t0)+polyComputeTime)
         
         #Process ERD for next measurement(s) selection (resize, set measured locations to 0, ensure >= values, rescale for Otsu, and prevent line revisitation as specified)
-        self.physicalERD = resize(self.squareERD, tuple(sampleData.finalDim), order=0)*(1-self.mask)
+        self.ERD = resize(self.squareERD, tuple(sampleData.finalDim), order=0)*(1-self.mask)
+        self.ERDs = np.moveaxis(resize(np.moveaxis(self.squareERDs , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)*(1-self.mask)
+        self.physicalERD = copy.deepcopy(self.ERD)
         self.physicalERD[self.physicalERD<0] = 0
         if np.max(self.physicalERD) != 0: self.physicalERD = ((self.physicalERD-np.min(self.physicalERD))/(np.max(self.physicalERD)-np.min(self.physicalERD)))*100
         if sampleData.scanMethod == 'linewise' and not sampleData.lineRevist: self.physicalERD[np.where(np.sum(self.mask, axis=1)>0)] = 0
@@ -450,9 +452,7 @@ class Result:
         #Resize RD(s) for final visualization
         sample.RD = resize(sample.squareRD, tuple(self.sampleData.finalDim), order=0)*(1-sample.mask)
         sample.RDs = np.moveaxis(resize(np.moveaxis(sample.squareRDs , 0, -1), tuple(self.sampleData.finalDim), order=0), -1, 0)*(1-sample.mask)
-        sample.ERD = resize(sample.squareERD, tuple(self.sampleData.finalDim), order=0)*(1-sample.mask)
-        sample.ERDs = np.moveaxis(resize(np.moveaxis(sample.squareERDs , 0, -1), tuple(self.sampleData.finalDim), order=0), -1, 0)*(1-sample.mask)
-        
+
     #Generate visualiations/metrics as needed at the end of scanning
     def complete(self):
         
@@ -480,10 +480,6 @@ class Result:
             #self.avgSSIMList = [sample.avgmzImageSSIM for sample in self.samples]
             self.TICSSIMList = [sample.TICImageSSIM for sample in self.samples]
             self.ERDSSIMList = [sample.ERDSSIM for sample in self.samples]
-        else:         
-            for sample in self.samples:
-                sample.ERD = resize(sample.squareERD, tuple(self.sampleData.finalDim), order=0)*(1-sample.mask)
-                sample.ERDs = np.moveaxis(resize(np.moveaxis(sample.squareERDs , 0, -1), tuple(self.sampleData.finalDim), order=0), -1, 0)*(1-sample.mask)
         
         #Generate visualizations if they are not created during operation
         if not self.liveOutputFlag:
