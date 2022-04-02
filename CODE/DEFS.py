@@ -276,13 +276,14 @@ class Sample:
         
         #If not taking values from a reconstruction, get from equipment or ground-truth; else get from the reconstruction
         if not fromRecon:
-            #If not simulation, then read from equipment; mask images by what should have been scanned
+            #If not simulation, then read from equipment; update sampleData mask and mask images by what should have been scanned
             if not sampleData.simulationFlag and not sampleData.postFlag:
                 print('Writing UNLOCK')
                 with open(dir_ImpDataFinal + 'UNLOCK', 'w') as filehandle: _ = [filehandle.writelines(str(tuple([pos[0]+1, (pos[1]*sampleData.scanRate)/sampleData.acqRate]))+'\n') for pos in newIdxs.tolist()]
                 if sampleData.unorderedNames and impModel and scanMethod == 'linewise': sampleData.physicalLineNums[len(sampleData.physicalLineNums.keys())+1] = int(newIdxs[0][0])
+                sampleData.mask = self.mask
                 equipWait()
-                sampleData.readScanData(self.mask)
+                sampleData.readScanData()
             self.mzImages = copy.deepcopy(sampleData.mzImages)*self.mask
             self.TIC = copy.deepcopy(sampleData.TIC)*self.mask
         else:
