@@ -210,7 +210,7 @@ class SampleData:
                     fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
                     
                     #If the file numbers are not the physical row numbers, then obtain correct number from stored LUT
-                    if self.unorderedNames: lineNum = self.physicalLineNums[lineNum+1]
+                    if self.unorderedNames: lineNum = self.physicalLineNums[fileNum+1]
                     else: lineNum = fileNum
                     #if (impModel or postModel) and self.unorderedNames: lineNum, columnNum = self.physicalLineNums[fileNum+1], self.physicalColumnNums[fileNum+1]
                     #else: lineNum, columnNum = fileNum #Unknown how MALDI data stores physical position...
@@ -671,7 +671,7 @@ def visualize_serial(sample, sampleData, dir_progression, dir_mzProgressions):
     #saveLocation = dir_progression + 'measured_Avg_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
     saveLocation = dir_progression + 'measured_TIC_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
     #borderlessPlot(sample.mzAvgReconImage*sample.mask, saveLocation, cmap='hot', vmin=avgMinValue, vmax=avgMaxValue)
-    borderlessPlot(sample.ERD, saveLocation, cmap='viridis', vmin=TICMinValue, vmax=TICMaxValue)
+    borderlessPlot(sample.TIC, saveLocation, cmap='hot', vmin=TICMinValue, vmax=TICMaxValue)
     
     if sampleData.simulationFlag:
         saveLocation = dir_progression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
