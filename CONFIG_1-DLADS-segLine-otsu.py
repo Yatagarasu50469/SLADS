@@ -92,7 +92,7 @@ percToViz = None
 #LINEWISE OPTIONS
 #==================================================================
 
-#How should points be returned from a chosen line: (segLine; partial line segment) (percLine; top stopPerc% ERD locations) (none, full line)
+#How should points be returned from a chosen line: (segLine; partial line segment) (percLine; top stopPerc% ERD locations) (fullLine; all of the points on the line)
 lineMethod = 'segLine'
 
 #How should individual points on a chosen line be selected: (single; one-by-one, updates ERD from reconstruction) (group; all chosen in one step)

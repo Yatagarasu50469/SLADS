@@ -80,7 +80,7 @@ def scanData_parhelper(sampleData, scanFileName):
         origTimes, TICData = ticData[:,0], ticData[:,1]
         
         #If the data is being sparesly acquired, then the listed times in the file need to be shifted; convert np.float to float for method compatability
-        if (impModel or postModel) and impOffset and scanMethod == 'linewise' and lineMethod == 'segLine': origTimes += (np.argwhere(sampleData.mask[lineNum]==1).min()/sampleData.finalDim[1])*(((sampleData.sampleWidth*1e3)/sampleData.scanRate)/60)
+        if (impModel or postModel) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(sampleData.mask[lineNum]==1).min()/sampleData.finalDim[1])*(((sampleData.sampleWidth*1e3)/sampleData.scanRate)/60)
         elif (impModel or postModel) and impOffset: sys.exit('Error - Using implementation mode with an offset but not segmented-linewise operation is not a supported configuration.')
         mzData = [np.interp(sampleData.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(sampleData.mzRanges[mzRangeNum][0]), float(sampleData.mzRanges[mzRangeNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0).astype('float32') for mzRangeNum in range(0, len(sampleData.mzRanges))]
         
