@@ -66,10 +66,11 @@ def scanData_parhelper(sampleData, scanFileName):
     if not readErrorFlag:
         
         #Extract line number from the filename, removing leading zeros, subtract 1 for zero indexing
-        lineNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
+        fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
         
-        #If the line numbers are not the physical row numbers, then obtain correct number from stored LUT
-        if (impModel or postModel) and sampleData.unorderedNames: lineNum = sampleData.physicalLineNums[lineNum+1]
+        #If the file numbers are not the physical row numbers, then obtain correct number from stored LUT
+        if sampleData.unorderedNames: lineNum = sampleData.physicalLineNums[fileNum+1]
+        else: lineNum = fileNum
         
         #If ignoring missing lines, then determine the offset for correct indexing
         if sampleData.ignoreMissingLines and len(sampleData.missingLines) > 0: lineNum -= int(np.sum(lineNum > sampleData.missingLines))

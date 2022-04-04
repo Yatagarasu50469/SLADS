@@ -62,7 +62,7 @@ class SampleData:
         lineIndex += 1
 
         #Check if files are numbered sequentially, or according to physical position
-        fileNumbering = int(sampleInfo[lineIndex].rstrip())
+        self.unorderedNames = int(sampleInfo[lineIndex].rstrip()) == 1
         lineIndex += 1
 
         #Check if the sample is fully acquired for simulation, or partially (for/from implementation)
@@ -72,9 +72,6 @@ class SampleData:
         #Process the read information as needed
         self.ignoreMissingLines = self.simulationFlag
         self.ppmPos, self.ppmNeg = 1+self.ppm, 1-self.ppm
-        if fileNumbering==0: self.unorderedNames = False
-        elif fileNumbering==1: self.unorderedNames = True
-        else: sys.exit('Error - File Numbering parameter used in sampleInfo is not an acceptable value.')
 
         #If the filenames were sequentially generated, then load location mapping dictionary
         if self.unorderedNames and not impModel: 
@@ -241,11 +238,11 @@ class SampleData:
         self.mzImagesMax = np.max(self.mzImages, axis=(1,2))
         
         #Calculate the average mz image
-        self.mzAvgImage = np.mean(self.mzImages, axis=0)
+        #self.mzAvgImage = np.mean(self.mzImages, axis=0)
         
         #Resize for square dimensions
         self.squaremzImages = np.moveaxis(resize(np.moveaxis(self.mzImages, 0, -1), tuple(self.squareDim), order=0), -1, 0)
-        self.squaremzAvgImage = np.mean(self.squaremzImages, axis=0)
+        #self.squaremzAvgImage = np.mean(self.squaremzImages, axis=0)
 
 #Relevant sample data at each time step; static information should be held in corresponding SampleData object
 class Sample:
@@ -291,7 +288,7 @@ class Sample:
             self.TIC[:, newIdxs[:,0], newIdxs[:,1]] = self.TICReconImage[newIdxs[:,0], newIdxs[:,1]]
         
         #Update the average image
-        self.mzAvgImage = np.mean(self.mzImages, axis=0)
+        #self.mzAvgImage = np.mean(self.mzImages, axis=0)
         
         #Update percentage pixels measured; only when not fromRecon
         self.percMeasured = (np.sum(self.mask)/sampleData.area)*100
