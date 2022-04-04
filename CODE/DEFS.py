@@ -462,6 +462,12 @@ class Result:
         #Make sure samples is writable
         self.samples = copy.deepcopy(self.samples)
         
+        #If the filenames were unordered, then save the mapping from filename to physical row
+        if self.sampleData.unorderedNames: np.savetxt(self.dir_sampleResults+'physicalLineNums.csv', np.asarray(list(self.sampleData.physicalLineNums.items())), delimiter=',', fmt='%d')
+        
+        #Save a copy of the final measurement mask
+        np.savetxt(self.dir_sampleResults+'measuredMask.csv', self.samples[-1].mask, delimiter=',', fmt='%d')
+        
         #If this is a simulation, then can compare against ground-truth information, otherwise resize ERD(s) for final visualization
         if self.sampleData.simulationFlag:
             
