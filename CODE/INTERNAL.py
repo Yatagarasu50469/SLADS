@@ -69,8 +69,15 @@ def scanData_parhelper(sampleData, scanFileName):
         fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
         
         #If the file numbers are not the physical row numbers, then obtain correct number from stored LUT
-        if sampleData.unorderedNames: lineNum = sampleData.physicalLineNums[fileNum+1]
+        if sampleData.unorderedNames: 
+            try: lineNum = sampleData.physicalLineNums[fileNum+1]
+            except: 
+                print('Warning - Attempt to find the physical line number for the file: ' + scanFileName + ' has failed; the file will therefore be ignored this iteration.')
+                readErrorFlag = True
         else: lineNum = fileNum
+        
+    #If the data file is still 'good' then continue processing
+    if not readErrorFlag:
         
         #If ignoring missing lines, then determine the offset for correct indexing
         if sampleData.ignoreMissingLines and len(sampleData.missingLines) > 0: lineNum -= int(np.sum(lineNum > sampleData.missingLines))
@@ -87,7 +94,7 @@ def scanData_parhelper(sampleData, scanFileName):
         #Interpolate TIC to final new times
         TICData = np.interp(sampleData.newTimes, origTimes, TICData).astype('float32')
         
-        return lineNum, mzData, TICData
+        return lineNum, mzData, TICData, scanFileName
 
 #Visualize multiple sample progression steps at once; reimport matplotlib to set backend for non-interactive visualization
 @ray.remote

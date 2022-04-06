@@ -188,7 +188,7 @@ class SampleData:
                     for mzRangeNum in range(0, len(self.mzRanges)): self.mzImages[mzRangeNum, result[0], :] = result[1][mzRangeNum]
                     self.TIC[result[0]] = result[2]
                     self.readLines.append(result[0])
-            for scanFileName in scanFiles: self.readScanFiles.append(scanFileName) 
+                    self.readScanFiles.append(result[3]) 
         else:
             for scanFileName in scanFiles:
 
@@ -199,18 +199,25 @@ class SampleData:
                 
                 #If the data file is 'good' then continue processing
                 if not readErrorFlag:
-                
-                    #Add file name to those already scanned
-                    self.readScanFiles.append(scanFileName)
                     
                     #Extract line number from the filename, removing leading zeros, subtract 1 for zero indexing
                     fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
                     
                     #If the file numbers are not the physical row numbers, then obtain correct number from stored LUT
-                    if self.unorderedNames: lineNum = self.physicalLineNums[fileNum+1]
+                    if sampleData.unorderedNames: 
+                        try: lineNum = sampleData.physicalLineNums[fileNum+1]
+                        except: 
+                            print('Warning - Attempt to find the physical line number for the file: ' + scanFileName + ' has failed; the file will therefore be ignored this iteration.')
+                            readErrorFlag = True
                     else: lineNum = fileNum
                     #if (impModel or postModel) and self.unorderedNames: lineNum, columnNum = self.physicalLineNums[fileNum+1], self.physicalColumnNums[fileNum+1]
                     #else: lineNum, columnNum = fileNum #Unknown how MALDI data stores physical position...
+                    
+                #If the data file is still 'good' then continue processing
+                if not readErrorFlag:
+                
+                    #Add file name to those already scanned
+                    self.readScanFiles.append(scanFileName)
                     
                     #Record that the line number specified has been read previously
                     self.readLines.append(lineNum)
