@@ -13,7 +13,7 @@ class SampleData:
         self.lineRevist = lineRevist
         self.postFlag = postFlag
         self.lineExt = None
-        self.mask=None
+        self.mask = None
         
         #Set global variables to indicate that OOM error states have not yet occurred; limited handle for ERD inferencing limitations
         self.OOM_multipleChannels, self.OOM_singleChannel = False, False
@@ -21,6 +21,7 @@ class SampleData:
         #Store location of MSI data and sample name
         self.sampleFolder = sampleFolder
         self.name = os.path.basename(sampleFolder)
+        if impModel: self.name = impSampleName
         
         #Note which files have already been read
         self.readScanFiles = []
@@ -239,8 +240,8 @@ class SampleData:
                     for mzRangeNum in range(0, len(self.mzRanges)): self.mzImages[mzRangeNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(self.mzRanges[mzRangeNum][0]), float(self.mzRanges[mzRangeNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0)
                     
                     #Interpolate TIC to final new times
-                    self.TIC[lineNum] = np.interp(self.newTimes, origTimes, TICData)
-        
+                    self.TIC[lineNum] = np.interp(self.newTimes, origTimes, np.nan_to_num(TICData, nan=0, posinf=0, neginf=0), left=0, right=0)
+
         #Find the maximum value in each mz image for easy referencing
         self.mzImagesMax = np.max(self.mzImages, axis=(1,2))
         
