@@ -86,6 +86,9 @@ def scanData_parhelper(sampleData, scanFileName):
         ticData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
         origTimes, TICData = ticData[:,0], ticData[:,1]
         
+        #Offset the original measured times, such that the first position's time equals 0
+        origTimes -= np.min(origTimes)
+        
         #If the data is being sparesly acquired, then the listed times in the file need to be shifted; convert np.float to float for method compatability
         if (impModel or postModel) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(sampleData.mask[lineNum]==1).min()/sampleData.finalDim[1])*(((sampleData.sampleWidth*1e3)/sampleData.scanRate)/60)
         elif (impModel or postModel) and impOffset: sys.exit('Error - Using implementation mode with an offset but not segmented-linewise operation is not a supported configuration.')

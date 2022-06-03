@@ -230,6 +230,9 @@ class SampleData:
                     ticData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
                     origTimes, TICData = ticData[:,0], ticData[:,1]
                     
+                    #Offset the original measured times, such that the first position's time equals 0
+                    origTimes -= np.min(origTimes)
+                    
                     #If the data is being sparesly acquired, then the listed times in the file need to be shifted; convert np.float to float for method compatability
                     #For impOffset compatability with percent-linewise or pointwise: np.argwhere(mask[lineNum]==1).min() must be improved...
                     #Where physicalLineNums is updated, add another dictionary of physicalColumnNums mapping number in filename to time offset
