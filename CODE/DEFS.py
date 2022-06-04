@@ -24,7 +24,7 @@ class SampleData:
         if impModel: self.name = impSampleName
         
         #Note which files have already been read
-        self.readScanFiles = []
+        self.readScanreadScanFiles = []
         self.readLines = []
         
         #Storage location for matching sequentially generated indexes with physical line numbers
@@ -205,8 +205,8 @@ class SampleData:
                     fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
                     
                     #If the file numbers are not the physical row numbers, then obtain correct number from stored LUT
-                    if sampleData.unorderedNames: 
-                        try: lineNum = sampleData.physicalLineNums[fileNum+1]
+                    if self.unorderedNames: 
+                        try: lineNum = self.physicalLineNums[fileNum+1]
                         except: 
                             print('Warning - Attempt to find the physical line number for the file: ' + scanFileName + ' has failed; the file will therefore be ignored this iteration.')
                             readErrorFlag = True
@@ -924,8 +924,8 @@ def computeERD(sample, sampleData, model, squareUnMeasuredIdxs, squareMeasuredId
                 try: sample.squareERDs = ray.get(model.remote(makeCompatible([prepareInput(sample, mzNum) for mzNum in range(0, len(sample.squareERDs))]))).copy()
                 except: 
                     sampleData.OOM_multipleChannels = True
-                    if (len(availableGPUs) > 0): print('Warning - Could not inference ERD for all channels of sample '+sampleData.name+' simultaneously on system GPU; will try processing channels iteratively.')
-                    if (len(availableGPUs) == 0): print('Warning - Could not inference ERD for all channels of sample '+sampleData.name+' simultaneously on system; will try processing channels iteratively.')
+                    if (len(gpus) > 0): print('Warning - Could not inference ERD for all channels of sample '+sampleData.name+' simultaneously on system GPU; will try processing channels iteratively.')
+                    if (len(gpus) == 0): print('Warning - Could not inference ERD for all channels of sample '+sampleData.name+' simultaneously on system; will try processing channels iteratively.')
             
             #If multiple channels causes an OOM, then try running each channel through on its own
             if sampleData.OOM_multipleChannels and not sampleData.OOM_singleChannel:
@@ -933,8 +933,8 @@ def computeERD(sample, sampleData, model, squareUnMeasuredIdxs, squareMeasuredId
                 except: sampleData.OOM_singleChannel = True
             
             #If an OOM occured for both mutiple and single channel inferencing, then exit; need to either restart program with no GPUs, or there isn't enough system RAM
-            if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(availableGPUs) > 0): sys.exit('Error - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on system GPU; please try disabling the GPU in the CONFIG.')
-            if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(availableGPUs) == 0): sys.exit('Error - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on this system by the loaded model.')
+            if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(gpus) > 0): sys.exit('Error - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on system GPU; please try disabling the GPU in the CONFIG.')
+            if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(gpus) == 0): sys.exit('Error - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on this system by the loaded model.')
             
     else:
         if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
