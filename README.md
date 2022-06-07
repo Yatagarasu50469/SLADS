@@ -62,7 +62,7 @@
                     0.8.9   Simplification
                     0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
                     0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
-					0.9.2   .imzML and image (.jpg, .png, .tiff) support, RD speedup, fix RD times, single sample training
+		0.9.2   .imzML and image (.jpg, .png, .tiff) support, RD speedup, fix RD times, single sample training
                     ~0.+.+  Custom adversarial network, Multimodal integration
                     ~1.0.0  Initial release
 
@@ -81,7 +81,7 @@
 		|	|------->INPUT
 		|	|	|------->TEST_SAMPLE_1
 		|	|	|	|------->sampleName-line-0001.RAW
-    	|	|	|------->sampleName-line-0002.RAW
+    	        |	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->sampleInfo.txt
     	|	|	|	|------->measuredMask.csv
     	|	|	|	|------->channels.csv
@@ -283,7 +283,7 @@ For all samples, a sampleInfo.txt file must be included in each of the sample di
 
 For MSI data, another file: channels.csv, should also be placed in the base directory, which contains line separated values of m/z locations, where the ranges used for visualization are determined through the specified m/z tolerance. If there are different mz that are specific to a sample, then a channels.csv should be placed in the sample directory. Local/sample channels.csv files are used even when a global channels.csv is defined. At this time, each m/z should be handpicked to highlight underlying structures of interest. 
 
-**DESI MSI**
+###  **DESI MSI**
 	- Sample Type
 		Specify the kind of file for correct parsing of the remaining fields (DESI, MALDI, IMAGE)
 	- Number of lines in the sample 
@@ -310,7 +310,7 @@ Each DESI MSI data file (ex. extensions: .d, or .raw), must be named with the st
 	
 If using Agilent equipment with linewise acquisition modes for an implementation run, then the line numbers are in sequence, rather than according to physical row number. In this case, enable the unorderedNames flag in the configuration file. 
 
-**MALDI MSI**
+###  **MALDI MSI**
 	- Sample Type
 		Specify the kind of file for correct parsing of the remaining fields (DESI, MALDI, IMAGE)
 	- Columns (px)
@@ -326,7 +326,7 @@ Each MALDI MSI data file (ex. .ibd and .imzML), must be named with the standard 
 
 	sampleName.extension
 
-**Images**
+###  **Images**
 	- Sample Type
 		Specify the kind of file for correct parsing of the remaining fields (DESI, MALDI, IMAGE)
 	- Columns (px)
@@ -384,11 +384,13 @@ All results will be placed in ./RESULTS/ as follows (presuming MSI data):
 
 In the case that multiple configuration files are provided in the form of: CONFIG_*descriptor*.py, the RESULTS folder will be duplicated with the same suffix for ease of testing. Configuration file will be copied into the results directory at the termination of the program. 
 
-# OPERATIONAL PROCEDURE
+# EXPERIMENTAL IMPLEMENTATION PROCEDURE
 
-**Note:** In order to use a SLADS model in a physical implementation, the files resultant from the training procedure must be located within './RESULTS/TRAIN_RESULTS/'.
+**Note:** Currently only supported/validated for DESI MSI equipment; MALDI and general image formats are under development.
 
-Prior to engaging the physical equipment run SLADS with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points to scan, (row number, and position in um to start scanning for 1 second, based on specified scan rate for the sample) saved in a file: **UNLOCK**. SLADS will delete the **LOCK** folder then, signalling the equipment that point selections have been made and in preparation for the next acquisition iteration. As with the training and testing datasets, it is expected that the data will be given to SLADS in MSI files in accordance with the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When SLADS has reached its termination criteria it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. A sampleInfo.txt must be included in the implementation directory as outlined in the CONFIGURATION section. 
+**Note:** In order to use a trained model in a physical implementation, the files resultant from the training procedure must be located within './RESULTS/TRAIN_RESULTS/'.
+
+Prior to engaging the physical equipment run the program with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points (row number, and column positions in um) to physically scan, saved in a file: **UNLOCK**. The **LOCK** will then be automatically deleted. This signals the equipment that new scan positions have been output and that the program is then waiting for **LOCK** to re-appear. As with the training and testing datasets, it is expected that the data will follow  the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When the termination criteria has been met it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. Note that a sampleInfo.txt must be placed in the implementation directory after the program has been initialized (python SLADS.py), but prior to placement of the first LOCK file. The sampleInfo.txt should follow the format outlined in the CONFIGURATION section. 
 
 # FAQ
 ###  **I read through the README thoroughly, but I'm still getting an error, am confused about how a feature should work, or would like a feature/option added**
