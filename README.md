@@ -21,9 +21,9 @@
                 	  -SLADS-Net using a neural network
                 	  -DLADS (Deep Learning Approach for Dynamic Sampling) using a Convolutional Neural Network (CNN)
     
-	AUTHOR(S):		David Helminiak	EECE, Marquette University
-	ADVISOR(S):		Dong Hye Ye	EECE, Marquette University
-    COLLAB.(S): 	Julia Laskin	CHEM, Purdue University
+	AUTHOR(S):	David Helminiak	EECE, Marquette University
+	ADVISOR(S):	Dong Hye Ye	EECE, Marquette University
+	COLLAB.(S): 	Julia Laskin	CHEM, Purdue University
 			Hang Hu		CHEM, Purdue University
     
     FUNDING:	This project has received funding and was programmed for NIH Grant 1UG3HL145593-01
@@ -62,7 +62,7 @@
                     0.8.9   Simplification
                     0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
                     0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
-		0.9.2   .imzML and image (.jpg, .png, .tiff) support, RD speedup, fix RD times, single sample training
+                    0.9.2   .imzML and image (.jpg, .png, .tiff) support, RD speedup, fix RD times, single sample training
                     ~0.+.+  Custom adversarial network, Multimodal integration
                     ~1.0.0  Initial release
 
@@ -77,18 +77,6 @@
     	|------->SLADS.py
     	|------->runConfig.py
     	|------->channels.csv
-    	|------->RECON
-		|	|------->INPUT
-		|	|	|------->TEST_SAMPLE_1
-		|	|	|	|------->sampleName-line-0001.RAW
-    	        |	|	|------->sampleName-line-0002.RAW
-    	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->measuredMask.csv
-    	|	|	|	|------->channels.csv
-    	|	|	|	|------->physicalLineNums.csv
-    	|	|------->RESULTS
-    	|	|------->channels.csv
-    	|	|------->mzReconstruction.ipynb
     	|------->CODE
     	|	|------->DEFS.py
     	|	|------->EXPERIMENTAL.py
@@ -97,7 +85,7 @@
     	|	|------->SIMULATION.py
     	|	|------->TRAINING.py
     	|------->INPUT
-    	|	|------->TEST/TRAIN
+    	|	|------->TRAIN
     	|	|	|------->SAMPLE_1
     	|	|	|	|------->sampleInfo.txt
     	|	|	|	|------->channels.csv
@@ -112,6 +100,21 @@
     	|	|	|------->SAMPLE_3
     	|	|	|	|------->sampleInfo.txt
     	|	|	|	|------->sampleName.(png, tif, jpg)
+    	|	|------->TEST
+    	|	|	|------->SAMPLE_4
+    	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->channels.csv
+    	|	|	|	|------->sampleName-line-0001.(d, RAW)
+    	|	|	|	|------->sampleName-line-0002.(d, RAW)
+    	|	|	|	|------->...
+    	|	|	|------->SAMPLE_5
+    	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->channels.csv
+    	|	|	|	|------->sampleName.imzML
+    	|	|	|	|------->sampleName.ibd
+    	|	|	|------->SAMPLE_6
+    	|	|	|	|------->sampleInfo.txt
+    	|	|	|	|------->sampleName.(png, tif, jpg)
     	|	|------->POST
     	|	|	|------->SIMULATION_SAMPLE_1
     	|	|	|	|------->sampleInfo.txt
@@ -120,7 +123,7 @@
     	|	|	|	|------->sampleName-line-0001.RAW
     	|	|	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->...
-    	|	|	|------->EXPERIMENTAL_SAMPLE_2
+    	|	|	|------->EXPERIMENTAL_SAMPLE_1
     	|	|	|	|------->sampleInfo.txt
     	|	|	|	|------->channels.csv
     	|	|	|	|------->measuredMask.csv
