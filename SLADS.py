@@ -7,24 +7,23 @@
 #
 #DATE MODIFIED:	    3 June 2021
 #
-#VERSION NUM:	    0.9.1
+#VERSION:	        0.9.2
 #
 #LICENSE:           GNU General Public License v3.0
 #
-#DESCRIPTION:	    Multichannel implementation of SLADS (Supervised Learning 
-#                   Algorithm for Dynamic Sampling) and DLADS (Deep Learning
-#                   Approach for Dynamic Sampling)
+#DESCRIPTION:	    Dynamic sampling algorithms with updated/developing implementations of:
+#	                  -SLADS (Supervised Learning Approach for Dynamic Sampling) using least-squares regression
+#	                  -SLADS-Net using a neural network
+#					  -DLADS (Deep Learning Approach for Dynamic Sampling) using a Convolutional Neural Network (CNN)
 #
 #AUTHOR(S):         David Helminiak	EECE, Marquette University
 #ADVISOR(S):        Dong Hye Ye		EECE, Marquette University
-#
 #COLLABORATORS:	    Julia Laskin	CHEM, Purdue University
 #                   Hang Hu		    CHEM, Purdue University
 #
 #FUNDING:	        This project has received funding and was programmed for:
 #                   NIH Grant 1UG3HL145593-01
 #
-#GLOBAL
 #CHANGELOG:         0.1.0   Multithreading adjustments to pointwise SLADS
 #                   0.1.1   Line constraints, concatenation, pruning, and results organization
 #                   0.2.0   Line bounded constraints addition
@@ -47,7 +46,7 @@
 #                   0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
 #                   0.7.4   CPU compatibility patch, removal of NaN values
 #                   0.7.5   c value selection performed before training database generation
-#                   0.8.0   Raw MSI file integration (Thermo .raw, Agilent .d), only Windows compatible
+#                   0.8.0   Raw MSI file integration (Thermo .raw, Agilent .d), .d files only Windows compatible
 #                   0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
 #                   0.8.2   Multichannel, fixed groupwise, square pixels, accelerated RD, altered visuals/metrics
 #                   0.8.3   Mask seed fix, normalization for sim. fix, non-Ray option, pad instead of resize
@@ -59,6 +58,7 @@
 #                   0.8.9   Simplification
 #                   0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
 #                   0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
+#                   0.9.2   .imzML and image (.jpg, .png, .tiff) support, RD speedup, fix RD times, single sample training
 #                   ~0.+.+  GAN, Custom adversarial network, Multimodal integration
 #                   ~1.0.0  Initial release
 #====================================================================
@@ -68,7 +68,7 @@
 #==================================================================
 
 #Current version information
-versionNum='0.9.1'
+versionNum='0.9.2'
 
 #Import needed libraries for subprocess initialization
 import glob
@@ -84,13 +84,13 @@ configFileNames = natsort.natsorted(glob.glob('./CONFIG_*.py'))
 #If there is more than one configuration file, validate their syntax
 if len(configFileNames) > 1: [exec(open(configFileName, encoding='utf-8').read()) for configFileName in configFileNames]
 
+
 #Run each configuration sequentially as a subprocess (GPU VRAM not cleared by Tensorflow, leading to crash otherwise); pass interrupts to active subprocess
 for configFileName in configFileNames: 
     process = subprocess.Popen(["python", "runConfig.py", configFileName, versionNum], shell=False)
     try: process.wait()
-    except: 
-        process.send_signal(signal.SIGINT)
-        exit()
+    except: exit()
+
 print('ALL CONFIGURATIONS COMPLETE')
 
 #Shutdown python kernel

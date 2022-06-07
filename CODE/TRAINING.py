@@ -29,13 +29,15 @@ class EpochEnd(keras.callbacks.Callback):
             self.model.stop_training = True
             self.nanValue = True
         
+        #Store model convergence progress
+        self.train_lossList.append(logs.get('loss'))
+        if not self.noValFlag: 
+            currentLoss = logs.get('val_loss')
+            self.val_lossList.append(logs.get('val_loss'))
+        else: 
+            currentLoss = logs.get('loss')
+        
         #Early stopping criteria
-        currentLoss = logs.get('val_loss')
-        #if epoch >= self.minimumEpochs: 
-        #    self.valLosses.append(currentLoss)
-        #    if np.sum(currentLoss == self.valLosses[:-self.maxPatience])) >= self.maxPatience: 
-        #        self.model.stop_training = True
-        #        self.nanValue = True
         if (currentLoss < self.bestLoss) and (epoch >= self.minimumEpochs):
             self.patience = 0
             self.bestLoss = currentLoss
@@ -47,27 +49,22 @@ class EpochEnd(keras.callbacks.Callback):
                 self.stopped_epoch = epoch
                 self.model.stop_training = True
                 self.model.set_weights(self.bestWeights)
-
-        #Store model convergence progress
-        self.train_lossList.append(logs.get('loss'))
-        if not self.noValFlag: self.val_lossList.append(logs.get('val_loss'))
-            
+                
         #Perform visualization as needed/specified
         if trainingProgressionVisuals and ((epoch == 0) or (epoch % trainingVizSteps == 0) or (self.stopped_epoch == epoch) or (self.bestEpoch == epoch)):
 
             #If there are no validation tensors, then just save a plot of the training losses
             if self.noValFlag:
-                f = plt.figure(figsize=(40,10))
+                f = plt.figure(figsize=(20,10))
                 f.subplots_adjust(top = 0.80)
                 f.subplots_adjust(wspace=0.2, hspace=0.2)
                 
                 #Plot losses
-                ax = plt.subplot2grid((1,2), (0,0))
+                ax = plt.subplot2grid((1,1), (0,0))
                 ax.plot(self.train_lossList, label='Training')
-                ax.plot(self.val_lossList, label='Validation')
                 ax.legend(loc='upper right', fontsize=14)
                 ax.set_yscale('log')
-                ax.set_title('Training Loss: ' + str(round(self.train_lossList[-1,8])), fontsize=15, fontweight='bold')
+                ax.set_title('Training Loss: ' + str(round(self.train_lossList[-1],8)), fontsize=15, fontweight='bold')
                 
             else:
                 f = plt.figure(figsize=(40,25))
@@ -86,7 +83,7 @@ class EpochEnd(keras.callbacks.Callback):
                 for vizSampleNum in range(0, len(self.vizSamples)):
                 
                     vizSample = self.vizSamples[vizSampleNum]
-                    sampleBatch = makeCompatible([prepareInput(vizSample, mzNum) for mzNum in range(0, len(vizSample.mzReconImages))])
+                    sampleBatch = makeCompatible([prepareInput(vizSample, chanNum) for chanNum in range(0, len(vizSample.chanReconImages))])
                     squareERD = np.mean(self.model(sampleBatch, training=False)[:,:,:,0].numpy(), axis=0)
                     squareRD = vizSample.squareRD
 
@@ -99,10 +96,8 @@ class EpochEnd(keras.callbacks.Callback):
                         self.nanValue = True
                     
                     ax = plt.subplot2grid((3,3), (vizSampleNum+1,0))
-                    #im = ax.imshow(vizSample.squaremzAvgReconImage, aspect='auto', cmap='hot', vmin=0, vmax=np.max(vizSample.squaremzAvgReconImage))
-                    #ax.set_title('Average Reconstruction', fontsize=15, fontweight='bold')
-                    im = ax.imshow(vizSample.squareTICReconImage, aspect='auto', cmap='hot', vmin=0, vmax=np.max(vizSample.squareTICReconImage))
-                    ax.set_title('TIC Reconstruction', fontsize=15, fontweight='bold')
+                    im = ax.imshow(vizSample.squareSumImageReconImage, aspect='auto', cmap='hot', vmin=0, vmax=np.max(vizSample.squareSumImageReconImage))
+                    ax.set_title('Sum Image Reconstruction', fontsize=15, fontweight='bold')
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                     
                     ax = plt.subplot2grid((3,3), (vizSampleNum+1,1))
@@ -127,7 +122,7 @@ def importInitialData(sortedSampleFolders):
     #Make sure sample mask initialization is consistent, particularly important for c value optimization
     #DO NOT RUN this section in parallel, makes optimizeC inconsistent, forcing seed in SampleData harms training generalization
     if consistentSeed: np.random.seed(0)
-    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPerc, 'pointwise', lineRevist, False) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)], dtype='object')
+    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPerc, 'pointwise', lineRevist, False, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)], dtype='object')
     
     #Save base visualizations
     for index in range(0, len(trainingValidationSampleData)):
@@ -137,17 +132,17 @@ def importInitialData(sortedSampleFolders):
         else: trainDataFlag, valDataFlag = True, False
         sampleData = trainingValidationSampleData[index]
         
-        #Save a visual of the ground-truth mz images
-        for mzNum in range(0, len(sampleData.mzImages)):
-            massRange = str(sampleData.mzRanges[mzNum][0]) + '-' + str(sampleData.mzRanges[mzNum][1])
-            if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'groundTruth_' + sampleData.name + '_mz_' + massRange + '.png'
-            if valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'groundTruth_' + sampleData.name + '_mz_'+ massRange + '.png'
-            borderlessPlot(sampleData.mzImages[mzNum], saveLocation, 'hot')
+        #Save a visual of the ground-truth channel images
+        for chanNum in range(0, len(sampleData.chanImages)):
+            chanLabel = str(sampleData.chanValues[chanNum])
+            if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'groundTruth_' + sampleData.name + '_channel_' + chanLabel + '.png'
+            if valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'groundTruth_' + sampleData.name + '_channel_'+ chanLabel + '.png'
+            borderlessPlot(sampleData.chanImages[chanNum], saveLocation, 'hot')
             
-        #Save a visual of the TIC
-        if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'TIC_' + sampleData.name + '.png'
-        if valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'TIC_' + sampleData.name + '.png'
-        borderlessPlot(sampleData.TIC, saveLocation, 'hot')
+        #Save a visual of the sumImage (TIC)
+        if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'sumImage_' + sampleData.name + '.png'
+        if valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'sumImage_' + sampleData.name + '.png'
+        borderlessPlot(sampleData.sumImage, saveLocation, 'hot')
         
         #Save the samples database
         pickle.dump(trainingValidationSampleData, open(dir_TrainingResults + 'trainingValidationSampleData.p', 'wb'))
@@ -191,22 +186,22 @@ def optimizeC(trainingSampleData):
             
             #Save information for output to file
             dataPrintout.append(['c Value', cValues[cNum]])
-            dataPrintout.append(['mz PSNR Area Under Curve:', np.mean(AUC), '+/-', np.std(AUC)])
+            dataPrintout.append(['Channel PSNR Area Under Curve:', np.mean(AUC), '+/-', np.std(AUC)])
             dataPrintout.append(['Average RD Compute Time (s)', np.mean(allRDTimes), '+/-', np.std(allRDTimes)])
             dataPrintout.append([])
             
             #Extract percentage results at the specified precision
-            percents, trainingmzMetric_mean = percResults([result.cSelectionList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
+            percents, trainingChanMetric_mean = percResults([result.cSelectionList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
             
             #Visualize/save the averaged curve for the given c value
-            np.savetxt(dir_TrainingResults+'optimizationCurve_c_' + str(cValues[cNum]) + '.csv', np.transpose([percents, trainingmzMetric_mean]), delimiter=',')
+            np.savetxt(dir_TrainingResults+'optimizationCurve_c_' + str(cValues[cNum]) + '.csv', np.transpose([percents, trainingChanMetric_mean]), delimiter=',')
             font = {'size' : 18}
             plt.rc('font', **font)
             f = plt.figure(figsize=(20,8))
             ax1 = f.add_subplot(1,1,1)
-            ax1.plot(percents, trainingmzMetric_mean, color='black')
+            ax1.plot(percents, trainingChanMetric_mean, color='black')
             ax1.set_xlabel('% Measured')
-            ax1.set_ylabel('Average PSNR of mz Reconstructions (dB)')
+            ax1.set_ylabel('Average PSNR of Channel Reconstructions (dB)')
             ax1.set_title('Area Under Curve: ' + str(areaUnderCurveList[-1]), fontsize=15, fontweight='bold')
             plt.savefig(dir_TrainingResults + 'optimizationCurve_c_' + str(cValues[cNum]) + '.png')
             plt.close()
@@ -231,31 +226,27 @@ def visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag
     if trainDataFlag: saveLocation = dir_TrainingResultsImages+ 'training_c_' + str(optimalC) + '_variation_' + str(maskNum) + '_' + result.sampleData.name + '_percentage_' + str(round(sample.percMeasured, 5))+ '.png'
     if valDataFlag: saveLocation = dir_ValidationTrainingResultsImages+ 'validation_c_' + str(optimalC) + '_variation_' + str(maskNum) + '_' + result.sampleData.name + '_percentage_' + str(round(sample.percMeasured, 5))+ '.png'
     
-    f = plt.figure(figsize=(20,5))
-    f.subplots_adjust(top = 0.7)
-    f.subplots_adjust(wspace=0.15, hspace=0.2)
-    plt.suptitle('c: ' + str(optimalC) + '  Variation: ' + str(maskNum) + '\nSample: ' + result.sampleData.name + '  Percent Sampled: ' + str(round(sample.percMeasured, 5)), fontsize=20, fontweight='bold', y = 0.95)
+    f = plt.figure(figsize=(20,5.3865))
+    plt.suptitle('c: ' + str(optimalC) + '  Variation: ' + str(maskNum) + '\nSample: ' + result.sampleData.name + '  Percent Sampled: ' + str(round(sample.percMeasured, 5)), fontweight='bold', y = 0.95)
     
-    ax = plt.subplot2grid(shape=(1,5), loc=(0,0))
+    ax = plt.subplot2grid(shape=(1,4), loc=(0,0))
     ax.imshow(sample.mask, cmap='gray', aspect='auto')
-    ax.set_title('Mask', fontsize=15)
+    ax.set_title('Mask')
 
-    ax = plt.subplot2grid(shape=(1,5), loc=(0,1))
-    ax.imshow(sample.mzAvgImage, cmap='hot', aspect='auto')
-    ax.set_title('Measured', fontsize=15)
+    ax = plt.subplot2grid(shape=(1,4), loc=(0,1))
+    ax.imshow(result.sampleData.sumImage, cmap='hot', aspect='auto')
+    ax.set_title('Sum Image Ground-Truth')
 
-    ax = plt.subplot2grid(shape=(1,5), loc=(0,2))
-    #ax.imshow(result.sampleData.mzAvgImage, cmap='hot', aspect='auto')
-    ax.imshow(result.sampleData.TIC, cmap='hot', aspect='auto')
-    ax.set_title('Ground-Truth', fontsize=15)
-
-    ax = plt.subplot2grid(shape=(1,5), loc=(0,3))
-    #ax.imshow(sample.mzAvgReconImage, aspect='auto', cmap='hot')
-    ax.imshow(sample.TICReconImage, cmap='hot', aspect='auto')
-    ax.set_title('Recon - PSNR: ' + str(round(compare_psnr(result.sampleData.TIC, sample.TICReconImage, data_range=np.max(result.sampleData.TIC)), 5)), fontsize=15)
-    ax = plt.subplot2grid(shape=(1,5), loc=(0,4))
+    ax = plt.subplot2grid(shape=(1,4), loc=(0,2))
+    ax.imshow(sample.sumImageReconImage, cmap='hot', aspect='auto')
+    ax.set_title('Recon - PSNR: ' + str(round(compare_psnr(result.sampleData.sumImage, sample.sumImageReconImage, data_range=np.max(result.sampleData.sumImage)), 5)))
+    
+    ax = plt.subplot2grid(shape=(1,4), loc=(0,3))
     ax.imshow(sample.RD, aspect='auto')
-    ax.set_title('RD', fontsize=15)
+    ax.set_title('RD')
+    
+    f.tight_layout()
+    f.subplots_adjust(top = 0.8)
     plt.savefig(saveLocation)
     plt.close()
     
@@ -270,17 +261,16 @@ def visualizeTraining_serial(sample, result, maskNum, trainDataFlag, valDataFlag
     
     if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png'
     elif valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_measured_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png'
-    #borderlessPlot(result.sampleData.mzAvgImage, saveLocation, 'hot')
-    borderlessPlot(result.sampleData.TIC, saveLocation, 'hot')
+    borderlessPlot(result.sampleData.sumImage, saveLocation, 'hot')
     
     if trainDataFlag: saveLocation = dir_TrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png'
     elif valDataFlag: saveLocation = dir_ValidationTrainingResultsImages + 'c_' + str(optimalC) + '_reconstruction_'+ result.sampleData.name + '_variation_' + str(maskNum) + '_percentage_' + str(round(sample.percMeasured, 5)) + '.png'
-    #borderlessPlot(sample.mzAvgReconImage, saveLocation)
-    borderlessPlot(sample.TICReconImage, saveLocation)
+    borderlessPlot(sample.sumImageReconImage, saveLocation)
 
 #Given a set of samples and a chosen c value, generate a training database
 def generateDatabases(trainingValidationSampleData, optimalC):
     
+    #Use a common rng seed if enabled
     if consistentSeed: np.random.seed(0)
     
     #For the number of mask iterations specified, create new masks and scan them with the specified method
@@ -324,7 +314,7 @@ def generateDatabases(trainingValidationSampleData, optimalC):
     for index in tqdm(range(0, len(results)), desc='Visualization/Set Separation', leave=True, ascii=True):
         
         #Determine if result data should go into training or validation sets
-        if index >= int(trainingSplit*len(trainingValidationSampleData))*numMasks: trainDataFlag, valDataFlag = False, True
+        if index >= round(trainingSplit*len(trainingValidationSampleData))*numMasks: trainDataFlag, valDataFlag = False, True
         
         #Append the result into the training or validation database
         for sample in results[index].samples:
@@ -336,7 +326,6 @@ def generateDatabases(trainingValidationSampleData, optimalC):
             if parallelization:
                 results_id = ray.put(results[index])
                 _ = ray.get([visualizeTraining_parhelper.remote(results_id, maskNumList[index], trainDataFlag, valDataFlag, indexes) for indexes in np.array_split(np.arange(0, len(results[index].samples)), numberCPUS)])
-                
             else:
                 _ = [visualizeTraining_serial(sample, results[index], maskNumList[index], trainDataFlag, valDataFlag) for sample in tqdm(results[index].samples, desc='% Measured', leave=False, ascii=True)]
 
@@ -349,7 +338,7 @@ def generateDatabases(trainingValidationSampleData, optimalC):
 #Given a training database, train a regression model
 def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, modelName):
     
-    if len(trainingDatabase) == 0: sys.exit('Error! - There was no training data supplied to train a model with; perhaps only one sample was provided?')
+    if len(trainingDatabase) == 0: sys.exit('Error! - No training data available.')
 
     #If consistentcy in the random generator is desired for comparisons, then reset seed
     if consistentSeed: 
@@ -381,20 +370,21 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         #Create lists of input/output images
         trainInputImages, trainOutputImages = [], []
         for sample in tqdm(trainingDatabase, desc = 'Training Data Setup', leave=True, ascii=True):
-            for mzNum in range(0, len(sample.squareRDs)):
-                trainInputImages.append(prepareInput(sample, mzNum))
-                trainOutputImages.append(sample.squareRDs[mzNum])
-
-        #If there is a validation set then create respective lists
+            for chanNum in range(0, len(sample.squareRDs)):
+                trainInputImages.append(prepareInput(sample, chanNum))
+                trainOutputImages.append(sample.squareRDs[chanNum])
+        
+        #If there is not a validation set then indicate such, otherwise create required lists
         if len(validationDatabase)<=0: 
             noValFlag = True
+            vizSamples, vizSampleData = None, None
         else:
             noValFlag = False
             valInputImages, valOutputImages = [], []
             for sample in tqdm(validationDatabase, desc = 'Validation Data Setup', leave=True, ascii=True):
-                for mzNum in range(0, len(sample.squareRDs)):
-                    valInputImages.append(prepareInput(sample, mzNum))
-                    valOutputImages.append(sample.squareRDs[mzNum])
+                for chanNum in range(0, len(sample.squareRDs)):
+                    valInputImages.append(prepareInput(sample, chanNum))
+                    valOutputImages.append(sample.squareRDs[chanNum])
                 
             #Extract lowest and highest density from the first validation sample for visualization during training; assumes 1% spacing
             vizSamples = [validationDatabase[0], validationDatabase[len(np.arange(initialPercToScanTrain, stopPercTrain))]]
@@ -405,50 +395,37 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         else: numChannels = 1
 
         #Create generators/iterators for the training and validation sets
-        trainGen = DataGen(trainInputImages, trainOutputImages, numChannels, True, batchSize)
-        valGen = DataGen(valInputImages, valOutputImages, numChannels, False, batchSize)
+        trainGen = DataGen(trainInputImages, trainOutputImages, numChannels, augTrainData, batchSize)
+        if not noValFlag: valGen = DataGen(valInputImages, valOutputImages, numChannels, False, batchSize)
 
         #Setup for distributed GPU training
         strategy = tf.distribute.MirroredStrategy()
 
-        #While a model has not been trained, reinitialize
-        trainingAttempts = 0
-        while True:
-            
-            #Select optimizer
-            if optimizer == 'Nadam': trainOptimizer = tf.keras.optimizers.Nadam(learning_rate=learningRate)
-            elif optimizer == 'Adam': trainOptimizer = tf.keras.optimizers.Adam(learning_rate=learningRate)
-            elif optimizer == 'RMSProp': trainOptimizer = tf.keras.optimizers.RMSprop(learning_rate=learningRate)
-            elif optimizer == 'SGD': trainOptimizer = tf.keras.optimizers.SGD(learning_rate=learningRate)
-            
-            #Given the specified computational scope
-            with strategy.scope(): 
-
-                #Create model
-                model = unet(numStartFilters, numChannels)
-
-                #Select loss function
-                if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss='mean_absolute_error')
-                elif lossFunc == 'MSE': model.compile(optimizer=trainOptimizer, loss='mean_squared_error')
-
-            #Setup callback object
-            epochEndCallback = EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizSamples, vizSampleData, dir_TrainingModelResults)
-
-            #Perform training
-            t0 = time.time()
-            if not noValFlag: history = model.fit(trainGen, epochs=numEpochs, callbacks=[epochEndCallback], validation_data=valGen, validation_freq=1, verbose=1, shuffle=True)
-            else: sys.exit('Error! - Model training without validation data not presently functional.')
-            #history = model.fit(trainGen, epochs=numEpochs, callbacks=[epochEndCallback], verbose=1, shuffle=True)
-            
-            #Check if training terminated due to nan, if not then break from loop, else restart training
-            if not epochEndCallback.nanValue: break
-            print('Restarting model training due to nan value')
-            
-            #Increment the number of training attempts and check if attempt should be canceled
-            trainingAttempts += 1
-            if trainingAttempts >= maxTrainingAttempts: sys.exit('Error! - Maximum number of training attempts have been performed.')
+        #Select optimizer
+        if optimizer == 'Nadam': trainOptimizer = tf.keras.optimizers.Nadam(learning_rate=learningRate)
+        elif optimizer == 'Adam': trainOptimizer = tf.keras.optimizers.Adam(learning_rate=learningRate)
+        elif optimizer == 'RMSProp': trainOptimizer = tf.keras.optimizers.RMSprop(learning_rate=learningRate)
+        elif optimizer == 'SGD': trainOptimizer = tf.keras.optimizers.SGD(learning_rate=learningRate)
         
-        print('Model Training Time: ' + str(datetime.timedelta(seconds=(time.time()-t0))))
+        #Given the specified computational scope
+        with strategy.scope(): 
+
+            #Create model
+            model = unet(numStartFilters, numChannels)
+
+            #Select loss function
+            if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss='mean_absolute_error')
+            elif lossFunc == 'MSE': model.compile(optimizer=trainOptimizer, loss='mean_squared_error')
+
+        #Setup callback object
+        epochEndCallback = EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizSamples, vizSampleData, dir_TrainingModelResults)
+
+        #Perform training, timing the overall operation
+        t0 = time.time()
+        if not noValFlag: history = model.fit(trainGen, epochs=numEpochs, callbacks=[epochEndCallback], validation_data=valGen, validation_freq=1, verbose=1, shuffle=True)
+        else: history = model.fit(trainGen, epochs=numEpochs, callbacks=[epochEndCallback], verbose=1, shuffle=True)
+        t1 = time.time()
+        print('Model Training Time: ' + str(datetime.timedelta(seconds=(t1-t0))))
         
         #Save the final model and weights; do not include optimizer to save space
         model.save(dir_TrainingResults + modelName, include_optimizer=False)
@@ -467,7 +444,7 @@ class DataGen(tf.keras.utils.Sequence):
         self.length = len(inputs)
         self.splitIndexes = np.array_split(np.arange(0, self.length), int(self.length/batchSize))
         self.data_augmentation = tf.keras.Sequential([
-        tf.keras.layers.RandomCrop(64,64),
+        #tf.keras.layers.experimental.preprocessing.RandomCrop(64, 64),
         tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical"),
         tf.keras.layers.experimental.preprocessing.RandomRotation(factor = (-0.125, 0.125), fill_mode='constant'),
         tf.keras.layers.experimental.preprocessing.RandomTranslation(height_factor=(-0.25, 0.25), width_factor=(-0.25, 0.25), fill_mode = "constant"),
@@ -487,11 +464,9 @@ class DataGen(tf.keras.utils.Sequence):
 
     def on_epoch_end(self):
         if self.dataAug: 
-
             augImages = [tf.squeeze(self.data_augmentation(self.comImages[index]), axis=0).numpy() for index in range(0, self.length)]
             augInputs = [comImage[:,:,:self.numChannels] for comImage in augImages]
             augOutputs = [comImage[:,:,self.numChannels:] for comImage in augImages]
-
             if self.batchSize == 1:
                 self.inputs = [makeCompatible(augInput) for augInput in augInputs]
                 self.outputs = [makeCompatible(augOutput) for augOutput in augOutputs]

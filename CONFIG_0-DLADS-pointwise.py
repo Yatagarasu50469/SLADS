@@ -9,16 +9,16 @@
 ##################################################################
 
 #Is training of a model to be performed
-trainingModel = False
+trainingModel = True
 
 #If trainingModel, should existing database/cValue in RESULTS be loaded instad of creating a new one
 loadTrainValDatasets = False
 
 #If validation dataset should be simulated
-validationModel = False
+validationModel = True
 
 #Is testing of a model to be performed
-testingModel = False
+testingModel = True
 
 #Is this an implementation run
 impModel = False
@@ -40,8 +40,8 @@ erdModel = 'DLADS'
 #Which scanning method shoud be used: pointwise or linewise
 scanMethod = 'pointwise'
 
-#Should only a single mz be used as the network input (allows evaluation over multiple, uses first mz in mz.csv local/global file)
-mzSingle = False
+#Should only a single channel be used as the network input (allows evaluation over multiple, MSI uses first channel in channels.csv local/global file, IMAGE uses first channel read)
+chanSingle = False
 
 #Should static window be used in RD generation
 staticWindow = False
@@ -58,7 +58,7 @@ dynWindowSigMult = 3
 #==================================================================
 
 #If an implementation run, what name should be used for data obtained
-impSampleName = 'SAMPLE_1'
+impSampleName = 'SAMPLE'
 
 #If an implementation run, where will the MSI files be located (location will be emptied on run); None equivalent to './RESULTS/IMP/'
 impInputDir = None
@@ -92,7 +92,7 @@ percToViz = 1
 #LINEWISE OPTIONS
 #==================================================================
 
-#How should points be returned from a chosen line: (segLine; partial line segment) (percLine; top stopPerc% ERD locations) (fullLine; all of the points on the line)
+#How should points be returned from a chosen line: (segLine; partial line segment) (percLine; top stopPerc% ERD locations) (none, full line)
 lineMethod = 'segLine'
 
 #How should individual points on a chosen line be selected: (single; one-by-one, updates ERD from reconstruction) (group; all chosen in one step)
@@ -124,8 +124,7 @@ initialPercToScanTrain = 1
 stopPercTrain = 30
 
 #Possible c values for RD approximation
-#cValues = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
-cValues = np.array([8])
+cValues = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
 
 #How many masks should be used for each percentage during training
 numMasks = 1
@@ -140,7 +139,7 @@ numMasks = 1
 #MODEL PARAMETERS
 ##################################################################
 
-#How many neighbors should be used in the reconstruction estimation
+#How many neighbors should be used in the IDW reconstruction
 numNeighbors = 10
 
 #==================================================================
@@ -174,11 +173,11 @@ learningRate = 1e-4
 #What should the batch size for pushing data through the network be
 batchSize = 1
 
+#Should the training data be augmented at the end of each epoch
+augTrainData = True
+
 #How many epochs should a model train for at maximum
 numEpochs = 1000
-
-#How many tries should the model have to produce a non-nan result before quitting
-maxTrainingAttempts = 5
 
 #Should the model training be cutoff early if no improvement is seen, using patience criteria
 earlyCutoff = True
@@ -189,10 +188,7 @@ maxPatience = 50
 #How many epochs at minimum should be performed before starting to save the current best model and consider termination
 minimumEpochs = 10
 
-#What percentage of the training data should be used for training
-#Early stopping is only functional with at least 1 validation sample
-#If 1.0, will terminate at minimumEpochs+maxPatience; not functional for DLADS!
-#If 1.0 set maxPatience to zero for model to save when intended
+#What percentage of the training data should be used for training (setting as 1.0 or using one input sample will use training loss for early stopping criteria)
 trainingSplit = 0.8
 
 #Should visualizations of the training progression be generated
@@ -214,8 +210,8 @@ trainingVizSteps = 10
 #Should output visualizations be generated during acquisition? (Not recommended; substantially reduces performance)
 liveOutputFlag = False
 
-#Should parallelization calls be used (True); if memory overflow issues develop, set to False
-parallelization = True
+#Should parallelization calls be used (True); if memory overflow issues develop, try setting to False
+parallelization = False
 
 #Which system GPU(s) are available; ('None', whichever is available; '-1', CPU only)
 availableGPUs = 'None'

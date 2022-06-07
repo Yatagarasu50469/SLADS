@@ -28,6 +28,7 @@ import pickle
 import PIL
 import PIL.ImageOps
 import platform
+import pyimzml
 import random
 import re
 import requests
@@ -49,6 +50,7 @@ from multiplierz.spectral_process import mz_range
 from numba import cuda
 from numba import jit
 from PIL import Image
+from pyimzml.ImzMLParser import ImzMLParser
 from scipy import misc
 from scipy import signal
 from scipy.io import loadmat

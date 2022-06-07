@@ -12,7 +12,7 @@ def postprocess(sortedSampleFolders, optimalC, modelName):
     if erdModel == 'DLADS': _ = ray.get(model.remote(np.empty((1,64,64,3))))
     
     #Load in data, creating corresponding sample and result objects
-    sampleDataset = [SampleData(sampleFolder, 0, stopPerc, scanMethod, lineRevist, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)]
+    sampleDataset = [SampleData(sampleFolder, 0, stopPerc, scanMethod, lineRevist, True, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=True)]
     samples = [Sample(sampleData) for sampleData in sampleDataset]
     results = [Result(sampleData, liveOutputFlag, dir_PostResults, False, False, optimalC, False) for sampleData in sampleDataset]
     

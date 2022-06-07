@@ -1,36 +1,33 @@
 
-      ▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄ 
-	▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌
-	▐░█▀▀▀▀▀▀▀▀▀ ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ 
-	▐░▌          ▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌          
-	▐░█▄▄▄▄▄▄▄▄▄ ▐░▌          ▐░█▄▄▄▄▄▄▄█░▌▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄▄▄ 
-	▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░░▌
-	 ▀▀▀▀▀▀▀▀▀█░▌▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌ ▀▀▀▀▀▀▀▀▀█░▌
-	          ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌          ▐░▌
-	 ▄▄▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄█░▌ ▄▄▄▄▄▄▄▄▄█░▌
-	▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌
-	 ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀	
+	 ▄▄▄▄▄▄▄▄▄▄   ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄   ▄▄▄▄▄▄▄▄▄▄▄ 
+	▐░░░░░░░░░░▌ ▐░▌          ▐░░░░░░░░░░░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌
+	▐░█▀▀▀▀▀▀▀█░▌▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ 
+	▐░▌       ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌▐░▌          
+	▐░▌       ▐░▌▐░▌          ▐░█▄▄▄▄▄▄▄█░▌▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄▄▄ 
+	▐░▌       ▐░▌▐░▌          ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░░▌
+	▐░▌       ▐░▌▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌ ▀▀▀▀▀▀▀▀▀█░▌
+	▐░▌       ▐░▌▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌          ▐░▌
+	▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌▐░█▄▄▄▄▄▄▄█░▌ ▄▄▄▄▄▄▄▄▄█░▌
+	▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌▐░▌       ▐░▌▐░░░░░░░░░░▌ ▐░░░░░░░░░░░▌
+	 ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀  ▀▀▀▀▀▀▀▀▀▀   ▀▀▀▀▀▀▀▀▀▀▀ 
 
 # GENERAL INFORMATION
 
-
     NAME: 		SLADS
-    VERSION NUM:	0.9.1
+    VERSION:	0.9.2
     LICENSE:    	GNU General Public License v3.0
-    DESCRIPTION:	Multichannel implementation of SLADS (Supervised Learning Algorithm 
-			for Dynamic Sampling with additional constraint to select groups of 
-			points along a single axis. 
+    DESCRIPTION:	Dynamic sampling algorithms with updated/developing implementations of:
+                	  -SLADS (Supervised Learning Approach for Dynamic Sampling) using least-squares regression
+                	  -SLADS-Net using a neural network
+                	  -DLADS (Deep Learning Approach for Dynamic Sampling) using a Convolutional Neural Network (CNN)
     
-    AUTHORS:	David Helminiak	EECE, Marquette University
-			Dong Hye Ye	EECE, Marquette University
-    
-    COLLAB. 	Julia Laskin	CHEM, Purdue University
+	AUTHOR(S):		David Helminiak	EECE, Marquette University
+	ADVISOR(S):		Dong Hye Ye	EECE, Marquette University
+    COLLAB.(S): 	Julia Laskin	CHEM, Purdue University
 			Hang Hu		CHEM, Purdue University
     
-    FUNDING:	This project has received funding and was programmed for:
-			NIH Grant 1UG3HL145593-01
-    
-	GLOBAL
+    FUNDING:	This project has received funding and was programmed for NIH Grant 1UG3HL145593-01
+	
 	CHANGELOG:	0.1.0   Multithreading adjustments to pointwise SLADS
                     0.1.1   Line constraints, concatenation, pruning, and results organization			
                     0.2.0   Line bounded constraints addition
@@ -43,17 +40,17 @@
                     0.6.3   Start/End point selection with Canny
                     0.6.4   Custom knn metric, SSIM calc, init computations
                     0.6.5   Clean variables and resize to physical
-                    0.6.6   SLADS-NET NN, PSNR, asymFinal, and multi-config
+                    0.6.6   SLADS-Net NN, PSNR, asymFinal, and multi-config
                     0.6.7   Clean asymmetric implementation with density features
                     0.6.8   Fixed RD generation, added metrics, and Windows compatible
-                    0.7.0   CNN/Unet/RBDN with dynamic window size
+                    0.7.0   CNN/U-Net/RBDN with dynamic window size
                     0.7.1   c value selection performed before model training
                     0.7.2   Remove custom pkg. dependency, use NN resize, recon+measured input
                     0.7.3   Start/End line patch, SLADS(-Net) options, normalization optimization
                     0.7.4   CPU compatibility patch, removal of NaN values
                     0.7.5   c value selection performed before training database generation
                     0.6.9   Do not use -- Original SLADS(-Net) variations for comparison with 0.7.3
-                    0.8.0   RAW MSI file integration (.raw, .d)
+                    0.8.0   Raw MSI file integration (.raw, .d), .d files only Windows compatible
                     0.8.1   Model simplification, method cleanup, mz tolerance/standard patch
                     0.8.2   Multichannel, fixed groupwise, square pixels, accelerated RD, altered visuals/metrics
                     0.8.3   Mask seed fix, normalization for sim. fix, non-Ray option, pad instead of resize
@@ -65,6 +62,7 @@
                     0.8.9   Simplification
                     0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
                     0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
+					0.9.2   .imzML and image (.jpg, .png, .tiff) support, RD speedup, fix RD times, single sample training
                     ~0.+.+  Custom adversarial network, Multimodal integration
                     ~1.0.0  Initial release
 
@@ -73,13 +71,12 @@
 
 **Warning:** If training is enabled, any model already in ./RESULTS/TRAIN/ will be overwritten. Likewise, if testing or implementation is enabled, then any data in ./RESULTS/TEST/ and/or ./RESULT/IMP/, respectively will be overwritten.
 
-
     ------->ROOT_DIR
     	|------->README
     	|------->CONFIG_#-description.py
     	|------->SLADS.py
     	|------->runConfig.py
-    	|------->mz.csv
+    	|------->channels.csv
     	|------->RECON
 		|	|------->INPUT
 		|	|	|------->TEST_SAMPLE_1
@@ -87,10 +84,10 @@
     	|	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->sampleInfo.txt
     	|	|	|	|------->measuredMask.csv
-    	|	|	|	|------->mz.csv
+    	|	|	|	|------->channels.csv
     	|	|	|	|------->physicalLineNums.csv
     	|	|------->RESULTS
-    	|	|------->mz.csv
+    	|	|------->channels.csv
     	|	|------->mzReconstruction.ipynb
     	|------->CODE
     	|	|------->DEFS.py
@@ -100,43 +97,32 @@
     	|	|------->SIMULATION.py
     	|	|------->TRAINING.py
     	|------->INPUT
-    	|	|------->TEST
-    	|	|	|------->TEST_SAMPLE_1
+    	|	|------->TEST/TRAIN
+    	|	|	|------->SAMPLE_1
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->mz.csv
-    	|	|	|	|------->sampleName-line-0001.RAW
-    	|	|	|	|------->sampleName-line-0002.RAW
+    	|	|	|	|------->channels.csv
+    	|	|	|	|------->sampleName-line-0001.(d, RAW)
+    	|	|	|	|------->sampleName-line-0002.(d, RAW)
     	|	|	|	|------->...
-    	|	|	|------->TEST_SAMPLE_2
+    	|	|	|------->SAMPLE_2
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->mz.csv
-    	|	|	|	|------->sampleName-line-0001.RAW
-    	|	|	|	|------->sampleName-line-0002.RAW
-    	|	|	|	|------->...
-    	|	|------->TRAIN
-    	|	|	|------->TRAIN_SAMPLE_1
+    	|	|	|	|------->channels.csv
+    	|	|	|	|------->sampleName.imzML
+    	|	|	|	|------->sampleName.ibd
+    	|	|	|------->SAMPLE_3
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->mz.csv
-    	|	|	|	|------->sampleName-line-0001.RAW
-    	|	|	|	|------->sampleName-line-0002.RAW
-    	|	|	|	|------->...
-    	|	|	|------->TRAIN_SAMPLE_2
-    	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->mz.csv
-    	|	|	|	|------->sampleName-line-0001.RAW
-    	|	|	|	|------->sampleName-line-0002.RAW
-    	|	|	|	|------->...
+    	|	|	|	|------->sampleName.(png, tif, jpg)
     	|	|------->POST
-    	|	|	|------->POST_SIMULATION_SAMPLE_1
+    	|	|	|------->SIMULATION_SAMPLE_1
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->mz.csv
+    	|	|	|	|------->channels.csv
     	|	|	|	|------->measuredMask.csv
     	|	|	|	|------->sampleName-line-0001.RAW
     	|	|	|	|------->sampleName-line-0002.RAW
     	|	|	|	|------->...
-    	|	|	|------->POST_EXPERIMENTAL_SAMPLE_2
+    	|	|	|------->EXPERIMENTAL_SAMPLE_2
     	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->mz.csv
+    	|	|	|	|------->channels.csv
     	|	|	|	|------->measuredMask.csv
     	|	|	|	|------->physicalLineNums.csv
     	|	|	|	|------->sampleName-line-0001.RAW
@@ -144,7 +130,7 @@
     	|	|	|	|------->...
     	|	|------->IMP
     	|	|	|------->sampleInfo.txt
-    	|	|	|------->mz.csv
+    	|	|	|------->channels.csv
     	|	|	|------->physicalLineNums.csv
     	|	|	|------->sampleName-line-0001.RAW
     	|	|	|------->sampleName-line-0002.RAW
@@ -154,49 +140,41 @@
     	|	|	|-------> DONE
     	|------->RESULTS
     	|	|------->IMP
-    	|	|	|-------IMP_SAMPLE_1
+    	|	|	|------->SAMPLE_1
     	|	|	|	|------->Progression
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
     	|	|	|	|------->physicalLineNums.csv
     	|	|------->POST
-    	|	|	|-------POST_SIMULATION_SAMPLE_1
+    	|	|	|------->SIMULATION_SAMPLE_1
     	|	|	|	|------->Progression
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
-    	|	|	|-------POST_EXPERIMENTAL_SAMPLE_2
-    	|	|	|	|------->TIC
+    	|	|	|------->EXPERIMENTAL_SAMPLE_2
+    	|	|	|	|------->sumImage
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
     	|	|------->TEST
-    	|	|	|-------dataPrintout.csv
-    	|	|	|-------PSNR and SSIM Results (.csv and .png)
-    	|	|	|-------TEST_SAMPLE_1
+    	|	|	|------->dataPrintout.csv
+    	|	|	|------->PSNR and SSIM Results (.csv and .png)
+    	|	|	|------->TEST_SAMPLE_1
     	|	|	|	|------->Progression
     	|	|	|	|------->mz
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
-    	|	|	|-------TEST_SAMPLE_2
-    	|	|	|	|------->Progression
-    	|	|	|	|------->mz
-    	|	|	|	|------->Videos
-    	|	|	|	|------->measuredMask.csv
-    	|	|-------VALIDATION
-    	|	|	|-------dataPrintout.csv
-    	|	|	|-------PSNR and SSIM Results (.csv and .png)
-    	|	|	|-------VALIDATION_SAMPLE_1
-    	|	|	|	|------->TIC
+    	|	|	|-------...
+    	|	|------->VALIDATION
+    	|	|	|------->dataPrintout.csv
+    	|	|	|------->PSNR and SSIM Results (.csv and .png)
+    	|	|	|------->VALIDATION_SAMPLE_1
+    	|	|	|	|------->sumImage
     	|	|	|	|------->Progression
     	|	|	|	|------->Videos
     	|	|	|	|------->measuredMask.csv
-    	|	|	|-------VALIDATION_SAMPLE_2
-    	|	|	|	|------->TIC
-    	|	|	|	|------->Progression
-    	|	|	|	|------->Videos
-    	|	|	|	|------->measuredMask.csv
+    	|	|	|-------...
     	|	|------->TRAIN
     	|	|	|------->Model Training Images
     	|	|	|	|------->...
@@ -207,13 +185,13 @@
     	|	|	|------->optimalC.npy
     	|	|	|------->trainingDatabase.npy
     	|	|	|------->trainingSamples.npy
-    	|	|	|------->model_cValue_
+    	|	|	|------->model_modelType_channelType_windowType_windowDim_c_cValue
 
 # INSTALLATION
-This implementation of SLADS is generally only functional within Windows 10, given a reliance on vendor provided .dll's, as utilized by the multiplierz package. The package versions do not necessarily need to match with those listed. However, should the program produce unexpected errors, installing a specific version of a package might be able to resolve the issue. Note that the multiplierz pacakage, must be installed from the provided link under the installation commands.
+**Note:** Use of Agilent .d files is only possible on Windows 10, given a reliance on vendor provided .dll's, as utilized by the multiplierz package. The package versions do not necessarily need to match with those listed. However, should the program produce unexpected errors, installing a specific version of a package might be able to resolve the issue. Note that the multiplierz pacakage, must be installed from the provided link under the installation commands. 
 
 	Operating System
-		Win. 10:	Updated as of Jan 1 2021
+		Win. 10:	Updated as of May 2022
 
 	System
 		Python		3.8.3
@@ -234,6 +212,7 @@ This implementation of SLADS is generally only functional within Windows 10, giv
 		pandas		1.3.5
 		Pillow		9.0.0
 		psutil		5.9.0
+		pyimzml		1.5.1
 		ray		1.11.0
 		scikit-image	0.19.1
 		scikit-learn	0.23.2                 
@@ -272,7 +251,7 @@ Note that the actual location of the specified file may vary depending on potent
 Open a new command prompt (critically, not as an administrator!) and enter the following commands:
 
 	$ python -m pip install --upgrade pip
-	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tensorflow-addons tqdm opencv-python pydot graphviz aiorwlock
+	$ pip3 install jupyter datetime glob3 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tensorflow-addons tqdm opencv-python pydot graphviz aiorwlock pyimzml
 	$ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
 	
 Either switch back to, or open a new command prompt as an administrator and enter the following command:
@@ -300,8 +279,13 @@ All critical parameters for SLADS may be altered in a configuration file (Ex. ./
 
 Multiple configuration files in the form of CONFIG_*descriptor*.py, can be generated for which SLADS will be run sequentially. RESULTS_*descriptor* folders will correspond with the numbering of the CONFIG files, with the RESULTS folder without a description, containing results from the last run performed. 
 
-One file must be included in each of the sample folders (specifically within the subdirectories in TRAIN, TEST, and IMP, as the tasks to be performed may dictate). sampleInfo.txt should include the following ordered information:
+For all samples, a sampleInfo.txt file must be included in each of the sample directories (specifically within the subdirectories in TRAIN, TEST, and IMP, as the tasks to be performed may dictate). The actual content is dependent on the file type as listed below, where each piece of information should be on its own line without additional description, as shown in the EXAMPLE sample directory. 
 
+For MSI data, another file: channels.csv, should also be placed in the base directory, which contains line separated values of m/z locations, where the ranges used for visualization are determined through the specified m/z tolerance. If there are different mz that are specific to a sample, then a channels.csv should be placed in the sample directory. Local/sample channels.csv files are used even when a global channels.csv is defined. At this time, each m/z should be handpicked to highlight underlying structures of interest. 
+
+**DESI MSI**
+	- Sample Type
+		Specify the kind of file for correct parsing of the remaining fields (DESI, MALDI, IMAGE)
 	- Number of lines in the sample 
 		Not to be confused with the number of line files present in the directory!
 	- Width (mm) 
@@ -319,18 +303,42 @@ One file must be included in each of the sample folders (specifically within the
 		Number of decimal places used when considering spectrum locations/values
 	- Sequential filenames (1 indicates sequential, 0 for physical row location)
 		Indicates whether the filename line numbers going to be labeled sequentially rather than by physical row number
-	- Data Completeness (1 for fully acquired, 0 for partially acquired)
-		Indicates whether the MSI files contain all of the sample data, or only some of it, as produced during implementation
 
-Each piece of information should be on its own line without additional description, as shown in the EXAMPLE sample directory. 
+Each DESI MSI data file (ex. extensions: .d, or .raw), must be named with the standard convention, increasing line-0001 as appropriate: 
 
-Another file mz.csv should be placed in the base directory, which contains line separated values of m/z locations, where the ranges used for visualization are determined through the specified m/z tolerance, to be extracted and used for a sample (as specified in sampleInfo.txt). If there are different mz that are specific to a sample, then a mz.csv should be placed in the sample directory, alongside the sampleInfo.txt file. Local/sample mz.csv files are used even when a global mz.csv is defined, though both need to have the same number of values/channels for model compatability. At this time, each m/z should be handpicked to highlight underlying structures of interest. If using the SLADS variants, or original RD generation method the m/z should be geometrically complementary. 
-
-Each MSI data file (ex. .d, or .raw), must be labeled with the standard convention: 
-
-	sampleName-line-000#.extension
-
+	sampleName-line-0001.extension
+	
 If using Agilent equipment with linewise acquisition modes for an implementation run, then the line numbers are in sequence, rather than according to physical row number. In this case, enable the unorderedNames flag in the configuration file. 
+
+**MALDI MSI**
+	- Sample Type
+		Specify the kind of file for correct parsing of the remaining fields (DESI, MALDI, IMAGE)
+	- Columns (px)
+		Number of columns in the sample
+	- Rows (px)
+		Number of rows in the sample
+	- m/z tolerance (ppm)
+		Informs the m/z range used for each specified central m/z value (m/z range computed as: specified_m/z times (1-m/z tolerance) to specified_m/z times (1+m/z tolerance)
+	- m/z precision
+		Number of decimal places used when considering spectrum locations/values
+
+Each MALDI MSI data file (ex. .ibd and .imzML), must be named with the standard convention: 
+
+	sampleName.extension
+
+**Images**
+	- Sample Type
+		Specify the kind of file for correct parsing of the remaining fields (DESI, MALDI, IMAGE)
+	- Columns (px)
+		Number of columns in the sample
+	- Rows (px)
+		Number of rows in the sample
+	- Channels
+		Number of channels in the sample
+	
+Use of regular image files (ex. .png, .jpg, .tiff) are supported, where each only represents a single channel of information and is named with the standard convention below. Note that the label should be descriptive of the channel (i.e. Red, Green, Blue, Alpha, 0, 1, 2, etc.). 
+
+	sampleName-chan-label.extension
 
 ###  **RUN**
 After configuration, to run the program perform the following command in the root directory:
@@ -338,7 +346,7 @@ After configuration, to run the program perform the following command in the roo
 	$ python ./SLADS
 
 ###  **RESULTS**
-All results will be placed in ./RESULTS/ as follows:
+All results will be placed in ./RESULTS/ as follows (presuming MSI data):
 
 	TRAIN: Training results
 		optimalC.npy: Determined optimal c value determined in training
@@ -348,12 +356,12 @@ All results will be placed in ./RESULTS/ as follows:
 		validationDatabase.p: Database of validation samples; random 1% point masks from 1-40%
 		testingDatabase.p: Database of testing sample data to allow for rapid back-to-back simulations
 		trainingValidationSampleData.p: Database of training and validation sample data
-		model_cValue_: Trained model corresponding to the indicated c value (.npy for SLADS-LS and SLADS-Net)
+		model_modelType_channelType_windowType_windowDim_c_cValue: Trained model corresponding to the indicated parameters (.npy for SLADS-LS and SLADS-Net)
 
 	TEST: Testing results
 		TEST_SAMPLE_1
-			Average: Individual and overall images of the progressive scanning for averaged m/z
-			mz: Individual and overall images of the progressive scanning for each specified m/z
+			Progression: Individual and overall images of the progressive scanning for averaged m/z
+			Channels: Individual and overall images of the progressive scanning for each specified m/z
 			Videos: Videos of final scan progression
 			physicalLineNums.csv: Mapping from sequential filename numbering to physical row number
 			measuredMask.csv: Final measurement mask; 1 for measured, 0 for unmeasured
@@ -361,16 +369,16 @@ All results will be placed in ./RESULTS/ as follows:
 		dataPrintout.csv(.png): Summary of final results
 		ERDPSNR_Percentage.csv(.png): Progressive PSNR of the ERD
 		ERDSSIM_Percentage.csv(.png): Progressive SSIM of the ERD
-		mzAvgPSNR_Percentage.csv(.png) Progressive averaged PSNR for reconstructions of all m/z
-		mzAvgSSIM_Percentage.csv(.png) Progressive averaged SSIM for reconstructions of all m/z
+		chanAvgPSNR_Percentage.csv(.png) Progressive averaged PSNR for reconstructions of all m/z
+		chanAvgSSIM_Percentage.csv(.png) Progressive averaged SSIM for reconstructions of all m/z
 
 	VALIDATION: Validation results
 		Identical structure to TEST
 		
 	POST: Post-Processing results
 		POST_EXPERIMENTAL_SAMPLE_2
-			Average: Individual and overall images of the progressive scanning for averaged m/z
-			mz: Individual and overall images of the progressive scanning for each specified m/z
+			Progression: Individual and overall images of the progressive scanning for averaged m/z
+			Channels: Individual and overall images of the progressive scanning for each specified m/z
 			physicalLineNums.csv: Mapping from sequential filename numbering to physical row number
 			measuredMask.csv: Final measurement mask; 1 for measured, 0 for unmeasured
 
@@ -389,18 +397,18 @@ Feel free to check if it has already been addressed in, or open an issue on, the
 
 ###  **Why am I receiving a 'list index out of range' error from the 'readScanData' method**
 
-Most likely this is due to MSI line filenames not matching the convention outlined above.
+Most likely this is due to filenames not matching the outlined naming convention.
 
-###  **Why is SLADS not compatible with Linux distributions, or Mac operating systems**
+###  **Why is SLADS not compatible with Linux distributions, or Mac operating systems when using MSI data**
 
-As of v0.8.0, SLADS obtains information directly from MSI files, rather than pre-processed .csv m/z visualizations. These operations are reliant on vendor specific .dll files as provided in the multiplierz package. Supperficially it appears as though the multiplierz API might function within Linux. For example, the packages pythonnet and comtypes can be installed, but cannot actually function in a linux environment. An alternative approach, that may work, might be to attempt an installation through wineDocker, though this has not been attempted. 
+As of v0.8.0, SLADS obtains information directly from MSI files, rather than pre-processed .csv m/z visualizations. For Agilent .d files, these operations are reliant on vendor specific .dll files as provided in the multiplierz package. Supperficially it appears as though the multiplierz API might function within Linux. For example, the packages pythonnet and comtypes can be installed, but cannot actually function in a linux environment. An alternative approach, that may work, might be to attempt an installation through wineDocker, though this has not been attempted. 
 
-While it does not currently function for some MSI formats, (verified operational for XCalibur .RAW but not Agilent .d) multiplierz may be installed directly on Ubuntu 18.04 or in a Docker container with the following commands:
+While it does not currently function for some MSI formats, (verified operational for .RAW and .imzML/.ibd files) multiplierz may be installed directly on Ubuntu 18.04 or in a Docker container with the following commands:
 	
 	$ python -m pip install --upgrade pip
 	$ sudo apt-get update
 	$ sudo apt-get install -y wget git python3-opencv
-	$ pip3 install jupyter datetime glob2 IPython joblib pandas pathlib2 psutil matplotlib numba pillow ray ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tensorflow-addons tqdm numpy opencv-python pydot graphviz aiorwlock
+	$ pip3 install jupyter datetime glob2 IPython joblib pandas pathlib2 psutil matplotlib numba pillow ray ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow tensorflow-addons tqdm numpy opencv-python pydot graphviz aiorwlock pyimzml
 	$ wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
 	$ sudo dpkg -i packages-microsoft-prod.deb
 	$ rm packages-microsoft-prod.deb
@@ -449,8 +457,26 @@ Some common outputs that can safely be ignored are produced from Ray during mode
 
 Previous install guides had the multiplierz package installed with pip3 as an administrator, which causes issues when running the program as a non-administrator. As an administrator, uninstall multiplierz (pip3 uninstall multiplierz), then install as per the updated instructions. Note that following the installation, the registerInterfaces command still needs to be performed as an administrator.
 
+###  **Program seems very slow**
 
+The most likely cause is from large sample dimensionality (i.e. both rows and columns are in excess of 100). It the computational platform appears to lock up, it is recommended to check either Task Manager (Windows) or htop (Ubuntu: sudo apt-get install htop) and verify there is both sufficient RAM and computational capabilities to utilize the selected model. DLADS is much more computationally intensive than SLADS-LS, but will try to offload work onto a discrete CUDA GPU if one is available. Warnings/Errors will be output if RAM limits are exceeded on either system or GPU. 
 
+Verify that liveOutputFlag in the configuration file is set to False, visualization is very expensive in terms of time as it writes data to a physical drive, rather than RAM.
 
+Verify that parallelism is enabled as the program can perform some operations concurrently. 
 
+###  **Error indicates that the GPU should be disabled, settting parallelism to False doesn't resolve this**
 
+The parallelism flag in the configuration file does not control GPU usage, only CPU usage. In order to disable GPUs entirely, set availableGPUs = '-1'.
+
+###  **Received a Windows Access Error**
+
+Windows prevents file/folder operations if they are currently open. Since folders are removed and generated during startup, make sure all explorer windows and files related/resulting to/from the program are closed before starting a run. If the error persists, then verify that the specified files/folders have appropriate permissions.
+
+###  **Looking at the model training images for DLADS shows a lack of loss convergence**
+
+Try disabling data augmentation, setting augTrainData to False, if this fixes the issue than likely the default parameters(specified in TRAINING.py under the DataGen class) being used are too large to extract meaningful features. If this doesn't fix the issue, than try lowering the learning rate and/or increasing the numbe of start filters. Beyond those parameters, provided there are sufficient training samples, a change in the network architecture may be required.
+
+###  **The resulting reconstructions are quite blurry**
+
+If the provided data is fairly homogeneous, with predominant value fluctuations around structural edges, try decreasing the number of neighbors used in IDW reconstruction (numNeighbors) as low as 1.
