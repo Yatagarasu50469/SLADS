@@ -5,7 +5,7 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    3 June 2021
+#DATE MODIFIED:	    7 June 2021
 #
 #VERSION:	        0.9.2
 #
@@ -83,7 +83,6 @@ configFileNames = natsort.natsorted(glob.glob('./CONFIG_*.py'))
 
 #If there is more than one configuration file, validate their syntax
 if len(configFileNames) > 1: [exec(open(configFileName, encoding='utf-8').read()) for configFileName in configFileNames]
-
 
 #Run each configuration sequentially as a subprocess (GPU VRAM not cleared by Tensorflow, leading to crash otherwise); pass interrupts to active subprocess
 for configFileName in configFileNames: 

@@ -444,7 +444,7 @@ class DataGen(tf.keras.utils.Sequence):
         self.length = len(inputs)
         self.splitIndexes = np.array_split(np.arange(0, self.length), int(self.length/batchSize))
         self.data_augmentation = tf.keras.Sequential([
-        #tf.keras.layers.experimental.preprocessing.RandomCrop(64, 64),
+        tf.keras.layers.experimental.preprocessing.RandomCrop(64, 64),
         tf.keras.layers.experimental.preprocessing.RandomFlip("horizontal_and_vertical"),
         tf.keras.layers.experimental.preprocessing.RandomRotation(factor = (-0.125, 0.125), fill_mode='constant'),
         tf.keras.layers.experimental.preprocessing.RandomTranslation(height_factor=(-0.25, 0.25), width_factor=(-0.25, 0.25), fill_mode = "constant"),

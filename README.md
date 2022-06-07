@@ -480,7 +480,11 @@ Windows prevents file/folder operations if they are currently open. Since folder
 
 ###  **Looking at the model training images for DLADS shows a lack of loss convergence**
 
-Try disabling data augmentation, setting augTrainData to False, if this fixes the issue than likely the default parameters(specified in TRAINING.py under the DataGen class) being used are too large to extract meaningful features. If this doesn't fix the issue, than try lowering the learning rate and/or increasing the numbe of start filters. Beyond those parameters, provided there are sufficient training samples, a change in the network architecture may be required.
+Try disabling data augmentation, setting augTrainData to False, if this fixes the issue than likely the default parameters(specified in TRAINING.py under the DataGen class), particularly the random crop size, being used may be too large to extract meaningful features. If this doesn't fix the issue, than try lowering the learning rate and/or increasing the number of start filters. Beyond those parameters, provided there are sufficient training samples, a change in the network architecture may be required.
+
+###  **Looking at the model training images for DLADS shows significant overfit**
+
+Double check that data augmentation is enabled, otherwise decrease the number of start filters used for the model. If this still does not fix the issue, it may be desirable to use a less complex model than DLADS, such as the included SLADS-LS or SLADS-Net options.
 
 ###  **The resulting reconstructions are quite blurry**
 
