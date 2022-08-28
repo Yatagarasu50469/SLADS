@@ -5,7 +5,7 @@
 #
 #DATE CREATED:	    4 October 2019
 #
-#DATE MODIFIED:	    7 June 2021
+#DATE MODIFIED:	    27 August 2022
 #
 #VERSION:	        0.9.2
 #
@@ -58,8 +58,8 @@
 #                   0.8.9   Simplification
 #                   0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
 #                   0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
-#                   0.9.2   .imzML and image (.jpg, .png, .tiff) support, RD speedup, fix RD times, single sample training
-#                   ~0.+.+  GAN, Custom adversarial network, Multimodal integration
+#                   0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
+#                   ~0.+.+  Custom adversarial network for reconstruction and ERD generation
 #                   ~1.0.0  Initial release
 #====================================================================
 

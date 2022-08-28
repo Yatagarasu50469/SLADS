@@ -18,6 +18,8 @@ class SampleData:
         self.unorderedNames = False
         self.missingLines = np.asarray([])
         self.chanValues = []
+        self.maskFOV = None
+        self.squareMaskFOV = None
         
         #Set global variables to indicate that OOM error states have not yet occurred; limited handle for ERD inferencing limitations
         self.OOM_multipleChannels, self.OOM_singleChannel = False, False
@@ -163,17 +165,27 @@ class SampleData:
             else: self.squareDim = self.finalDim
             self.newTimes = np.linspace(0, ((self.sampleWidth*1e3)/self.scanRate)/60, self.finalDim[1])
             
-        #Establish total sample area, setup zeroed channel and sum images for MSI data
-        self.area = int(round(self.finalDim[0]*self.finalDim[1]))
+        #Setup zeroed channel and sum images for holding MSI data
         self.chanImages = np.zeros((self.numChannels, self.finalDim[0], self.finalDim[1]))
         self.sumImage = np.zeros((self.finalDim))
     
-        #If not just post-processing, setup initial sets
-        if not self.postFlag: self.generateInitialSets(self.scanMethod)
+        #If not just post-processing check for FOV mask
+        if not self.postFlag: 
+            try: 
+                self.maskFOV = np.loadtxt(self.sampleFolder+os.path.sep+'mask.csv', delimiter=',') 
+                self.squareMaskFOV = resize(self.maskFOV, tuple(self.squareDim), order=0)
+            except: pass
         else:
             try: self.mask = np.loadtxt(self.sampleFolder+os.path.sep+'measuredMask.csv', 'int', delimiter=',') 
             except: sys.exit('Error - Unable to load measurement mask for sample: ' + self.name)
-            
+        
+        #Establish sample area
+        if type(self.maskFOV) is np.ndarray and not disableMaskFOV and percUpdateFOV: self.area = np.sum(self.maskFOV)
+        else: self.area = int(round(self.finalDim[0]*self.finalDim[1]))
+        
+        #If not just post-processing, setup initial sets
+        if not self.postFlag: self.generateInitialSets(self.scanMethod)
+        
         #If a simulation or post-processing, then just read all the data outright
         if self.simulationFlag or self.postFlag: self.readScanData()
         
@@ -189,11 +201,23 @@ class SampleData:
         #If scanning with line-bounded constraint
         if self.scanMethod == 'linewise':
         
-            #Create list of arrays containing points to measure on each line
-            self.linesToScan = np.asarray([[tuple([rowNum, columnNum]) for columnNum in np.arange(0, self.finalDim[1], 1)] for rowNum in np.arange(0, self.finalDim[0], 1)]).tolist()
+            #If applicable, limit rows/columns to consider according to the FOV mask
+            if type(self.maskFOV) is np.ndarray and not disableMaskFOV: 
+            
+                #Create list of arrays containing points to measure on each line
+                validRows = np.where(np.sum(self.maskFOV, axis=1)>0)[0]
+                self.linesToScan = [[tuple([rowNum, columnNum]) for columnNum in np.where(self.maskFOV[rowNum]>0)[0]] for rowNum in validRows]
+                
+                #Set initial lines to scan
+                lineIndexes = np.unique([int(np.ceil(len(validRows)*startLinePosition)) for startLinePosition in startLinePositions]).tolist()
+                
+            else:
+            
+                #Create list of arrays containing points to measure on each line
+                self.linesToScan = np.asarray([[tuple([rowNum, columnNum]) for columnNum in np.arange(0, self.finalDim[1], 1)] for rowNum in np.arange(0, self.finalDim[0], 1)]).tolist()
 
-            #Set initial lines to scan
-            lineIndexes = [int(round((self.finalDim[0]-1)*startLinePosition)) for startLinePosition in startLinePositions]
+                #Set initial lines to scan
+                lineIndexes = np.unique([int(np.ceil((self.finalDim[0]-1)*startLinePosition)) for startLinePosition in startLinePositions]).tolist()
             
             #Obtain points in the specified lines and add them to the initial scan list
             for lineIndex in lineIndexes:
@@ -202,7 +226,7 @@ class SampleData:
                 if lineMethod == 'percLine':
                     newIdxs = copy.deepcopy(self.linesToScan[lineIndex])
                     np.random.shuffle(newIdxs)
-                    newIdxs = newIdxs[:int(np.ceil((self.stopPerc/100)*self.finalDim[1]))]
+                    newIdxs = newIdxs[:int(np.ceil((self.stopPerc/100)*len(newIdxs)))]
                 else: 
                     newIdxs = [pt for pt in self.linesToScan[lineIndex]]
                 
@@ -210,9 +234,10 @@ class SampleData:
                 self.initialSets.append(newIdxs)
                 
         elif self.scanMethod == 'pointwise' or self.scanMethod == 'random':
-        
+            
             #Randomly select points to initially scan
-            newIdxs = np.transpose(np.where(np.zeros(self.finalDim)==0))
+            if type(self.maskFOV) is np.ndarray and not disableMaskFOV: newIdxs = np.transpose(np.where(self.maskFOV==1))
+            else: newIdxs = np.transpose(np.where(np.zeros(self.finalDim)==0))
             np.random.shuffle(newIdxs)
             newIdxs = newIdxs[:int(np.ceil(((self.initialPercToScan/100)*self.area)))]
             
@@ -287,29 +312,58 @@ class SampleData:
                         #If ignoring missing lines, then determine the offset for correct indexing
                         if self.ignoreMissingLines and len(self.missingLines) > 0: lineNum -= int(np.sum(lineNum > self.missingLines))
                         
-                        #Obtain the total ion chromatogram and extract original times
-                        sumImageData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
-                        origTimes, sumImageData = sumImageData[:,0], sumImageData[:,1]
-                        
-                        #Offset the original measured times, such that the first position's time equals 0
-                        origTimes -= np.min(origTimes)
-                        
-                        #If the data is being sparesly acquired, then the listed times in the file need to be shifted; convert np.float to float for method compatability
-                        #For impOffset compatability with percent-linewise or pointwise: np.argwhere(mask[lineNum]==1).min() must be improved...
-                        #Where physicalLineNums is updated, add another dictionary of physicalColumnNums mapping number in filename to time offset
-                        #Remember to make modifications to corresponding parhelper method
-                        #if (impModel or postModel) and impOffset and scanMethod == 'linewise' and lineMethod == 'segLine': origTimes += (columnNum/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
+                        #If the data is being sparesly acquired in lines, then the listed times in the file need to be shifted
                         if (impModel or postModel) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(self.mask[lineNum]==1).min()/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
                         elif (impModel or postModel) and impOffset: sys.exit('Error - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
-                        for chanNum in range(0, len(self.chanValues)): self.chanImages[chanNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(self.mzRanges[chanNum][0]), float(self.mzRanges[chanNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0)
                         
+                        #Processing for Bruker timsTOF data
+                        if data.format == 'Bruker':
+                        
+                            #Extract original measurement times
+                            origTimes = np.asarray(data.ms1_frames)[:,1]
+                            
+                            #Offset the original measurement times, such that the first position's time equals 0
+                            origTimes -= np.min(origTimes)
+                            
+                            #Load MSI data for each measured location
+                            sumImageData = []
+                            mzChanData = np.zeros((len(self.chanValues), len(origTimes)))
+                            for frameNum in range(1, len(origTimes)+1):
+                            
+                                #Load m/z spectrum and sum values with identical m/z values
+                                frameData = np.asarray(data.frame(frameNum))
+                                mzs, uniqueIndices = np.unique(frameData[:,0], return_inverse=True)
+                                ints = np.zeros(len(mzs), dtype=np.float32)
+                                np.add.at(ints, uniqueIndices, frameData[:,2])
+                                
+                                #Obtain the total ion chromatogram value for the position
+                                sumImageData.append(np.sum(ints))
+                                
+                                #Extract intensity values for each of the m/z channels of interest
+                                for chanNum in range(0, len(self.chanValues)): mzChanData[chanNum, frameNum-1] = np.sum(ints[np.logical_and(mzs>=float(self.mzRanges[chanNum][0]), mzs<=float(self.mzRanges[chanNum][1]))])
+                                
+                            #Interpolate m/z channel data to final new times; convert np.float to float for method compatability
+                            for chanNum in range(0, len(self.chanValues)): self.chanImages[chanNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(np.asarray(mzChanData[chanNum]), nan=0, posinf=0, neginf=0), left=0, right=0)
+                        else:
+                            
+                            #Obtain the total ion chromatogram and extract original measurement times
+                            sumImageData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
+                            origTimes, sumImageData = sumImageData[:,0], sumImageData[:,1]
+                            
+                            #Offset the original measurement times, such that the first position's time equals 0
+                            origTimes -= np.min(origTimes)
+                            
+                            #Interpolate m/z channel data to final new times; convert np.float to float for method compatability
+                            for chanNum in range(0, len(self.chanValues)): self.chanImages[chanNum, lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(self.mzRanges[chanNum][0]), float(self.mzRanges[chanNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0)
+                            
                         #Interpolate sumImage (TIC) to final new times
                         self.sumImage[lineNum] = np.interp(self.newTimes, origTimes, np.nan_to_num(sumImageData, nan=0, posinf=0, neginf=0), left=0, right=0)
-        
+            
             #Resize for square dimensions
             self.squareChanImages = np.moveaxis(resize(np.moveaxis(self.chanImages, 0, -1), tuple(self.squareDim), order=0), -1, 0)
         
         #If MALDI, then there is only a single file with all of the spectral data
+        #No parallel implementation yet
         elif self.sampleType == 'MALDI':
         
             #Establish file pointer for the scan
@@ -317,7 +371,6 @@ class SampleData:
             except: sys.exit('Error - Unable to read file' + scanFiles[chanNum])
             
             #Read all data available if a simulation; not yet implemented: for actual implementation should just read new positions ref. new idxs
-            #No parallel implementation yet
             for i, (x, y, z) in enumerate(data.coordinates):
                 mzs, ints = data.getspectrum(i)
                 for chanNum in range(0, len(self.chanValues)): 
@@ -326,7 +379,6 @@ class SampleData:
                 self.sumImage[y-1, x-1] = np.sum(ints)
             
         #If IMAGE, each scanfile corresponds to a channel, read in each and sum of all data, augmenting list of channel labels
-        #No parallel implementation yet
         elif self.sampleType == 'IMAGE':
             for chanNum in range(0, len(scanFiles)):
                 self.chanValues.append(scanFiles[chanNum].split('chan-')[1].split('.')[0])
@@ -343,10 +395,11 @@ class SampleData:
 #Relevant sample data at each time step; static information should be held in corresponding SampleData object
 class Sample:
     def __init__(self, sampleData):
-        
-        #Initialize variables that are expected to exist
+                
+        #Initialize measurement masks and other variables that are expected to exist
         self.mask = np.zeros((sampleData.finalDim))
-        self.squareMask = np.zeros((sampleData.squareDim))
+        if sampleData.sampleType == 'DESI': self.squareMask = resize(self.mask, tuple(sampleData.squareDim), order=0)
+        else: self.squareMask = self.mask
         self.squareRD = np.zeros((sampleData.squareDim))
         self.squareRDs = np.zeros((sampleData.numChannels, sampleData.squareDim[0], sampleData.squareDim[1]))
         self.squareERD = np.zeros((sampleData.squareDim))
@@ -364,8 +417,9 @@ class Sample:
             newIdxs = np.atleast_2d(newIdxs)
             self.mask[newIdxs[:,0], newIdxs[:,1]] = 1
         
-        #Update which positions have not yet been measured
-        self.unMeasuredIdxs = np.transpose(np.where(self.mask==0))
+        #Update which physical positions have not yet been measured for new measurement location(s) selection
+        if type(sampleData.maskFOV) is np.ndarray and not disableMaskFOV: self.unMeasuredIdxs = np.transpose(np.where((self.mask==0) & (sampleData.maskFOV==1)))
+        else: self.unMeasuredIdxs = np.transpose(np.where(self.mask==0))
         
         #If not taking values from a reconstruction, get from equipment or ground-truth; else get from the reconstruction
         if not fromRecon:
@@ -386,16 +440,19 @@ class Sample:
         #Update percentage pixels measured; only when not fromRecon
         self.percMeasured = (np.sum(self.mask)/sampleData.area)*100
         
-        #For DESI, resize the mask to enforce square pixels and extract measured and unmeasured locations, otherwise no resizing is needed
+        #For DESI, resize the mask to enforce square pixels
         if sampleData.sampleType == 'DESI': self.squareMask = resize(self.mask, tuple(sampleData.squareDim), order=0)
         else: self.squareMask = self.mask
-            
-        squareMeasuredIdxs, squareUnMeasuredIdxs = np.transpose(np.where(self.squareMask==1)), np.transpose(np.where(self.squareMask==0))
-
+        
+        #Extract measured and unmeasured locations, considering FOV mask if applicable
+        squareMeasuredIdxs = np.transpose(np.where(self.squareMask==1))
+        if type(sampleData.maskFOV) is np.ndarray and not disableMaskFOV: squareUnMeasuredIdxs = np.transpose(np.where((self.squareMask==0) & (sampleData.squareMaskFOV==1)))
+        else: squareUnMeasuredIdxs = np.transpose(np.where(self.squareMask==0))
+        
         #Determine neighbor information for unmeasured locations
         if len(squareUnMeasuredIdxs) > 0: neighborIndices, neighborWeights, neighborDistances = findNeighbors(squareMeasuredIdxs, squareUnMeasuredIdxs)
         else: neighborIndices, neighborWeights, neighborDistances = [], [], []
-
+        
         #Compute the reconstructions (using square pixels) if new data is acquired
         if not fromRecon:
         
@@ -413,7 +470,7 @@ class Sample:
                 self.squareChanReconImages = computeRecon(self.chanImages, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborWeights)
                 self.sumImageReconImage = self.squareSumImageReconImage
                 self.chanReconImages = self.squareChanReconImages
-                
+            
             #Compute feature information for SLADS models; not needed for DLADS
             if (datagenFlag or ((erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net')) and not bestCFlag) and len(squareUnMeasuredIdxs) > 0: 
                 t0 = time.time()
@@ -460,8 +517,9 @@ class Sample:
             self.ERD = self.squareERD
             self.ERDs = self.squareERDs
         
-        #For processed ERD, set measured locations to 0, ensure >= values, rescale for Otsu, and prevent line revisitation as specified)
-        self.physicalERD = copy.deepcopy(self.ERD)
+        #For processed ERD, mask by FOV, set measured locations to 0, ensure >= values, rescale for potential Otsu, and prevent line revisitation as specified
+        if type(sampleData.maskFOV) is np.ndarray and not disableMaskFOV: self.physicalERD = copy.deepcopy(self.ERD)*sampleData.maskFOV
+        else: self.physicalERD = copy.deepcopy(self.ERD)
         self.physicalERD[self.physicalERD<0] = 0
         if np.max(self.physicalERD) != 0: self.physicalERD = ((self.physicalERD-np.min(self.physicalERD))/(np.max(self.physicalERD)-np.min(self.physicalERD)))*100
         if sampleData.scanMethod == 'linewise' and not sampleData.lineRevist: self.physicalERD[np.where(np.sum(self.mask, axis=1)>0)] = 0
@@ -705,7 +763,7 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions):
             borderlessPlot(sample.RDs[chanNum], saveLocation, cmap='viridis', vmin=0)
             
             saveLocation = dir_chanProgressions[chanNum] + 'groundTruth_channel_' + chanLabel + '.png'
-            borderlessPlot(sample.chanImages[chanNum], saveLocation, cmap='hot', vmin=chanMinValue, vmax=chanMaxValue)
+            borderlessPlot(sampleData.chanImages[chanNum], saveLocation, cmap='hot', vmin=chanMinValue, vmax=chanMaxValue)
 
         saveLocation = dir_chanProgressions[chanNum] + 'reconstruction_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
         borderlessPlot(sample.chanReconImages[chanNum], saveLocation, cmap='hot', vmin=chanMinValue, vmax=chanMaxValue)
@@ -794,11 +852,10 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, ora
     #Make sure random selection is consistent
     if consistentSeed: np.random.seed(0)
     
-    #If groupwise is active, specify how many points should be scanned each step if pointwise, or random
-    if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random') and percToScan!=None: sampleData.pointsToScan = int(np.ceil(((stopPerc/100)*sampleData.area)/(stopPerc/percToScan)))
-    
-    #If linewise acquisiton, sepcify how many points should be scanned on each line 
-    if sampleData.scanMethod == 'linewise': sampleData.pointsToScan = int(np.ceil((stopPerc/100)*sampleData.finalDim[1]))
+    #If groupwise is active, specify how many points should be scanned each step
+    if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random') and percToScan != None: sampleData.pointsToScan = int(np.ceil(((stopPerc/100)*sampleData.area)/(stopPerc/percToScan)))
+    elif sampleData.scanMethod == 'linewise' and type(sampleData.maskFOV) is np.ndarray and not disableMaskFOV: sampleData.pointsToScan = [int(np.ceil((stopPerc/100)*np.sum(sampleData.maskFOV[lineIndex]))) for lineIndex in range(0, sampleData.finalDim[0])]
+    elif sampleData.scanMethod == 'linewise': sampleData.pointsToScan = [int(np.ceil((stopPerc/100)*sampleData.finalDim[1])) for _ in range(0, sampleData.finalDim[0])]
     
     #Create a new sample object to hold current information
     sample = Sample(sampleData)
@@ -814,7 +871,7 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, ora
     
     #Check stopping criteria, just in case of a bad input
     if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
-    elif sampleData.scanMethod == 'linewise' and sampleData.finalDim[0]-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
+    elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
     if np.sum(sample.physicalERD) == 0: completedRunFlag = True
     
     #Perform the first update for the result
@@ -842,7 +899,7 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, ora
             
             #Check stopping criteria
             if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
-            elif sampleData.scanMethod == 'linewise' and sampleData.finalDim[0]-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
+            elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
             if np.sum(sample.physicalERD) == 0: completedRunFlag = True
 
             #If viz limit, only update when percToViz has been met; otherwise update every iteration
@@ -1061,7 +1118,7 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
                 sample.performMeasurements(sampleData, result, np.asarray(newIdxs[-1]), model, cValue, bestCFlag, oracleFlag, datagenFlag, True)
                 
                 #When enough new locations have been determined, break from loop
-                if len(newIdxs) >= sampleData.pointsToScan: break
+                if len(newIdxs) >= sampleData.pointsToScan[lineToScanIdx]: break
                 
             #Convert to array for indexing
             newIdxs = np.asarray(newIdxs)
@@ -1071,7 +1128,7 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
             
         #If points on the line should be selected in one step/group
         elif lineMethod == 'percLine' and linePointSelection == 'group':
-            indexes = np.sort(np.argsort(sample.physicalERD[lineToScanIdx])[::-1][:sampleData.pointsToScan])
+            indexes = np.sort(np.argsort(sample.physicalERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
             newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
         
         #If all the points on a chosen line should be scanned
@@ -1090,7 +1147,7 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
                     indexes = np.arange(indexes[0],indexes[-1]+1)
                     newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
             elif segLineMethod == 'minPerc':
-                indexes = np.sort(np.argsort(sample.physicalERD[lineToScanIdx])[::-1][:sampleData.pointsToScan])
+                indexes = np.sort(np.argsort(sample.physicalERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
                 if len(indexes)>0: newIdxs = np.column_stack([np.ones(indexes[-1]-indexes[0]+1)*lineToScanIdx, np.arange(indexes[0],indexes[-1]+1)]).astype(int)
         #==========================================
         
@@ -1114,12 +1171,12 @@ def findNeighbors(measuredIdxs, unMeasuredIdxs):
 
 #Perform the reconstruction using IDW (inverse distance weighting)
 def computeRecon(inputImage, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborWeights):
-
+    
     #Create a blank image for the reconstruction
     reconImage = np.zeros(inputImage.shape)
     
     #Retrieve measured values, compute reconstruction values, and combine; if 3D do all channels at once
-    if len(reconImage.shape) == 3:
+    if len(inputImage.shape) == 3:
         measuredValues = inputImage[:, squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1]]
         if len(squareUnMeasuredIdxs) > 0: reconImage[:, squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1]] = np.sum(measuredValues[:, neighborIndices]*neighborWeights, axis=-1)
         reconImage[:, squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1]] = measuredValues
@@ -1127,7 +1184,7 @@ def computeRecon(inputImage, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborI
         measuredValues = inputImage[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1]]
         if len(squareUnMeasuredIdxs) > 0: reconImage[squareUnMeasuredIdxs[:,0], squareUnMeasuredIdxs[:,1]] = np.sum(measuredValues[neighborIndices]*neighborWeights, axis=1)
         reconImage[squareMeasuredIdxs[:,0], squareMeasuredIdxs[:,1]] = measuredValues
-
+    
     return reconImage
 
 def downConv(numFilters, inputs):

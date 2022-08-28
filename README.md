@@ -62,8 +62,8 @@
                     0.8.9   Simplification
                     0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
                     0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
-                    0.9.2   .imzML and image (.jpg, .png, .tiff) support, RD speedup, fix RD times, single sample training
-                    ~0.+.+  Custom adversarial network, Multimodal integration
+                    0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
+                    ~0.+.+  Custom adversarial network for reconstruction and ERD generation
                     ~1.0.0  Initial release
 
 # PROGRAM FILE STRUCTURE
@@ -95,6 +95,7 @@
     	|	|	|------->SAMPLE_2
     	|	|	|	|------->sampleInfo.txt
     	|	|	|	|------->channels.csv
+    	|	|	|	|------->mask.csv
     	|	|	|	|------->sampleName.imzML
     	|	|	|	|------->sampleName.ibd
     	|	|	|------->SAMPLE_3
@@ -110,6 +111,7 @@
     	|	|	|------->SAMPLE_5
     	|	|	|	|------->sampleInfo.txt
     	|	|	|	|------->channels.csv
+    	|	|	|	|------->mask.csv
     	|	|	|	|------->sampleName.imzML
     	|	|	|	|------->sampleName.ibd
     	|	|	|------->SAMPLE_6
@@ -283,6 +285,8 @@ All critical parameters for SLADS may be altered in a configuration file (Ex. ./
 Multiple configuration files in the form of CONFIG_*descriptor*.py, can be generated for which SLADS will be run sequentially. RESULTS_*descriptor* folders will correspond with the numbering of the CONFIG files, with the RESULTS folder without a description, containing results from the last run performed. 
 
 For all samples, a sampleInfo.txt file must be included in each of the sample directories (specifically within the subdirectories in TRAIN, TEST, and IMP, as the tasks to be performed may dictate). The actual content is dependent on the file type as listed below, where each piece of information should be on its own line without additional description, as shown in the EXAMPLE sample directory. 
+
+For all samples, a mask.csv file may optionally be included to limit measurements to with a defined area of the sample field of view; the dimensionality of the included data must match with the sample. Zeros indicate a location that should never be scanned, where ones indicate scannable locations. 
 
 For MSI data, another file: channels.csv, should also be placed in the base directory, which contains line separated values of m/z locations, where the ranges used for visualization are determined through the specified m/z tolerance. If there are different mz that are specific to a sample, then a channels.csv should be placed in the sample directory. Local/sample channels.csv files are used even when a global channels.csv is defined. At this time, each m/z should be handpicked to highlight underlying structures of interest. 
 

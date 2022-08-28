@@ -46,6 +46,13 @@ chanSingle = False
 #Should static window be used in RD generation
 staticWindow = False
 
+#Should measurement locations not be limited to a FOV mask for a sample if provided
+disableMaskFOV = False
+
+#Should the percentage measured only reflect the number of acquisitions within the FOV mask
+#Automatically disabled if disableMaskFOV is enabled
+percUpdateFOV = False
+
 #If a static window is to be used, what size (symmetric) should it be ([15,15] for original SLADS)
 staticWindowSize = 15
 

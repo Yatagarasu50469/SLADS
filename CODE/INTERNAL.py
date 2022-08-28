@@ -82,21 +82,55 @@ def scanData_DESI_parhelper(sampleData, scanFileName):
         #If ignoring missing lines, then determine the offset for correct indexing
         if sampleData.ignoreMissingLines and len(sampleData.missingLines) > 0: lineNum -= int(np.sum(lineNum > sampleData.missingLines))
 
-        #Obtain the total ion chromatogram and extract original times
-        sumImageData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
-        origTimes, sumImageData = sumImageData[:,0], sumImageData[:,1]
-        
-        #Offset the original measured times, such that the first position's time equals 0
-        origTimes -= np.min(origTimes)
-        
-        #If the data is being sparesly acquired, then the listed times in the file need to be shifted; convert np.float to float for method compatability
+        #If the data is being sparesly acquired in lines, then the listed times in the file need to be shifted
         if (impModel or postModel) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(sampleData.mask[lineNum]==1).min()/sampleData.finalDim[1])*(((sampleData.sampleWidth*1e3)/sampleData.scanRate)/60)
         elif (impModel or postModel) and impOffset: sys.exit('Error - Using implementation mode with an offset but not segmented-linewise operation is not a supported configuration.')
-        chanData = [np.interp(sampleData.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(sampleData.mzRanges[chanNum][0]), float(sampleData.mzRanges[chanNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0) for chanNum in range(0, len(sampleData.mzRanges))]
-        
+
+        #Processing for Bruker timsTOF data
+        if data.format == 'Bruker':
+
+            #Extract original measurement times
+            origTimes = np.asarray(data.ms1_frames)[:,1]
+            
+            #Offset the original measurement times, such that the first position's time equals 0
+            origTimes -= np.min(origTimes)
+            
+            #Load MSI data for each measured location
+            sumImageData = []
+            mzChanData = np.zeros((len(sampleData.mzRanges), len(origTimes)))
+            for frameNum in range(1, len(origTimes)+1):
+            
+                #Load m/z spectrum and sum values with identical m/z values
+                frameData = np.asarray(data.frame(frameNum))
+                mzs, uniqueIndices = np.unique(frameData[:,0], return_inverse=True)
+                ints = np.zeros(len(mzs), dtype=np.float32)
+                np.add.at(ints, uniqueIndices, frameData[:,2])
+                
+                #Obtain the total ion chromatogram value for the position
+                sumImageData.append(np.sum(ints))
+                
+                #Extract intensity values for each of the m/z channels of interest; convert np.float to float for method compatability
+                for chanNum in range(0, len(sampleData.mzRanges)): mzChanData[chanNum, frameNum-1] = np.sum(ints[np.logical_and(mzs>=float(sampleData.mzRanges[chanNum][0]), mzs<=float(sampleData.mzRanges[chanNum][1]))])
+                
+            #Interpolate m/z channel data to final new times
+            chanData = [np.interp(sampleData.newTimes, origTimes, np.nan_to_num(np.asarray(mzChanData[chanNum]), nan=0, posinf=0, neginf=0), left=0, right=0) for chanNum in range(0, len(sampleData.mzRanges))]
+
+        #For all other MSI data formats
+        else:
+
+            #Obtain the total ion chromatogram and extract original times
+            sumImageData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
+            origTimes, sumImageData = sumImageData[:,0], sumImageData[:,1]
+            
+            #Offset the original measured times, such that the first position's time equals 0
+            origTimes -= np.min(origTimes)
+            
+            #Extract intensity values for each of the m/z channels of interest; convert np.float to float for method compatability
+            chanData = [np.interp(sampleData.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(sampleData.mzRanges[chanNum][0]), float(sampleData.mzRanges[chanNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0) for chanNum in range(0, len(sampleData.mzRanges))]
+            
         #Interpolate sumImage (TIC) data to final new times
         sumImageData = np.interp(sampleData.newTimes, origTimes, np.nan_to_num(sumImageData, nan=0, posinf=0, neginf=0), left=0, right=0)
-        
+    
         return lineNum, chanData, sumImageData, scanFileName
 
 #Visualize multiple sample progression steps at once; reimport matplotlib to set backend for non-interactive visualization
