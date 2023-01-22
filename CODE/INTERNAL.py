@@ -1,161 +1,11 @@
 #==================================================================
-#INTERNAL SETUP
+#INTERNAL DIRECTORY SETUP
 #==================================================================
 
-#AESTHETIC SETUP
-#==================================================================
-#Determine console size if applicable
-if systemOS != 'Windows':
-    consoleRows, consoleColumns = os.popen('stty size', 'r').read().split()
-elif systemOS == 'Windows':
-    h = windll.kernel32.GetStdHandle(-12)
-    csbi = create_string_buffer(22)
-    res = windll.kernel32.GetConsoleScreenBufferInfo(h, csbi)
-    (bufx, bufy, curx, cury, wattr, left, top, right, bottom, maxx, maxy) = struct.unpack("hhhhHhhhhhh", csbi.raw)
-    consoleRows = bottom-top
-    consoleColumns = right-left
-    
-#INTERNAL OBJECT SETUP
-#==================================================================
-
-#Limit GPU(s) if indicated
-if availableGPUs != 'None': os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
-numGPUs = len(tf.config.experimental.list_physical_devices('GPU'))
-
-#Initialize ray instance; leave 2 processor threads free if possible; make sure a ray instance isn't already running
-ray.shutdown()
-if parallelization: 
-    numberCPUS = multiprocessing.cpu_count()-2
-    if numberCPUS <= 1: parallelization = False
-if not parallelization: numberCPUS = 1
-ray.init(num_cpus=numberCPUS, configure_logging=True, logging_level=logging.ERROR, include_dashboard=False)
-
-#Allow partial GPU memory allocation
-gpus = tf.config.list_physical_devices('GPU')
-for gpu in gpus: tf.config.experimental.set_memory_growth(gpu, True)
-
-#If the number of gpus to be used is greater than 1, then increase the batch size accordingly for distribution
-if len(gpus)>1: batchSize*=len(gpus)
-
-#RAY REMOTE METHOD DEFINITIONS
-#==================================================================
-
-#Define deployment for trained models
-@serve.deployment(route_prefix="/ModelServer", ray_actor_options={"num_gpus": numGPUs})
-class ModelServer:
-
-    def __init__(self, erdModel, modelPath):
-        self.erdModel = erdModel
-        if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': self.model = np.load(modelPath+'.npy', allow_pickle=True).item()
-        elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': self.model = tf.function(tf.keras.models.load_model(modelPath, compile=False), experimental_relax_shapes=True)
-
-    def __call__(self, data):
-        if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': return self.model.predict(data)
-        elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': return self.model(data, training=False)[:,:,:,0].numpy()
-
-#Load m/z and TIC data from a specified MSI file
-@ray.remote
-def scanData_DESI_parhelper(sampleData, scanFileName):
-
-    #Establish file pointer and line number (1 indexed) for the specific scan; flag indicates 'good'/'bad' data file (primarily checking for files without data)
-    readErrorFlag = False
-    try: data = mzFile(scanFileName)
-    except: readErrorFlag = True
-    
-    #If the data file is 'good' then continue processing
-    if not readErrorFlag:
-        
-        #Extract line number from the filename, removing leading zeros, subtract 1 for zero indexing
-        fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
-        
-        #If the file numbers are not the physical row numbers, then obtain correct number from stored LUT
-        if sampleData.unorderedNames: 
-            try: lineNum = sampleData.physicalLineNums[fileNum+1]
-            except: 
-                print('Warning - Attempt to find the physical line number for the file: ' + scanFileName + ' has failed; the file will therefore be ignored this iteration.')
-                readErrorFlag = True
-        else: lineNum = fileNum
-        
-    #If the data file is still 'good' then continue processing
-    if not readErrorFlag:
-        
-        #If ignoring missing lines, then determine the offset for correct indexing
-        if sampleData.ignoreMissingLines and len(sampleData.missingLines) > 0: lineNum -= int(np.sum(lineNum > sampleData.missingLines))
-
-        #If the data is being sparesly acquired in lines, then the listed times in the file need to be shifted
-        if (impModel or postModel) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(sampleData.mask[lineNum]==1).min()/sampleData.finalDim[1])*(((sampleData.sampleWidth*1e3)/sampleData.scanRate)/60)
-        elif (impModel or postModel) and impOffset: sys.exit('Error - Using implementation mode with an offset but not segmented-linewise operation is not a supported configuration.')
-
-        #Processing for Bruker timsTOF data
-        if data.format == 'Bruker':
-
-            #Extract original measurement times
-            origTimes = np.asarray(data.ms1_frames)[:,1]
-            
-            #Offset the original measurement times, such that the first position's time equals 0
-            origTimes -= np.min(origTimes)
-            
-            #Load MSI data for each measured location
-            sumImageData = []
-            mzChanData = np.zeros((len(sampleData.mzRanges), len(origTimes)))
-            for frameNum in range(1, len(origTimes)+1):
-            
-                #Load m/z spectrum and sum values with identical m/z values
-                frameData = np.asarray(data.frame(frameNum))
-                mzs, uniqueIndices = np.unique(frameData[:,0], return_inverse=True)
-                ints = np.zeros(len(mzs), dtype=np.float32)
-                np.add.at(ints, uniqueIndices, frameData[:,2])
-                
-                #Obtain the total ion chromatogram value for the position
-                sumImageData.append(np.sum(ints))
-                
-                #Extract intensity values for each of the m/z channels of interest; convert np.float to float for method compatability
-                for chanNum in range(0, len(sampleData.mzRanges)): mzChanData[chanNum, frameNum-1] = np.sum(ints[np.logical_and(mzs>=float(sampleData.mzRanges[chanNum][0]), mzs<=float(sampleData.mzRanges[chanNum][1]))])
-                
-            #Interpolate m/z channel data to final new times
-            chanData = [np.interp(sampleData.newTimes, origTimes, np.nan_to_num(np.asarray(mzChanData[chanNum]), nan=0, posinf=0, neginf=0), left=0, right=0) for chanNum in range(0, len(sampleData.mzRanges))]
-
-        #For all other MSI data formats
-        else:
-
-            #Obtain the total ion chromatogram and extract original times
-            sumImageData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
-            origTimes, sumImageData = sumImageData[:,0], sumImageData[:,1]
-            
-            #Offset the original measured times, such that the first position's time equals 0
-            origTimes -= np.min(origTimes)
-            
-            #Extract intensity values for each of the m/z channels of interest; convert np.float to float for method compatability
-            chanData = [np.interp(sampleData.newTimes, origTimes, np.nan_to_num(np.asarray(data.xic(data.time_range()[0], data.time_range()[1], float(sampleData.mzRanges[chanNum][0]), float(sampleData.mzRanges[chanNum][1])))[:,1], nan=0, posinf=0, neginf=0), left=0, right=0) for chanNum in range(0, len(sampleData.mzRanges))]
-            
-        #Interpolate sumImage (TIC) data to final new times
-        sumImageData = np.interp(sampleData.newTimes, origTimes, np.nan_to_num(sumImageData, nan=0, posinf=0, neginf=0), left=0, right=0)
-    
-        return lineNum, chanData, sumImageData, scanFileName
-
-#Visualize multiple sample progression steps at once; reimport matplotlib to set backend for non-interactive visualization
-@ray.remote
-def visualize_parhelper(samples, sampleData, dir_progression, dir_chanProgressions, indexes):
-    import matplotlib
-    import matplotlib.pyplot as plt
-    matplotlib.use('Agg')
-    for index in indexes: visualize_serial(samples[index], sampleData, dir_progression, dir_chanProgressions)
-
-#Run multiple sampling instances in parallel
-@ray.remote
-def runSampling_parhelper(sampleData, cValue, model, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, liveOutputFlag, dir_Results, datagenFlag, impModel, tqdmHide):
-    return runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, liveOutputFlag, dir_Results, datagenFlag, impModel, tqdmHide)
-
-#Visualize multiple sample progression steps at once; reimport matplotlib to set backend for non-interactive visualization
-@ray.remote
-def visualizeTraining_parhelper(result, maskNum, trainDataFlag, valDataFlag, indexes):
-    import matplotlib
-    import matplotlib.pyplot as plt
-    matplotlib.use('Agg')
-    for index in indexes: visualizeTraining_serial(result.samples[index], result, maskNum, trainDataFlag, valDataFlag)
-
-#PATH/DIRECTORY SETUP
-#==================================================================
+#Indicate and setup the destination folder for results of this configuration
+destResultsFolder = './RESULTS_'+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0]
+if preventResultsOverwrite: sys.exit('Error! - The destination results folder already exists')
+elif os.path.exists(destResultsFolder): shutil.rmtree(destResultsFolder)
 
 #Set a base model name for the specified configuration; must specify/append c value during run
 modelName = 'model_'
@@ -187,25 +37,25 @@ dir_ImpResults = dir_Results + 'IMP'+ os.path.sep
 dir_PostResults = dir_Results + 'POST'+ os.path.sep
 
 #Check that the result directory exists for cases where existing training data/model are to be used
-if (not os.path.exists(dir_Results)) and (not trainingModel): 
-    sys.exit('Error - dir_Results: ./RESULTS/ does not exist')
-elif not os.path.exists(dir_Results):
-    os.makedirs(dir_Results)
+if (not os.path.exists(dir_Results)) and (not trainingModel): sys.exit('Error - dir_Results: ./RESULTS/ does not exist')
+elif not os.path.exists(dir_Results): os.makedirs(dir_Results)
 
 #Input data directories
 if not os.path.exists(dir_InputData): sys.exit('Error - dir_InputData: ./INPUT/ does not exist')
-if not os.path.exists(dir_TrainingData) and trainingModel: sys.exit('Error - dir_TrainingData: ./INPUT/TRAIN/ does not exist')
+if not os.path.exists(dir_TrainingData) and (trainingDataGen or trainingModel): sys.exit('Error - dir_TrainingData: ./INPUT/TRAIN/ does not exist')
 if not os.path.exists(dir_TestingData) and testingModel: sys.exit('Error - dir_InputData: ./INPUT/TEST/ does not exist')
 if not os.path.exists(dir_ImpData) and impModel: sys.exit('Error - dir_ImpData: ./INPUT/IMP/ does not exist')
 if not os.path.exists(dir_PostData) and postModel: sys.exit('Error - dir_PostData: ./INPUT/POST/ does not exist')
 
 #As needed, reset the training directories
-if trainingModel and not loadTrainValDatasets:
+if (trainingDataGen or trainingModel) and not loadTrainValDatasets:
     if os.path.exists(dir_TrainingResults): shutil.rmtree(dir_TrainingResults)
     os.makedirs(dir_TrainingResults)
-    os.makedirs(dir_TrainingModelResults)
-    os.makedirs(dir_TrainingResultsImages)
-    os.makedirs(dir_ValidationTrainingResultsImages)
+    if trainingDataGen:
+        os.makedirs(dir_TrainingResultsImages)
+        os.makedirs(dir_ValidationTrainingResultsImages)
+    if trainingModel:
+        os.makedirs(dir_TrainingModelResults)
 if trainingModel and loadTrainValDatasets:
     if os.path.exists(dir_TrainingModelResults): shutil.rmtree(dir_TrainingModelResults)
     os.makedirs(dir_TrainingModelResults)
@@ -220,6 +70,3 @@ if os.path.exists(dir_ImpDataFinal): shutil.rmtree(dir_ImpDataFinal)
 os.makedirs(dir_ImpDataFinal)
 if os.path.exists(dir_PostResults): shutil.rmtree(dir_PostResults)
 os.makedirs(dir_PostResults)
-
-#Clear the screen
-os.system('cls' if os.name=='nt' else 'clear')

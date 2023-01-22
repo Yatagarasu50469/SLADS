@@ -1,5 +1,5 @@
 #==================================================================
-#IMPLEMENTATION SLADS SPECIFIC
+#IMPLEMENTATION/EXPERIMENTAL SPECIFIC METHOD AND CLASS DEFINITIONS
 #==================================================================
 
 #Signal external equipment and wait for LOCK file to exist
@@ -17,17 +17,15 @@ def equipWait():
 #Perform SLADS with external equipment
 def performImplementation(optimalC, modelName):
 
-    #Start server, deploy, and get handle for model queries; run Tensorflow model once for pre-compilation (otherwise affects reported timings)
-    serve.start()
-    ModelServer.deploy(erdModel, dir_TrainingResults+modelName)
-    model = ModelServer.get_handle()
-    if erdModel == 'DLADS': _ = ray.get(model.remote(np.empty((1,64,64,3)))).copy()
+    #Deploy model, running once for pre-compilation on GPU (otherwise affects reported timings)
+    model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName)
+    if erdModel == 'DLADS': _ = ray.get(model.generateERD.remote(np.empty((1,512,512,3), dtype=np.float32)))
 
     #Wait for equipment to initialize scan
     equipWait()
     
     #Create a sample object and read the first sets of information
-    sampleData = SampleData(dir_ImpDataFinal, initialPercToScan, stopPerc, scanMethod, lineRevist, False, False)
+    sampleData = SampleData(dir_ImpDataFinal, initialPercToScan, stopPerc, scanMethod, lineRevist, False, False, False)
 
     #Run sampling
     result = runSampling(sampleData, optimalC, model, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_ImpResults, False, True, False)
@@ -40,7 +38,7 @@ def performImplementation(optimalC, modelName):
     #Shutdown the server to ensure resources are returned to ray
     serve.shutdown()
 
-    #Call completion/printout function
+    #Call for completion/printout
     print('Generating Visualizations')
     result.complete()
 

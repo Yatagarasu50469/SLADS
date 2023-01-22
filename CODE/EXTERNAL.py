@@ -1,17 +1,20 @@
 #==================================================================
-#EXTERNAL SETUP
+#EXTERNAL LIBRARY IMPORTS AND SETUP
 #==================================================================
 
+#GENERAL LIBRARY IMPORTS AND SETUP
 #==================================================================
-#GENERAL LIBRARY IMPORTS
-#==================================================================
+
 from __future__ import absolute_import, division, print_function
+import colorama
 import cv2
 import contextlib
 import copy
 import datetime
 import gc
 import glob
+import h5py
+import joblib
 import logging
 import math
 import matplotlib
@@ -40,6 +43,8 @@ import sklearn
 import time
 import warnings
 
+from bisect import bisect_left, bisect_right
+from collections import defaultdict
 from IPython import display
 from IPython.core.debugger import set_trace as Tracer
 from itertools import chain
@@ -51,6 +56,7 @@ from numba import cuda
 from numba import jit
 from PIL import Image
 from pyimzml.ImzMLParser import ImzMLParser
+from pyimzml.ImzMLWriter import ImzMLWriter
 from scipy import misc
 from scipy import signal
 from scipy.io import loadmat
@@ -72,54 +78,68 @@ from skimage.filters import *
 from skimage.metrics import peak_signal_noise_ratio as compare_psnr
 from skimage.metrics import structural_similarity as compare_ssim
 from skimage.transform import resize
+from typeguard import typechecked
 from sobol import *
 from tqdm.auto import tqdm
 
 matplotlib.use('Agg') #Non-interactive plotting mode
 sys.coinit_flags = 0 #Change method of instantiation for COM objects
 
-#==================================================================
-#TENSORFLOW/RAY IMPORT AND SETUP
+
+#TENSORFLOW/RAY IMPORTS AND SETUP
 #==================================================================
 
 #Make tensorflow only report errors (3), warnings (2), information (1), all (0) (disable for debug)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-#Allocate memory for CUDA in an asynchronous manner, prevents GPU OOM when training multiple models
+#Allocate memory for CUDA in an asynchronous manner
 os.environ["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
 
-#Tell Ray to not report unahndled errors (currently occurs with graceful shutdown) (disable for debug)
+#Disable Ray memory monitor as it will sometimes decide to kill processes with suprising/unexpected/unmanageable/untracable errors
+#Default appears to be killing jobs at 95% system memory capacity
+#os.environ['RAY_DISABLE_MEMORY_MONITOR'] = '1'
+
+#Stop Ray from crashing the program when errors occur (otherwise may crash despite being handled by try/catch!)
 os.environ["RAY_IGNORE_UNHANDLED_ERRORS"] = "1"
+
+#Prevent Ray from printing spill logs
+#os.environ["RAY_verbose_spill_logs"] = "0"
+
+#Disable HDF5 lock, allowing parallel access
+#os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 
 #After enivronmental settings can finish imports
 import ray
-import tensorflow as tf
 from ray import serve
 from ray.util.multiprocessing import Pool
+
+import tensorflow as tf
+import tensorflow_addons as tfa
+from tensorflow.data.experimental import DistributeOptions, AutoShardPolicy
 from tensorflow import keras
+from tensorflow.keras import backend as K
 from tensorflow.keras import mixed_precision
+from tensorflow.keras.callbacks import Callback
 from tensorflow.keras.layers import *
 from tensorflow.keras.optimizers import *
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.utils import *
+from tensorflow.python.data.util import options as options_lib
+from tensorflow.python.framework import constant_op
 from tensorflow.python.framework import tensor_shape
+from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import image_ops
-from tensorflow.keras import backend as K
 from tensorflow.python.util import dispatch
 from tensorflow.python.util.tf_export import keras_export
 from tensorflow.tools.docs import doc_controls
-from tensorflow.python.ops import array_ops
-from tensorflow.python.framework import constant_op
 
 #Further restrict logging levels to only report errors (disable for debug)
 tf.get_logger().setLevel('ERROR')
 warnings.filterwarnings("ignore")
 
-#Set tensorflow to use mixed model precision to save memory and improve performance
-#mixed_precision.set_global_policy('mixed_float16')
+#Get logger for ray server deployments
+loggerServe = logging.getLogger("ray.serve")
 
-#==================================================================
-
-#==================================================================
 #OS SPECIFIC IMPORTS
 #==================================================================
 #Determine system operating system
@@ -131,3 +151,4 @@ if systemOS == 'Windows':
     import struct
 
 #==================================================================
+
