@@ -20,7 +20,7 @@
                 	  -SLADS (Supervised Learning Approach for Dynamic Sampling) using least-squares regression
                 	  -SLADS-Net using a neural network
                 	  -DLADS (Deep Learning Approach for Dynamic Sampling) using a Convolutional Neural Network (CNN)
-					  -GLANDS (Generative Learning Adversarial Network for Dynamic Sampling) implementing a Generative Adversarial Network (GAN)
+			  -GLANDS (Generative Learning Adversarial Network for Dynamic Sampling) implementing a Generative Adversarial Network (GAN)
     
 	AUTHOR(S):	David Helminiak	EECE, Marquette University
 	ADVISOR(S):	Dong Hye Ye	EECE, Marquette University
@@ -62,11 +62,11 @@
                     0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
                     0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
                     0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
-					0.9.3   Whole spectra metrics, improved augmentation and MSI loading, fix RAM leak, .imzML output, I/O rescaling
-					0.9.4   Option to disable whole spectra evaluation
+                    0.9.3   Whole spectra metrics, improved augmentation and MSI loading, fix RAM leak, .imzML output, I/O rescaling
+                    0.9.4   Option to disable whole spectra evaluation
                     0.9.5   GLANDS
-					x.x.x+  Iterative feature selection mechanism for selection of target channels
-					x.x.x+  Experimental MALDI integration
+                    x.x.x+  Iterative feature selection mechanism for selection of target channels
+                    x.x.x+  Experimental MALDI integration
                     ~1.0.0  Release installation method for python package manager
 
 # PROGRAM FILE STRUCTURE
@@ -75,20 +75,20 @@
 **Warning:** If training is enabled, any model already in ./RESULTS/TRAIN/ will be overwritten. Likewise, if testing or implementation is enabled, then any data in ./RESULTS/TEST/ and/or ./RESULT/IMP/, respectively will be overwritten.
 
     ------->ROOT_DIR
-		|------->START.py
+	|------->START.py
     	|------->README.md
     	|------->CONFIG_#-description.py
     	|------->channels.csv
     	|------->CODE
-		|	|------->AESTHETICS.py
-		|	|------->COMPUTE.py
+	|	|------->AESTHETICS.py
+	|	|------->COMPUTE.py
     	|	|------->DEFINITIONS.py
     	|	|------->EXPERIMENTAL.py
     	|	|------->EXTERNAL.py
     	|	|------->INTERNAL.py
-		|	|------->POSTPROCESS.py
-		|	|------->REMOTE.py
-		|	|------->RUN_CONFIG.py
+	|	|------->POSTPROCESS.py
+	|	|------->REMOTE.py
+	|	|------->RUN_CONFIG.py
     	|	|------->SIMULATION.py
     	|	|------->TRAINING.py
     	|------->INPUT
@@ -154,70 +154,70 @@
     	|	|------->IMP
     	|	|	|------->SAMPLE_1
     	|	|	|	|------->Channels
-		|	|	|	|	|------->...
-		|	|	|	|------->Progression
-		|	|	|	|	|------->...
+	|	|	|	|	|------->...
+	|	|	|	|------->Progression
+	|	|	|	|	|------->...
     	|	|	|	|------->Videos
-		|	|	|	|	|------->...
+	|	|	|	|	|------->...
     	|	|	|	|------->measuredMask.csv
     	|	|	|	|------->physicalLineNums.csv
     	|	|------->POST
     	|	|	|------->SIMULATION_SAMPLE_1
     	|	|	|	|------->Channels
-		|	|	|	|	|------->...
-		|	|	|	|------->Progression
-		|	|	|	|	|------->...
+	|	|	|	|	|------->...
+	|	|	|	|------->Progression
+	|	|	|	|	|------->...
     	|	|	|	|------->Videos
-		|	|	|	|	|------->...
+	|	|	|	|	|------->...
     	|	|	|	|------->measuredMask.csv
     	|	|	|------->EXPERIMENTAL_SAMPLE_2
     	|	|	|	|------->Channels
-		|	|	|	|	|------->...
-		|	|	|	|------->Progression
-		|	|	|	|	|------->...
+	|	|	|	|	|------->...
+	|	|	|	|------->Progression
+	|	|	|	|	|------->...
     	|	|	|	|------->Videos
-		|	|	|	|	|------->...
+	|	|	|	|	|------->...
     	|	|	|	|------->measuredMask.csv
     	|	|------->TEST
     	|	|	|------->TEST_SAMPLE_1
     	|	|	|	|------->Channels
-		|	|	|	|	|------->...
-		|	|	|	|------->Progression
-		|	|	|	|	|------->...
+	|	|	|	|	|------->...
+	|	|	|	|------->Progression
+	|	|	|	|	|------->...
     	|	|	|	|------->Videos
-		|	|	|	|	|------->...
+	|	|	|	|	|------->...
     	|	|	|	|------->measuredMask.csv
-		|	|	|	|------->PSNR and SSIM Results (.csv and .png)
+	|	|	|	|------->PSNR and SSIM Results (.csv and .png)
     	|	|	|------->dataPrintout.csv
     	|	|	|------->PSNR and SSIM Results (.csv and .png)
     	|	|------->VALIDATION
     	|	|	|------->VALIDATION_SAMPLE_1
     	|	|	|	|------->Channels
-		|	|	|	|	|------->...
-		|	|	|	|------->Progression
-		|	|	|	|	|------->...
+	|	|	|	|	|------->...
+	|	|	|	|------->Progression
+	|	|	|	|	|------->...
     	|	|	|	|------->Videos
-		|	|	|	|	|------->...
+	|	|	|	|	|------->...
     	|	|	|	|------->measuredMask.csv
-		|	|	|	|------->PSNR and SSIM Results (.csv and .png)
-		|	|	|------->dataPrintout.csv
+	|	|	|	|------->PSNR and SSIM Results (.csv and .png)
+	|	|	|------->dataPrintout.csv
     	|	|	|------->PSNR and SSIM Results (.csv and .png)
     	|	|------->TRAIN
     	|	|	|------->Model Training Images
     	|	|	|	|------->...
-		|	|	|------->model_modelType_channelType_windowType_windowDim_c_cValue
-		|	|	|	|------->...
+	|	|	|------->model_modelType_channelType_windowType_windowDim_c_cValue
+	|	|	|	|------->...
     	|	|	|------->Training Data Images
     	|	|	|	|------->...
-		|	|	|------->Validation Data Images
+	|	|	|------->Validation Data Images
     	|	|	|	|------->...
-		|	|	|------->cValueOptimization.csv
-		|	|	|------->history.csv
+	|	|	|------->cValueOptimization.csv
+	|	|	|------->history.csv
     	|	|	|------->optimalC.npy
     	|	|	|------->trainingDatabase.p
     	|	|	|------->trainingValidationSampleData.p
-		|	|	|------->trainingValidation_RDTimes.csv
-		|	|	|------->validationDatabase.p
+	|	|	|------->trainingValidation_RDTimes.csv
+	|	|	|------->validationDatabase.p
     	
 
 # INSTALLATION
@@ -225,8 +225,8 @@
 This code has been verified to function on Windows 10/11, CentOS 7/8 (through Docker containers) and Ubuntu 18.04/20.04 operating systems. As more functionality is being added, minimum hardware specifications cannot be exactly ascertained, however validation of functionality is performed on systems containing 64+ GB DDR3/4/5 RAM, 32+ CPU threads at 3.0+ GHz, 1080Ti/2080Ti+ GPUs, and 1TB+ SSD storage. While v0.8.9 and below have managed to utilize pre-trained models with only a dual core CPU, 8 GB DDR2, and no discrete GPU, this is not an advisable set of hardware for utilizing this program. 
 
 	**Software**
-	Python 			3.8.10
-	pip 			22.2.2
+	Python 				3.8.10
+	pip 				22.2.2
 
 	**Python Packages**
 	aiorwlock 			1.3.0
@@ -237,11 +237,11 @@ This code has been verified to function on Windows 10/11, CentOS 7/8 (through Do
 	IPython 			8.8.0
 	joblib 				1.2.0
 	matplotlib 			3.6.3
-	multiprocess 		0.70.14
+	multiprocess 			0.70.14
 	natsort 			8.2.0
 	numba 				0.56.4
 	numpy 				1.23.5
-	opencv-python 		4.7.0.68
+	opencv-python 			4.7.0.68
 	pandas 				1.5.2
 	pathlib  			1.0.1
 	pillow 				9.4.0
@@ -249,13 +249,13 @@ This code has been verified to function on Windows 10/11, CentOS 7/8 (through Do
 	pydot 				1.4.2
 	pyimzml 			1.5.3
 	ray[serve]			2.1.0 
-	scikit-image  		0.19.3
-	scikit-learn 		1.2.0
+	scikit-image  			0.19.3
+	scikit-learn 			1.2.0
 	scipy 				1.10.0
 	sobol 				0.9
 	sobol-seq 			0.2.0
-	tensorflow-addons  	0.19.0
-	tensorflow-gpu 		2.8.4 
+	tensorflow-addons  		0.19.0
+	tensorflow-gpu 			2.8.4 
 	tqdm 				4.64.1
 
 
@@ -616,13 +616,19 @@ N. Scarborough, G. Godaliyadda, D. Ye, D. Kissick, S. Zhang, J. Newman, M. Sheed
 **Available:** https://doi.org/10.1107/s160057751601612x
 
 **Original SLADS-LS - Dissertation**
+
 G. M. D. P. Godaliyadda, “A Supervised Learning Approach for Dynamic Sampling (SLADS),” Ph.D. dissertation, Purdue University, 2017, copyright - Database copyright ProQuest LLC; ProQuest does not claim copyright in the individual underlying works; Last updated - 2022-01-06.
+
 **Subject:** Scanning Electron Microscopy, X-Ray Diffraction, Energy Dispersive Spectroscopy, Confocal Raman Microscopy
+
 **Available:** https://docs.lib.purdue.edu/cgi/viewcontent.cgi?article=2765&context=open_access_dissertations
 
 **Original SLADS-LS**
+
 G. M. D. Godaliyadda, D. Ye, M. D. Uchic, M. A. Groeber, G. T. Buzzard, C. A. Bouman, "A Supervised Learning Approach for Dynamic Sampling" in Proc. IS&T Int’l. Symp. on Electronic Imaging: Computational Imaging XIV, 2016
+
 **Subject:** Electron Backscatter Diffraction Microscopy 
+
 **Available:** https://doi.org/10.2352/ISSN.2470-1173.2016.19.COIMG-153
 
 
