@@ -616,19 +616,13 @@ N. Scarborough, G. Godaliyadda, D. Ye, D. Kissick, S. Zhang, J. Newman, M. Sheed
 **Available:** https://doi.org/10.1107/s160057751601612x
 
 **Original SLADS-LS - Dissertation**
-
 G. M. D. P. Godaliyadda, “A Supervised Learning Approach for Dynamic Sampling (SLADS),” Ph.D. dissertation, Purdue University, 2017, copyright - Database copyright ProQuest LLC; ProQuest does not claim copyright in the individual underlying works; Last updated - 2022-01-06.
-
 **Subject:** Scanning Electron Microscopy, X-Ray Diffraction, Energy Dispersive Spectroscopy, Confocal Raman Microscopy
-
 **Available:** https://docs.lib.purdue.edu/cgi/viewcontent.cgi?article=2765&context=open_access_dissertations
 
 **Original SLADS-LS**
-
 G. M. D. Godaliyadda, D. Ye, M. D. Uchic, M. A. Groeber, G. T. Buzzard, C. A. Bouman, "A Supervised Learning Approach for Dynamic Sampling" in Proc. IS&T Int’l. Symp. on Electronic Imaging: Computational Imaging XIV, 2016
-
 **Subject:** Electron Backscatter Diffraction Microscopy 
-
 **Available:** https://doi.org/10.2352/ISSN.2470-1173.2016.19.COIMG-153
 
 
