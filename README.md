@@ -13,16 +13,6 @@
 
 # GENERAL INFORMATION
 
-<<<<<<< Updated upstream
-    NAME: 		SLADS
-    VERSION:	0.9.3
-    LICENSE:    	GNU General Public License v3.0
-    DESCRIPTION:	Dynamic sampling algorithms with updated/developing implementations of:
-                	  -SLADS (Supervised Learning Approach for Dynamic Sampling) using least-squares regression
-                	  -SLADS-Net using a neural network
-                	  -DLADS (Deep Learning Approach for Dynamic Sampling) using a Convolutional Neural Network (CNN)
-			  -GLANDS (Generative Learning Adversarial Network for Dynamic Sampling) implementing a Generative Adversarial Network (GAN)
-=======
     NAME:           SLADS/DLADS/GLANDS
     VERSION:        0.9.3
     LICENSE:        GNU General Public License v3.0
@@ -31,7 +21,6 @@
                        -SLADS-Net   Supervised Learning Approach for Dynamic Sampling, using a Multi-Layer Perceptron (MLP) network
                        -DLADS       Deep Learning Approach for Dynamic Sampling, using a Convolutional Neural Network (CNN)
                        -GLANDS      Generative Learning Adversarial Network for Dynamic Sampling, using a Generative Adversarial Network (GAN)
->>>>>>> Stashed changes
     
     AUTHOR(S):      David Helminiak    EECE, Marquette University
     ADVISOR(S):     Dong Hye Ye        COSC, Georgia State University
@@ -86,152 +75,6 @@
 **Warning:** If training is enabled, any model already in ./RESULTS/TRAIN/ will be overwritten. Likewise, if testing or implementation is enabled, then any data in ./RESULTS/TEST/ and/or ./RESULT/IMP/, respectively will be overwritten.
 
     ------->ROOT_DIR
-<<<<<<< Updated upstream
-	|------->START.py
-    	|------->README.md
-    	|------->CONFIG_#-description.py
-    	|------->channels.csv
-    	|------->CODE
-	|	|------->AESTHETICS.py
-	|	|------->COMPUTE.py
-    	|	|------->DEFINITIONS.py
-    	|	|------->EXPERIMENTAL.py
-    	|	|------->EXTERNAL.py
-    	|	|------->INTERNAL.py
-	|	|------->POSTPROCESS.py
-	|	|------->REMOTE.py
-	|	|------->RUN_CONFIG.py
-    	|	|------->SIMULATION.py
-    	|	|------->TRAINING.py
-    	|------->INPUT
-    	|	|------->TRAIN
-    	|	|	|------->SAMPLE_1
-    	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->channels.csv
-    	|	|	|	|------->sampleName-line-0001.(d, RAW)
-    	|	|	|	|------->sampleName-line-0002.(d, RAW)
-    	|	|	|	|------->...
-    	|	|	|------->SAMPLE_2
-    	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->channels.csv
-    	|	|	|	|------->mask.csv
-    	|	|	|	|------->sampleName.imzML
-    	|	|	|	|------->sampleName.ibd
-    	|	|	|------->SAMPLE_3
-    	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->sampleName.(png, tif, jpg)
-    	|	|------->TEST
-    	|	|	|------->SAMPLE_4
-    	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->channels.csv
-    	|	|	|	|------->sampleName-line-0001.(d, RAW)
-    	|	|	|	|------->sampleName-line-0002.(d, RAW)
-    	|	|	|	|------->...
-    	|	|	|------->SAMPLE_5
-    	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->channels.csv
-    	|	|	|	|------->mask.csv
-    	|	|	|	|------->sampleName.imzML
-    	|	|	|	|------->sampleName.ibd
-    	|	|	|------->SAMPLE_6
-    	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->sampleName.(png, tif, jpg)
-    	|	|------->POST
-    	|	|	|------->SIMULATION_SAMPLE_1
-    	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->channels.csv
-    	|	|	|	|------->measuredMask.csv
-    	|	|	|	|------->sampleName-line-0001.RAW
-    	|	|	|	|------->sampleName-line-0002.RAW
-    	|	|	|	|------->...
-    	|	|	|------->EXPERIMENTAL_SAMPLE_1
-    	|	|	|	|------->sampleInfo.txt
-    	|	|	|	|------->channels.csv
-    	|	|	|	|------->measuredMask.csv
-    	|	|	|	|------->physicalLineNums.csv
-    	|	|	|	|------->sampleName-line-0001.RAW
-    	|	|	|	|------->sampleName-line-0002.RAW
-    	|	|	|	|------->...
-    	|	|------->IMP
-    	|	|	|------->sampleInfo.txt
-    	|	|	|------->channels.csv
-    	|	|	|------->physicalLineNums.csv
-    	|	|	|------->sampleName-line-0001.RAW
-    	|	|	|------->sampleName-line-0002.RAW
-    	|	|	|------->...
-    	|	|	|-------> UNLOCK
-    	|	|	|-------> LOCK
-    	|	|	|-------> DONE
-    	|------->RESULTS
-    	|	|------->IMP
-    	|	|	|------->SAMPLE_1
-    	|	|	|	|------->Channels
-	|	|	|	|	|------->...
-	|	|	|	|------->Progression
-	|	|	|	|	|------->...
-    	|	|	|	|------->Videos
-	|	|	|	|	|------->...
-    	|	|	|	|------->measuredMask.csv
-    	|	|	|	|------->physicalLineNums.csv
-    	|	|------->POST
-    	|	|	|------->SIMULATION_SAMPLE_1
-    	|	|	|	|------->Channels
-	|	|	|	|	|------->...
-	|	|	|	|------->Progression
-	|	|	|	|	|------->...
-    	|	|	|	|------->Videos
-	|	|	|	|	|------->...
-    	|	|	|	|------->measuredMask.csv
-    	|	|	|------->EXPERIMENTAL_SAMPLE_2
-    	|	|	|	|------->Channels
-	|	|	|	|	|------->...
-	|	|	|	|------->Progression
-	|	|	|	|	|------->...
-    	|	|	|	|------->Videos
-	|	|	|	|	|------->...
-    	|	|	|	|------->measuredMask.csv
-    	|	|------->TEST
-    	|	|	|------->TEST_SAMPLE_1
-    	|	|	|	|------->Channels
-	|	|	|	|	|------->...
-	|	|	|	|------->Progression
-	|	|	|	|	|------->...
-    	|	|	|	|------->Videos
-	|	|	|	|	|------->...
-    	|	|	|	|------->measuredMask.csv
-	|	|	|	|------->PSNR and SSIM Results (.csv and .png)
-    	|	|	|------->dataPrintout.csv
-    	|	|	|------->PSNR and SSIM Results (.csv and .png)
-    	|	|------->VALIDATION
-    	|	|	|------->VALIDATION_SAMPLE_1
-    	|	|	|	|------->Channels
-	|	|	|	|	|------->...
-	|	|	|	|------->Progression
-	|	|	|	|	|------->...
-    	|	|	|	|------->Videos
-	|	|	|	|	|------->...
-    	|	|	|	|------->measuredMask.csv
-	|	|	|	|------->PSNR and SSIM Results (.csv and .png)
-	|	|	|------->dataPrintout.csv
-    	|	|	|------->PSNR and SSIM Results (.csv and .png)
-    	|	|------->TRAIN
-    	|	|	|------->Model Training Images
-    	|	|	|	|------->...
-	|	|	|------->model_modelType_channelType_windowType_windowDim_c_cValue
-	|	|	|	|------->...
-    	|	|	|------->Training Data Images
-    	|	|	|	|------->...
-	|	|	|------->Validation Data Images
-    	|	|	|	|------->...
-	|	|	|------->cValueOptimization.csv
-	|	|	|------->history.csv
-    	|	|	|------->optimalC.npy
-    	|	|	|------->trainingDatabase.p
-    	|	|	|------->trainingValidationSampleData.p
-	|	|	|------->trainingValidation_RDTimes.csv
-	|	|	|------->validationDatabase.p
-    	
-=======
         |------->START.py
         |------->README.md
         |------->CONFIG_#-description.py
@@ -376,48 +219,12 @@
         |    |    |------->trainingValidation_RDTimes.csv
         |    |    |------->validationDatabase.p
         
->>>>>>> Stashed changes
 
 # INSTALLATION
 **Note:** Use of Agilent .d files is only possible on Windows, given a reliance on vendor provided .dll's, as utilized by the multiplierz package. The package versions do not necessarily need to match with those listed. However, should the program produce unexpected errors, installing a specific version of a package might be able to resolve the issue. Note that the multiplierz pacakage, must be installed from the provided link under the installation commands.
 
 This code has been verified to function on Windows 10/11, CentOS 7/8 (through Docker containers) and Ubuntu 18.04/20.04 operating systems. As more functionality is being added, minimum hardware specifications cannot be exactly ascertained, however validation of functionality is performed on systems containing 64+ GB DDR3/4/5 RAM, 32+ CPU threads at 3.0+ GHz, 1080Ti/2080Ti+ GPUs, and 1TB+ SSD storage. While v0.8.9 and below have managed to utilize pre-trained models with only a dual core CPU, 8 GB DDR2, and no discrete GPU, this is not an advisable set of hardware for utilizing this program. 
 
-<<<<<<< Updated upstream
-	**Software**
-	Python 				3.8.10
-	pip 				22.2.2
-
-	**Python Packages**
-	aiorwlock 			1.3.0
-	colorama 			0.4.6
-	datetime 			5.0
-	glob2 				0.7
-	graphviz 			0.20.1
-	IPython 			8.8.0
-	joblib 				1.2.0
-	matplotlib 			3.6.3
-	multiprocess 			0.70.14
-	natsort 			8.2.0
-	numba 				0.56.4
-	numpy 				1.23.5
-	opencv-python 			4.7.0.68
-	pandas 				1.5.2
-	pathlib  			1.0.1
-	pillow 				9.4.0
-	psutil 				5.9.4
-	pydot 				1.4.2
-	pyimzml 			1.5.3
-	ray[serve]			2.1.0 
-	scikit-image  			0.19.3
-	scikit-learn 			1.2.0
-	scipy 				1.10.0
-	sobol 				0.9
-	sobol-seq 			0.2.0
-	tensorflow-addons  		0.19.0
-	tensorflow-gpu 			2.8.4 
-	tqdm 				4.64.1
-=======
     **Software**
     Python             3.8.10
     pip                22.2.2
@@ -451,7 +258,6 @@ This code has been verified to function on Windows 10/11, CentOS 7/8 (through Do
     tensorflow-addons  0.19.0
     tensorflow-gpu     2.8.4 
     tqdm               4.64.1
->>>>>>> Stashed changes
 
 
 ### **Installation on Windows 10 and 11**
