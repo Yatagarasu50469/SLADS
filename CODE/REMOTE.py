@@ -17,7 +17,7 @@ class ModelServer:
         elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': return self.model(data, training=False)[:,:,:,0].numpy()
 
 #Define actor for utilizing trained models
-@ray.remote
+@ray.remote(num_gpus=numGPUs)
 class Model_Actor:
     def __init__(self, erdModel, modelPath):
         warnings.filterwarnings("ignore")
