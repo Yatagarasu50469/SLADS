@@ -46,18 +46,18 @@ trainMaskFOVDilation = 3
 otherMaskFOVDilation = 0
 
 #Should the percentage measured be relative to the FOV mask area (True) or the whole FOV area (False)
-#Does not apply to training/validation generation
+#Does not apply to training/validation generation; disabled automatically if dilation flags are set to None
 #If enabled, will cause complications in evaluation if some samples have masks and others do not
 percFOVMask = True
 
-#Should inputs to model and RDPP calculations be adjusted ('rescale', 'standardize', or default: None)
+#Should inputs to model and RDPP calculations be adjusted ('rescale', 'standardize', or None)
 #Only affects DLADS and GLANDS pipelines
 dataAdjust = None
 
 #Should the final reconstructed data be saved in .imzML format
 imzMLExport = True
 
-#If using IDW reconstruction, how many neighbors should be considered
+#If using IDW reconstruction, how many neighbors should be considered; use 1 for nearest-neighbor
 numNeighbors = 10
 
 #Should parallelization calls be used; if memory overflow issues develop, try setting to False (massively increases computation time)
@@ -67,7 +67,7 @@ parallelization = True
 availableGPUs = 'None'
 
 #If parallelization is enabled how many CPU threads should be reserved for other computer functions
-#Recommend starting at half of the available threads; decrease just enough that CPU is not pinned at 100% in parallel operations
+#Recommend starting at half of the available threads if using hyperthreading; decrease just enough that CPU is not pinned at 100% in parallel operations
 #May increase up to the total number of system CPU threads to decrease relative memory pressure
 reserveThreadCount = 16
 
@@ -215,7 +215,7 @@ numEpochs = 1000
 earlyCutoff = True
 
 #How many epochs should the model training wait to see an improvement before terminating
-maxPatience = 25
+maxPatience = 50
 
 #How many epochs at minimum should be performed before starting to save the current best model and consider termination
 minimumEpochs = 10

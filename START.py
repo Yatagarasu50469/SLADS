@@ -1,24 +1,22 @@
 #====================================================================
 #PROGRAM INFORMATION
 #====================================================================
-#DATE CREATED:	    4 October 2019
-#
-#DATE MODIFIED:	    20 January 2023
+#MODIFIED:	        25 January 2023
 #
 #VERSION:	        0.9.3
 #
 #LICENSE:           GNU General Public License v3.0
 #
 #DESCRIPTION:	    Dynamic sampling algorithms with updated/developing implementations of:
-#	                  -SLADS (Supervised Learning Approach for Dynamic Sampling) using Least-Squares (LS)
-#	                  -SLADS-Net using a Multi-Layer Perceptron (MLP) network
-#					  -DLADS (Deep Learning Approach for Dynamic Sampling) using a Convolutional Neural Network (CNN)
-#                     -GLANDS (Generative Learning Adversarial Network for Dynamic Sampling) using a Generative Adversarial Network (GAN)
+#	                  -SLADS-LS    Supervised Learning Approach for Dynamic Sampling, using Least-Squares (LS) regression
+#	                  -SLADS-Net   Supervised Learning Approach for Dynamic Sampling, using a Multi-Layer Perceptron (MLP) network
+#					  -DLADS       Deep Learning Approach for Dynamic Sampling, using a Convolutional Neural Network (CNN)
+#                     -GLANDS      Generative Learning Adversarial Network for Dynamic Sampling, using a Generative Adversarial Network (GAN)
 #
-#AUTHOR(S):         David Helminiak	EECE, Marquette University
-#ADVISOR(S):        Dong Hye Ye		COSC, Georgia State University
+#AUTHOR(S):         David Helminiak    EECE, Marquette University
+#ADVISOR(S):        Dong Hye Ye        COSC, Georgia State University
 #
-#FUNDING:	        DESI MSI integration was funded by NIH Grant 1UG3HL145593-01
+#FUNDING:	        This project originally received funding and was programmed for NIH Grant 1UG3HL145593-01
 #
 #CHANGELOG:         0.1.0   Multithreading adjustments to pointwise SLADS
 #                   0.1.1   Line constraints, concatenation, pruning, and results organization
@@ -55,9 +53,12 @@
 #                   0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
 #                   0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
 #                   0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
-#                   0.9.3   Whole spectra metrics, improved augmentation and MSI loading, fix RAM leak, .imzML output, I/O rescaling
-#                   ~0.+.+  Custom adversarial network for reconstruction and ERD generation
-#                   ~1.0.0  Initial release
+#                   0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
+#                   0.9.4   Disable whole spectra metrics option, new pointwise group-based selection
+#                   0.9.5   GLANDS
+#                   x.x.x+  Iterative feature selection mechanism for selection of target channels
+#                   x.x.x+  Experimental MALDI integration
+#                   ~1.0.0  Release installation method for python package manager
 #====================================================================
 
 #==================================================================
@@ -70,9 +71,6 @@ versionNum='0.9.3'
 #Import needed libraries for subprocess initialization
 import glob
 import natsort
-import numpy as np
-import sys
-import signal
 import subprocess
 
 #Obtain list of configuration files

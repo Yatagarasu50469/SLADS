@@ -383,9 +383,9 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             
     elif erdModel == 'DLADS' or erdModel == 'GLANDS':
         
-        #Setup a distribution strategy and compute global batch size
+        #Setup a distribution strategy (batchSize already has been adjusted to accomodate strategy)
+        devices=tf.config.experimental.list_physical_devices('GPU')
         strategy = tf.distribute.MirroredStrategy()
-        batchSize = strategy.num_replicas_in_sync
         
         #Create training and validation datasets compatible with tensorflow models
         trainInputImages, trainOutputImages = [], []
@@ -456,7 +456,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             model = unet(numStartFilters, numChannels)
             if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss='mean_absolute_error')
             elif lossFunc == 'MSE': model.compile(optimizer=trainOptimizer, loss='mean_squared_error')
-
+        
         #Setup callback object for visualizing training convergence
         epochEndCallback = EpochEnd(maxPatience, minimumEpochs, trainingProgressionVisuals, trainingVizSteps, noValFlag, vizSamples, vizSampleData, dir_TrainingModelResults)
         tqdmCallback = tfa.callbacks.TQDMProgressBar(leave_epoch_progress=False, overall_bar_format='Epochs |{bar}| {n_fmt}/{total_fmt} | ETA: {remaining} | {rate_fmt} | {desc}', epoch_bar_format='Steps  |{bar}| {n_fmt}/{total_fmt} | ETA: {remaining} | {desc}', metrics_separator=' | ')

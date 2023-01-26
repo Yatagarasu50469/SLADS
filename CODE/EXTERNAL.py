@@ -103,7 +103,7 @@ os.environ["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
 os.environ["RAY_IGNORE_UNHANDLED_ERRORS"] = "1"
 
 #Prevent Ray from printing spill logs
-#os.environ["RAY_verbose_spill_logs"] = "0"
+os.environ["RAY_verbose_spill_logs"] = "0"
 
 #Disable HDF5 lock, allowing parallel access
 #os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
@@ -151,4 +151,3 @@ if systemOS == 'Windows':
     import struct
 
 #==================================================================
-

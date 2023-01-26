@@ -393,7 +393,7 @@ class SampleData:
         #If IMAGE, each file corresponds to a channel, read in each and sum of all data, augmenting list of channel labels
         if self.sampleType == 'IMAGE':
             for chanNum in range(0, len(scanFileNames)):
-                self.chanValues.append(scanFileNames[chanNum].split('chan-')[1].split('.')[0])
+                self.chanValues.append(scanFileNames[chanNum].split('-chan-')[1].split('.')[0])
                 try: self.chanImages[chanNum] = cv2.imread(scanFileNames[chanNum], 0)
                 except: sys.exit('Error - Unable to read file' + scanFileNames[chanNum])
             self.sumImage = np.sum(np.atleast_3d(self.chanImages), axis=0)
@@ -511,8 +511,8 @@ class SampleData:
                 _ = ray.get(self.reader_MSI_Actor.interpolateDESI.remote(self.mzFinal, self.mzFinalGrid))
                 for scanFileName in ray.get(self.reader_MSI_Actor.getReadScanFiles.remote()): self.readScanFiles.append(scanFileName)
 
-        #If parallelization is enabled, read MSI data in parallel, retrieve from shared memory, and process data into accessible shape
-        if parallelization:
+        #If parallelization is enabled, and this is a MSI sample, then read MSI data in parallel, retrieve from shared memory, and process data into accessible shape
+        if parallelization and (self.sampleType == 'DESI' or self.sampleType == 'MALDI'):
             self.chanImages = np.moveaxis(ray.get(self.reader_MSI_Actor.getChanImages.remote()), -1, 0)
             #self.allImages = np.moveaxis(ray.get(self.reader_MSI_Actor.getAllImages.remote()), -1, 0)
             self.sumImage = ray.get(self.reader_MSI_Actor.getSumImage.remote())
@@ -649,9 +649,6 @@ class Sample:
                     self.RDPPs = np.moveaxis(abs(((np.moveaxis(sampleData.squareChanImages, 0, -1)-meanValues)/stdValues)-((np.moveaxis(self.squareChanReconImages, 0, -1)-meanValues)/stdValues)), -1, 0)
                 else: self.RDPPs = abs(sampleData.squareChanImages-self.squareChanReconImages)
             
-            #If this is a full measurement step, compute the RDPP
-            #if not fromRecon: self.RDPPs = abs(sampleData.squareChanImages-self.squareChanReconImages)
-                
             #Compute the RD and use it in place of an ERD; only save times if they are fully computed, not just being updated
             t0 = time.time()
             computeRD(self, squareMeasuredIdxs, squareUnMeasuredIdxs, neighborIndices, neighborDistances, cValue, bestCFlag, datagenFlag, fromRecon, result.liveOutputFlag, result.impModel)
@@ -847,57 +844,63 @@ class Result:
         #Make sure samples is writable
         self.samples = copy.deepcopy(self.samples)
         
-        #If all channel reconstructions are needed, then setup actors if in parallel, or load data into main memory
-        if self.allChanEval or (imzMLExport and not self.sampleData.trainFlag):
-            if parallelization:
-                self.recon_Actors = [Recon_Actor.remote(indexes, self.sampleData.sampleType, self.sampleData.squareDim, self.sampleData.finalDim, self.sampleData.allImagesMax) for indexes in np.array_split(np.arange(0, len(self.sampleData.mzFinal)), numberCPUS)]
-                _ = ray.get([recon_Actor.setup.remote(self.sampleData.allImagesPath, self.sampleData.squareAllImagesPath) for recon_Actor in self.recon_Actors])
-                #_ = [ray.get(recon_Actor.setup.remote(self.sampleData.allImagesPath, self.sampleData.squareAllImagesPath)) for recon_Actor in self.recon_Actors]
-                #If performing a non-training simulation, then potentially could pass a ray object id rather than reading in from hdf5...
-                #_ = [ray.get(reconIDW_Actor.setupFromShared.remote(self.allImages_id)) for reconIDW_Actor in reconIDW_Actors]
-            else:
-                self.sampleData.allImagesFile = h5py.File(self.sampleData.allImagesPath, 'r')
-                self.sampleData.allImages = self.sampleData.allImagesFile['allImages']
-                if self.sampleData.sampleType == 'DESI':
-                    self.sampleData.squareAllImagesFile = h5py.File(self.sampleData.squareAllImagesPath, 'r')
-                    self.sampleData.squareAllImages = self.sampleData.squareAllImagesFile['squareAllImages']
+        #If this is an MSI sample
+        if self.sampleData.sampleType == 'DESI' or self.sampleData.sampleType == 'MALDI':
         
-        #If all channel evaluation and simulation then extract performance metrics, if not live output and not for training database generation
+            #If all channel reconstructions are needed, then setup actors if in parallel, or load data into main memory
+            if self.allChanEval or (imzMLExport and not self.sampleData.trainFlag):
+                if parallelization:
+                    self.recon_Actors = [Recon_Actor.remote(indexes, self.sampleData.sampleType, self.sampleData.squareDim, self.sampleData.finalDim, self.sampleData.allImagesMax) for indexes in np.array_split(np.arange(0, len(self.sampleData.mzFinal)), numberCPUS)]
+                    _ = ray.get([recon_Actor.setup.remote(self.sampleData.allImagesPath, self.sampleData.squareAllImagesPath) for recon_Actor in self.recon_Actors])
+                    #_ = [ray.get(recon_Actor.setup.remote(self.sampleData.allImagesPath, self.sampleData.squareAllImagesPath)) for recon_Actor in self.recon_Actors]
+                    #If performing a non-training simulation, then potentially could pass a ray object id rather than reading in from hdf5...
+                    #_ = [ray.get(reconIDW_Actor.setupFromShared.remote(self.allImages_id)) for reconIDW_Actor in reconIDW_Actors]
+                else:
+                    self.sampleData.allImagesFile = h5py.File(self.sampleData.allImagesPath, 'r')
+                    self.sampleData.allImages = self.sampleData.allImagesFile['allImages']
+                    if self.sampleData.sampleType == 'DESI':
+                        self.sampleData.squareAllImagesFile = h5py.File(self.sampleData.squareAllImagesPath, 'r')
+                        self.sampleData.squareAllImages = self.sampleData.squareAllImagesFile['squareAllImages']
+        
+        #For all sample types, if all channel evaluation and simulation then extract performance metrics, if not live output and not for training database generation
         if self.allChanEval and (self.sampleData.simulationFlag and not self.liveOutputFlag and not self.datagenFlag):
             for sample in tqdm(self.samples, desc='RD/Metrics Extraction', leave=False, ascii=asciiFlag): self.extractSimulationData(sample)
+                
+        #If this is an MSI sample
+        if self.sampleData.sampleType == 'DESI' or self.sampleData.sampleType == 'MALDI':
+                
+            #If exporting final reconstruction data to .imzML
+            if imzMLExport and not self.sampleData.trainFlag:
+                
+                #Set the coordinates to save values for
+                coordinates = list(map(tuple, list(np.ndindex(tuple(self.sampleData.finalDim)))))
+                
+                #Export all measured, reconstructed data in .imzML format
+                reconImages = np.concatenate([ray.get(recon_Actor.getReconImages.remote()) for recon_Actor in self.recon_Actors])
+                writer = ImzMLWriter(self.dir_sampleResults+self.sampleData.name+'_reconstructed', intensity_dtype=np.float32, mz_dtype=np.float32, spec_type='profile', mode='processed')
+                for coord in coordinates: writer.addSpectrum(self.sampleData.mzFinal, reconImages[:, coord[0], coord[1]], (coord[1]+1, coord[0]+1))
+                writer.close()
+                del reconImages, writer
+                
+                #Export the equivalent ground-truth measured data here to .imzML format if needed
+                #allImages = np.concatenate([ray.get(recon_Actor.getAllImages.remote()) for recon_Actor in self.recon_Actors])
+                #writer = ImzMLWriter(self.dir_sampleResults+self.sampleData.name+'_groundTruth', intensity_dtype=np.float32, mz_dtype=np.float32, spec_type='profile', mode='processed')
+                #for coord in coordinates: writer.addSpectrum(self.sampleData.mzFinal, allImages[:, coord[0], coord[1]], (coord[1]+1, coord[0]+1))
+                #writer.close()
+                #del allImages, writer
             
-        #If exporting final reconstruction data to .imzML
-        if imzMLExport and not self.sampleData.trainFlag:
-            
-            #Set the coordinates to save values for
-            coordinates = list(map(tuple, list(np.ndindex(tuple(self.sampleData.finalDim)))))
-            
-            #Export all measured, reconstructed data in .imzML format
-            reconImages = np.concatenate([ray.get(recon_Actor.getReconImages.remote()) for recon_Actor in self.recon_Actors])
-            writer = ImzMLWriter(self.dir_sampleResults+self.sampleData.name+'_reconstructed', intensity_dtype=np.float32, mz_dtype=np.float32, spec_type='profile', mode='processed')
-            for coord in coordinates: writer.addSpectrum(self.sampleData.mzFinal, reconImages[:, coord[0], coord[1]], (coord[1]+1, coord[0]+1))
-            writer.close()
-            del reconImages, writer
-            
-            #Export the equivalent ground-truth measured data here if needed
-            #allImages = np.concatenate([ray.get(recon_Actor.getAllImages.remote()) for recon_Actor in self.recon_Actors])
-            #writer = ImzMLWriter(self.dir_sampleResults+self.sampleData.name+'_groundTruth', intensity_dtype=np.float32, mz_dtype=np.float32, spec_type='profile', mode='processed')
-            #for coord in coordinates: writer.addSpectrum(self.sampleData.mzFinal, allImages[:, coord[0], coord[1]], (coord[1]+1, coord[0]+1))
-            #writer.close()
-            #del allImages, writer
-        
-        #If all channel evaluation or imzMLExport (not training), close all images file reference if applicable, remove all recon images from memory, purge/reset ray
-        if self.allChanEval or (imzMLExport and not self.sampleData.trainFlag):
-            if not parallelization:
-                self.sampleData.allImagesFile.close()
-                del self.sampleData.allImages, self.reconImages, self.sampleData.allImagesFile
-                if self.sampleData.sampleType == 'DESI':
-                    self.sampleData.squareAllImagesFile.close()
-                    del self.sampleData.squareAllImages, self.sampleData.squareAllImagesFile
-            else:
-                _ = [ray.get(recon_Actor.closeAllImages.remote()) for recon_Actor in self.recon_Actors]
-                self.recon_Actors.clear()
-                del self.recon_Actors
+            #If all channel evaluation or imzMLExport (not training), close all images file reference if applicable, remove all recon images from memory, purge/reset ray
+            if self.allChanEval or (imzMLExport and not self.sampleData.trainFlag):
+                if not parallelization:
+                    self.sampleData.allImagesFile.close()
+                    del self.sampleData.allImages, self.reconImages, self.sampleData.allImagesFile
+                    if self.sampleData.sampleType == 'DESI':
+                        self.sampleData.squareAllImagesFile.close()
+                        del self.sampleData.squareAllImages, self.sampleData.squareAllImagesFile
+                else:
+                    _ = [ray.get(recon_Actor.closeAllImages.remote()) for recon_Actor in self.recon_Actors]
+                    self.recon_Actors.clear()
+                    del self.recon_Actors
                 
         #If this is a simulation, not for training database generation, then summarize PSNR/SSIM scores across all measurement steps
         if self.sampleData.simulationFlag and not self.datagenFlag:
@@ -953,7 +956,7 @@ class Result:
 #Visualize single sample progression step
 def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, datagenFlag):
 
-    #If running visualization in parallel, try to set backend to avoid main thread/loop issues
+    #If running visualization in parallel, reset backend to avoid main thread/loop issues
     if parallelization: matplotlib.use('Agg')
 
     #Turn percent measured into a string
@@ -1319,29 +1322,39 @@ def computePolyFeatures(sampleData, reconImage, squareMeasuredIdxs, squareUnMeas
     
     return polyFeatures
 
-#Prepare data for DLADS or GLANDS model input, with the option to rescale the input recon data to between 0 and 1, or standardize it
-def prepareInput(sample, numChannel):
-    inputReconImage = sample.squareChanReconImages[numChannel]
-    if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
-        minValue = np.min(inputReconImage)
-        inputReconImage = (inputReconImage-minValue)/(np.max(inputReconImage)-minValue)
-    elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
-        inputReconImage = (inputReconImage-np.mean(inputReconImage))/np.std(inputReconImage)
-    if erdModel == 'DLADS': return np.dstack((sample.squareMask, inputReconImage*(1-sample.squareMask), inputReconImage*sample.squareMask))
-    elif erdModel == 'GLANDS': return np.dstack((sample.squareMask, inputReconImage*sample.squareMask))
+#Prepare data for DLADS or GLANDS model input; if a channel number was given then prepare it on its own, otherwise create a batch for the whole sample
+def prepareInput(sample, numChannel=None):
+    if numChannel != None:
+        inputReconImage = sample.squareChanReconImages[numChannel]
+        if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
+            minValue = np.min(inputReconImage)
+            inputReconImage = (inputReconImage-minValue)/(np.max(inputReconImage)-minValue)
+        elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
+            inputReconImage = (inputReconImage-np.mean(inputReconImage))/np.std(inputReconImage)
+        if erdModel == 'DLADS': return np.dstack((sample.squareMask, inputReconImage*(1-sample.squareMask), inputReconImage*sample.squareMask))
+        elif erdModel == 'GLANDS': return np.dstack((sample.squareMask, inputReconImage*sample.squareMask))
+    else: 
+        inputReconImages = np.moveaxis(sample.squareChanReconImages, 0, -1)
+        if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
+            minValues = np.min(inputReconImages, axis=(0,1))
+            inputReconImages = (inputReconImages-minValues)/(np.max(inputReconImages, axis=(0,1))-minValues)
+        elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
+            inputReconImages = (inputReconImages-np.mean(inputReconImages))/np.std(inputReconImages)
+        inputReconImages = np.moveaxis(inputReconImages, -1, 0)
+        if erdModel == 'DLADS': return np.stack((np.repeat(np.expand_dims(sample.squareMask, 0), len(inputReconImages), axis=0), inputReconImages*(1-sample.squareMask), inputReconImages*sample.squareMask), axis=-1)
+        elif erdModel == 'GLANDS': return np.stack((np.repeat(np.expand_dims(sample.squareMask, 0), len(inputReconImages), axis=0), inputReconImages*sample.squareMask), axis=-1)
 
 #Determine the Estimated Reduction in Distortion
 def computeERD(sample, sampleData, model, squareUnMeasuredIdxs, squareMeasuredIdxs):
-
+    
     #Compute the ERD with the prescribed model; if configured to, only use a single channel
     if not chanSingle:
         if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
             for chanNum in range(0, len(sample.squareERDs)): sample.squareERDs[chanNum, squareUnMeasuredIdxs[:, 0], squareUnMeasuredIdxs[:, 1]] = ray.get(model.generateERD.remote(sample.polyFeatures[chanNum]))
         elif erdModel == 'DLADS': 
-        
             #First try inferencing all m/z channels at the same time 
             if not sampleData.OOM_multipleChannels:
-                try: sample.squareERDs = ray.get(model.generateERD.remote(makeCompatible([prepareInput(sample, chanNum) for chanNum in range(0, len(sample.squareERDs))]))).copy()
+                try: sample.squareERDs = ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample)))).copy()
                 except: 
                     sampleData.OOM_multipleChannels = True
                     if (len(gpus) > 0): print('\nWarning - Could not inference ERD for all channels of sample '+sampleData.name+' simultaneously on system GPU; will try processing channels iteratively.')
@@ -1386,9 +1399,6 @@ def findNewMeasurementIdxs(sample, sampleData, result, model, cValue, percToScan
             
             #Until the percToScan has been reached, substitute reconstruction values for actual measurements
             while True:
-                
-                #If there are no more points with physical ERD > 0, break from loop
-                if np.sum(sample.physicalERD) <= 0: break
                 
                 #Find next measurement location and store the chosen scanning location for later, actual measurement
                 newIdx = sample.unMeasuredIdxs[np.argmax(sample.physicalERD[sample.unMeasuredIdxs[:,0], sample.unMeasuredIdxs[:,1]])]
@@ -1483,7 +1493,7 @@ def mzFastIndex(mz, values, mzLowerIndex, mzPrecision, mzRound, mzInitialCount):
     mzValues = np.zeros(mzInitialCount, dtype=np.float32)
     mzValues[(indices/mzPrecision).astype(np.int32)-mzLowerIndex] = values
     return mzValues
-
+    
 #Calculate k-nn and determine inverse distance weights
 def findNeighbors(measuredIdxs, unMeasuredIdxs):
     neighborDistances, neighborIndices = NearestNeighbors(n_neighbors=numNeighbors).fit(measuredIdxs).kneighbors(unMeasuredIdxs)
@@ -1524,33 +1534,6 @@ def unet(numFilters, numChannels):
     #else: outputs = Conv2D(1, 1, activation='relu', padding='same')(conv8)
     outputs = Conv2D(1, 1, activation='relu', padding='same')(conv8)
     return tf.keras.Model(inputs=inputs, outputs=outputs)
-    
-def aug_unet(numFilters, numChannels):
-    inputs = Input(shape=(None,None,numChannels), batch_size=None)
-    
-    combinedInputOutput = tf.stack([inputs, outputs], axis=0)
-    #combinedInputOutput = tf.stack([inputs.to_tensor(), outputs.to_tensor()], axis=0)
-    combinedInputOutput = tf.keras.layers.RandomFlip('horizontal_and_vertical')(combinedInputOutput)
-    combinedInputOutput = tf.keras.layers.RandomRotation(factor = (-0.125, 0.125), fill_mode='constant')(combinedInputOutput)
-    combinedInputOutput = tf.keras.layers.RandomTranslation(height_factor=(-0.25, 0.25), width_factor=(-0.25, 0.25), fill_mode = 'constant')(combinedInputOutput)
-    augInputs, augOutputs = combinedInputOutput[0], combinedInputOutput[1]
-    
-    
-    conv0 = downConv(numFilters, augInputs)
-    conv1 = downConv(numFilters*2, MaxPool2D(pool_size=(2,2))(conv0))
-    conv2 = downConv(numFilters*4, MaxPool2D(pool_size=(2,2))(conv1))
-    conv3 = downConv(numFilters*8, MaxPool2D(pool_size=(2,2))(conv2))
-    conv4 = downConv(numFilters*16, MaxPool2D(pool_size=(2,2))(conv3))
-    up1 = Conv2D(numFilters*16, 2, activation='relu', padding='same')(customResize(conv4, conv3))
-    conv5 = upConv(numFilters*8, concatenate([conv3, up1]))
-    up2 = Conv2D(numFilters*8, 2, activation='relu', padding='same')(customResize(conv5, conv2))
-    conv6 = upConv(numFilters*4, concatenate([conv2, up2]))
-    up3 = Conv2D(numFilters*4, 2, activation='relu', padding='same')(customResize(conv6, conv1))
-    conv7 = upConv(numFilters*2, concatenate([conv1, up3]))
-    up4 = Conv2D(numFilters*2, 2, activation='relu', padding='same')(customResize(conv7, conv0))
-    conv8 = upConv(numFilters, concatenate([conv0, up4]))
-    outputs = Conv2D(1, 1, activation='relu', padding='same')(conv8)
-    return tf.keras.Model(inputs=inputs, outputs=augOutputs)
 
 #Rescale spatial dimensions of tensor x to match to those of tensor y
 def customResize(x, y):
@@ -1562,13 +1545,53 @@ def customResize(x, y):
 #Convert image into TF model compatible shapes/tensors
 def makeCompatible(image):
     
-    #Turn into an array before processings; will error in the event of dimensional incompatability
+    #Turn into an array before processings; will produce an error in the event of dimensional incompatability
     image = np.asarray(image)
 
     #Reshape for tensor transition, as needed by number of channels
     if len(image.shape) > 3: return image
     elif len(image.shape) > 2: return image.reshape((1,image.shape[0],image.shape[1],image.shape[2]))
     else: return image.reshape((1,image.shape[0],image.shape[1],1))
+
+#Define process for converting input images into input samples
+def processImages(baseFolder, filenames, label):
+
+    #If there are files to be processed, then convert each
+    if len(filenames) > 0:
+        for filename in tqdm(filenames, desc='Converting '+ label+ ' Images', leave=True, ascii=asciiFlag):
+            
+            #Extract name and verify the image has a supported extension and number of channels
+            basename, extension = os.path.splitext(filename)
+            basename, numChannels = os.path.basename(basename).split('-numChan-')
+            numChannels = int(numChannels)
+            if extension not in ['.png', '.jpg', '.tiff']: 
+                print('Error - Skipping file, as image extenstion is not currently compatible: ' + filename)
+                break
+            image = cv2.imread(filename)
+            if len(image.shape) > 3:
+                print('Error - Skipping file, as image contains more than 3 channels, which is not currently supported: ' + filename)
+                break
+            
+            #Setup a destination folder for the new smaple, overwriting existing matches
+            destinationFolder = baseFolder+basename+os.path.sep
+            if os.path.exists(destinationFolder): shutil.rmtree(destinationFolder)
+            os.makedirs(destinationFolder)
+            
+            #Save a sampleInfo.txt for the sample
+            sampleInfo = ['IMAGE', image.shape[1], image.shape[0], numChannels]
+            np.savetxt(destinationFolder+'sampleInfo.txt', sampleInfo, delimiter=',', fmt='%s')
+            
+            #Save each channel as a separate image
+            if numChannels > 1:
+                for chanNum in range(0, numChannels):
+                    outputLocation = destinationFolder+basename+'-chan-'+str(chanNum)+extension
+                    _ = cv2.imwrite(outputLocation, image[:,:,chanNum])
+            else:
+                outputLocation = destinationFolder+basename+'-chan-0'+extension
+                _ = cv2.imwrite(outputLocation, image)
+            
+            #Delete the original file to prevent repeat processing in the future
+            os.remove(filename)
 
 #Interpolate results to a given precision for averaging results
 def percResults(results, perc_testingResults, precision):

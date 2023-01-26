@@ -62,8 +62,8 @@
                     0.9.0   Multichannel E/RD, distributed GPU/batch training, E/RD timing, fix seq. runs
                     0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
                     0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
-                    0.9.3   Whole spectra metrics, improved augmentation and MSI loading, fix RAM leak, .imzML output, I/O rescaling
-                    0.9.4   Option to disable whole spectra evaluation
+                    0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
+                    0.9.4   Disable whole spectra metrics option, new pointwise group-based selection
                     0.9.5   GLANDS
                     x.x.x+  Iterative feature selection mechanism for selection of target channels
                     x.x.x+  Experimental MALDI integration
@@ -92,6 +92,11 @@
         |    |------->SIMULATION.py
         |    |------->TRAINING.py
         |------->INPUT
+        |    |------->IMAGES
+        |    |    |------->TRAIN
+        |    |    |    |------->sampleName.(png, tiff, jpg)
+        |    |    |------->TEST
+        |    |    |    |------->sampleName.(png, tiff, jpg)
         |    |------->TRAIN
         |    |    |------->SAMPLE_1
         |    |    |    |------->sampleInfo.txt
@@ -107,7 +112,7 @@
         |    |    |    |------->sampleName.ibd
         |    |    |------->SAMPLE_3
         |    |    |    |------->sampleInfo.txt
-        |    |    |    |------->sampleName.(png, tif, jpg)
+        |    |    |    |------->sampleName-chan-label.(png, tiff, jpg)
         |    |------->TEST
         |    |    |------->SAMPLE_4
         |    |    |    |------->sampleInfo.txt
@@ -123,7 +128,7 @@
         |    |    |    |------->sampleName.ibd
         |    |    |------->SAMPLE_6
         |    |    |    |------->sampleInfo.txt
-        |    |    |    |------->sampleName.(png, tif, jpg)
+        |    |    |    |------->sampleName-chan-label.(png, tiff, jpg)
         |    |------->POST
         |    |    |------->SIMULATION_SAMPLE_1
         |    |    |    |------->sampleInfo.txt
@@ -351,7 +356,6 @@ Each DESI MSI data file (ex. extensions: .d, or .raw), must be named with the st
 
 
     sampleName-line-0001.extension
-	
 
 ###  **MALDI MSI**
     - Sample Type
@@ -381,9 +385,13 @@ Each MALDI MSI data file (ex. .ibd and .imzML), must be named with the standard 
     - Channels
         Number of channels in the sample
     
-Regular image files (ex. .png, .jpg, .tiff) are supported as inputs. Each file only represents a single channel of information and is named with the standard convention below. Note that the label should be descriptive of the channel (i.e. Red, Green, Blue, Alpha, 0, 1, 2, etc.). Targeting only specific channels out of those presented is not currently supported.
+Regular image files with extensions: .png, .jpg, and .tiff (extensions are case-sensitive) are supported as inputs. Each file only represents a single channel of information and is named with the standard convention below. sampleName should not itself contain '-chan-' which is used to parse out the channel label. Note that the label should ideally be descriptive of the channel (i.e. Red, Green, Blue, Alpha, 0, 1, 2, etc.). Targeting only specific channels out of those included as inputs is not currently supported.
 
     sampleName-chan-label.extension
+	
+If a large number of new .png, .jpg, and/or .tiff images (extensions are case-sensitive), with single or combined multiple channels, are to be added as training and/or testing inputs, then a helper method will automatically prepare them for use with the main program. Place such images into ./INPUT/IMAGES/TRAIN/ or ./INPUT/IMAGES/TEST/ as appropriate. The program will split multichannel images, generate sampleInfo.txt files, and move the results into the corresponding ./INPUT/TRAIN and ./INPUT/TEST directories. If a sampleName already exists in the destination location, it will be overwritten. The original files in ./INPUT/IMAGES will be deleted to prevent repeated processing. Each file should follow the convention below, where the desired destination is set by sampleName, and the number following '-numChan-' (starting with '1') indicates how many channels are in the actual image (required as on its own opencv will read/write grayscale images as 3 identical channels. sampleName should not itself contain '-chan-' or '-numChan-'. 4 dimensional images are not presently supported. 
+
+    sampleName-numChan-#.extension
 
 ###  **RUN**
 After configuration, to run the program perform the following command in the root directory:
@@ -553,6 +561,10 @@ Certain sections of the program are extremely compute/memory/storage instensive 
 ###  **Most of the code appears to focus on integration with MSI modalities, can it be used for others?**
 
 Absolutely! Currently support is offered for regular images with single and multiple channels. If compatability with another file format is needed for your use case, please either open an issue in the repository, or feel free to fork this project and open a pull request with the added functionality.
+
+###  **Why the limitation to TensorFlow version 2.8**
+
+There are a couple of limiting factors. Above v2.8, TensorFlow incorporates a newer version of Keras that attempts and fails to vectorize the data augmentation layers, falling back on inefficient while loops, which harms training performance. Further, v2.11 no longer offers native CUDA/GPU acceleration, instead requiring the use of Microsoft's directML plugin (replace tensorflow-gpu in pip package installations with tensorflow-directml-plugin and install Windows Subsystem Linux (WSL). This should allow for training non-NVIDIA GPUs (untested), but cannot presently handle multi-GPU training with a distributed strategy. Manually disabling the strategy (tested, but no option included in configuration) does allow the plugin to work, though there is still a noticable performance penalty. If a more modern version of TensorFLow is required for your workflow, please open an issue in the GitHub repository for creation of a directML option, or if there is not a need for Agilent .d file compatability, follow the Linux install instructions (under another FAQ entry) after installing Ubuntu on WSL. 
 
 # PUBLICATIONS
 

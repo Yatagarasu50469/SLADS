@@ -32,7 +32,7 @@ def programTitle(versionNum, configFileName):
     
     #Font: Dark with Shadow
     if erdModel == 'SLADS-LS': 
-        header = "\
+        header = "\n\
 "+headerLineOffset+"███████╗██╗      █████╗ ██████╗ ███████╗         ██╗     ███████╗\n\
 "+headerLineOffset+"██╔════╝██║     ██╔══██╗██╔══██╗██╔════╝         ██║     ██╔════╝\n\
 "+headerLineOffset+"███████╗██║     ███████║██║  ██║███████╗ ███████ ██║     ███████╗\n\
@@ -41,7 +41,7 @@ def programTitle(versionNum, configFileName):
 "+headerLineOffset+"╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝         ╚══════╝╚══════╝\n"
 
     elif erdModel == 'SLADS-Net': 
-        header = "\
+        header = "\n\
 "+headerLineOffset+"███████╗██╗      █████╗ ██████╗ ███████╗         ███╗   ██╗███████╗████████╗\n\
 "+headerLineOffset+"██╔════╝██║     ██╔══██╗██╔══██╗██╔════╝         ████╗  ██║██╔════╝╚══██╔══╝\n\
 "+headerLineOffset+"███████╗██║     ███████║██║  ██║███████╗ ███████ ██╔██╗ ██║█████╗     ██║   \n\
@@ -50,7 +50,7 @@ def programTitle(versionNum, configFileName):
 "+headerLineOffset+"╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝         ╚═╝  ╚═══╝╚══════╝   ╚═╝   \n"
 
     elif erdModel == 'DLADS': 
-        header = "\
+        header = "\n\
 "+headerLineOffset+"██████╗ ██╗      █████╗ ██████╗ ███████╗\n\
 "+headerLineOffset+"██╔══██╗██║     ██╔══██╗██╔══██╗██╔════╝\n\
 "+headerLineOffset+"██║  ██║██║     ███████║██║  ██║███████╗\n\
@@ -59,7 +59,7 @@ def programTitle(versionNum, configFileName):
 "+headerLineOffset+"╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝\n"
 
     elif erdModel == 'GLANDS': 
-        header = "\
+        header = "\n\
 "+headerLineOffset+" ██████╗ ██╗      █████╗ ███╗   ██╗██████╗ ███████╗\n\
 "+headerLineOffset+"██╔════╝ ██║     ██╔══██╗████╗  ██║██╔══██╗██╔════╝\n\
 "+headerLineOffset+"██║  ███╗██║     ███████║██╔██╗ ██║██║  ██║███████╗\n\

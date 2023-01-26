@@ -31,6 +31,10 @@ if impModel: exec(open("./CODE/EXPERIMENTAL.py", encoding='utf-8').read())
 if postModel: exec(open("./CODE/POSTPROCESS.py", encoding='utf-8').read())
 if overWriteFile != None: exec(open(overWriteFile, encoding='utf-8').read())
 
+#Convert any training and testing images into compatible samples
+processImages(dir_TrainingData, natsort.natsorted(glob.glob(dir_ImagesTrainData+'*')), 'Training')
+processImages(dir_TestingData, natsort.natsorted(glob.glob(dir_ImagesTestData+'*')), 'Testing')
+
 #Generate training data if not already done so, optimizing c value if applicable
 if trainingDataGen or trainingModel or validationModel:
     
