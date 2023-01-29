@@ -187,7 +187,6 @@ def optimizeC(trainingSampleData):
             computePool.join()
             results = np.split(np.asarray(results.get(), dtype='object'), len(cValues))
             del samplingProgress_Actor
-            #gc.collect() #Try manually running garbage collection afer deletion instead of reseting ray completely
             resetRay(numberCPUS)
         else:
             results = []
@@ -320,7 +319,6 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
         computePool.join()
         results = results.get()
         del samplingProgress_Actor
-        #gc.collect() #Try manually running garbage collection afer deletion instead of reseting ray completely
         resetRay(numberCPUS)
     
     #Get timing data for RD generation, average, and save
@@ -453,7 +451,8 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         
         #Given the specified computational scope create the model and select a loss function
         with strategy.scope(): 
-            model = unet(numStartFilters, numChannels)
+            if modelDef=='unet': model = unet(numStartFilters, numChannels)
+            elif modelDef=='custom': model = custom(numStartFilters, numChannels)
             if lossFunc == 'MAE': model.compile(optimizer=trainOptimizer, loss='mean_absolute_error')
             elif lossFunc == 'MSE': model.compile(optimizer=trainOptimizer, loss='mean_squared_error')
         

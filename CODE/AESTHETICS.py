@@ -30,7 +30,7 @@ def programTitle(versionNum, configFileName):
     licenseOffset = (' ' * int((int(consoleColumns)-len(licenseHeader))//2))
     configOffset = (' ' * int((int(consoleColumns)-len(configHeader))//2))
     
-    #Font: Dark with Shadow
+    #Font: textfancy - Dark with Shadow
     if erdModel == 'SLADS-LS': 
         header = "\n\
 "+headerLineOffset+"███████╗██╗      █████╗ ██████╗ ███████╗         ██╗     ███████╗\n\

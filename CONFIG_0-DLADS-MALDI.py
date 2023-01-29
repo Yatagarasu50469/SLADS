@@ -69,7 +69,7 @@ availableGPUs = 'None'
 #If parallelization is enabled how many CPU threads should be reserved for other computer functions
 #Recommend starting at half of the available threads if using hyperthreading; decrease just enough that CPU is not pinned at 100% in parallel operations
 #May increase up to the total number of system CPU threads to decrease relative memory pressure
-reserveThreadCount = 16
+reserveThreadCount = 0
 
 #==================================================================
 #PARAMETERS: L1-0
@@ -196,7 +196,7 @@ numStartFilters = 64
 #Which optimizer should be used('Nadam', 'Adam', or 'RMSProp')
 optimizer = 'Nadam'
 
-#Which loss function should be used for the optimizer ('MAE' or 'MSE')
+#Which loss function should be used for the optimizer ('MAE' (MSI default) or 'MSE' (SEM image default))
 lossFunc = 'MAE'
 
 #What should the learning rate of the model's optimizer be
@@ -222,6 +222,9 @@ minimumEpochs = 10
 
 #What percentage of the training data should be used for training (setting as 1.0 or using one input sample will use training loss for early stopping criteria)
 trainingSplit = 0.8
+
+#Should visualizations of the training/validation samples be generated during database generation
+visualizeTrainingData = True
 
 #Should visualizations of the training progression be generated
 trainingProgressionVisuals = True

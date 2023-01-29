@@ -8,7 +8,7 @@
 # GENERAL INFORMATION
 
     NAME:           SLADS/DLADS/GLANDS
-    VERSION:        0.9.3
+    VERSION:        0.9.4
     LICENSE:        GNU General Public License v3.0
     DESCRIPTION:    Dynamic sampling algorithms with updated/developing implementations of:
                        -SLADS-LS    Supervised Learning Approach for Dynamic Sampling, using Least-Squares (LS) regression
@@ -57,7 +57,7 @@
                     0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
                     0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
                     0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
-                    0.9.4   Disable whole spectra metrics option, new pointwise group-based selection
+                    0.9.4   MALDI optical image input, fix for group-based selection, option to disable whole spectra metrics option
                     0.9.5   GLANDS
                     x.x.x+  Iterative feature selection mechanism for selection of target channels
                     x.x.x+  Experimental MALDI integration
@@ -218,7 +218,6 @@
         |    |    |------->trainingValidation_RDTimes.csv
         |    |    |------->validationDatabase.p
         
-
 # INSTALLATION
 **Note:** Use of Agilent .d files is only possible on Windows, given a reliance on vendor provided .dll's, as utilized by the multiplierz package. The package versions do not necessarily need to match with those listed. However, should the program produce unexpected errors, installing a specific version of a package might be able to resolve the issue. Note that the multiplierz pacakage, must be installed from the provided link under the installation commands.
 

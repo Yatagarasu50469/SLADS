@@ -49,7 +49,6 @@ def simulateSLADS(sortedSampleFolders, dir_Results, optimalC, modelName):
         computePool.join()
         results = results.get()
         del samplingProgress_Actor
-        #gc.collect() #Try manually running garbage collection afer deletion instead of reseting ray completely
         resetRay(numberCPUS)
     else: results = [runSampling(sampleDataset[sampleNum], optimalC, model, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False, False, False) for sampleNum in tqdm(range(0,len(sampleDataset)), desc='Samples', position=0, leave=True, ascii=asciiFlag)]
     

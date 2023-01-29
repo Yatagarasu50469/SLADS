@@ -7,9 +7,9 @@
 #╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝  █  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝  █   ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝
 #                                          █                                            █
 #
-#MODIFIED:	        25 January 2023
+#MODIFIED:	        28 January 2023
 #
-#VERSION:	        0.9.3
+#VERSION:	        0.9.4
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -60,7 +60,7 @@
 #                   0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
 #                   0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
 #                   0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
-#                   0.9.4   Disable whole spectra metrics option, new pointwise group-based selection
+#                   0.9.4   MALDI optical image input, updated group-based selection, option to disable whole spectra metrics option
 #                   0.9.5   GLANDS
 #                   x.x.x+  Iterative feature selection mechanism for selection of target channels
 #                   x.x.x+  Experimental MALDI integration
@@ -72,7 +72,7 @@
 #==================================================================
 
 #Current version information
-versionNum='0.9.3'
+versionNum='0.9.4'
 
 #Import needed libraries for subprocess initialization
 import glob
