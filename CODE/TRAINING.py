@@ -117,7 +117,7 @@ class EpochEnd(Callback):
                         self.nanValue = True
                     
                     ax = plt.subplot2grid((3,3), (vizSampleNum+1,0))
-                    im = ax.imshow(vizSample.squareSumImageReconImage, aspect='auto', cmap='hot', vmin=0, vmax=np.max(vizSample.squareSumImageReconImage))
+                    im = ax.imshow(vizSample.squareSumReconImage, aspect='auto', cmap='hot', vmin=0, vmax=np.max(vizSample.squareSumReconImage))
                     ax.set_title('Sum Image Reconstruction', fontsize=15, fontweight='bold')
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                     
@@ -142,7 +142,7 @@ def importInitialData(sortedSampleFolders):
     if consistentSeed: 
         np.random.seed(0)
         random.seed(0)
-    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPerc, 'pointwise', lineRevist, False, True, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Samples', leave=True, ascii=asciiFlag)], dtype='object')
+    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPercTrain, 'pointwise', lineRevist, False, True, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Samples', leave=True, ascii=asciiFlag)], dtype='object')
     pickle.dump(trainingValidationSampleData, open(dir_TrainingResults + 'trainingValidationSampleData.p', 'wb'))
     return trainingValidationSampleData
 
@@ -162,7 +162,7 @@ def optimizeC(trainingSampleData):
             futures, maxProgress = [], 0.0
             for cNum in range(0, len(cValues)):
                 for sampleNum in range(0, len(trainingSampleData)):
-                    futures.append((trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False, None, False, False, True, samplingProgress_Actor, 1.0))
+                    futures.append((trainingSampleData[sampleNum], cValues[cNum], False, percToScanC, percToVizC, True, False, lineVisitAll, False, None, False, False, True, samplingProgress_Actor, 1.0))
                     maxProgress += trainingSampleData[sampleNum].stopPerc
             maxProgress = round(maxProgress, 2)
             
@@ -191,11 +191,10 @@ def optimizeC(trainingSampleData):
         else:
             results = []
             for cNum in tqdm(range(0, len(cValues)), desc='c Value Sampling', leave=True, ascii=asciiFlag):
-                results.append([runSampling(trainingSampleData[sampleNum], cValues[cNum], False, 1, None, True, False, lineVisitAll, False, None, False, False, False) for sampleNum in tqdm(range(0, len(trainingSampleData)), desc='Samples', leave=False, ascii=asciiFlag)])
-        print('Sampling completed in: '+str(time.time()-t0))
+                results.append([runSampling(trainingSampleData[sampleNum], cValues[cNum], False, percToScanC, percToVizC, True, False, lineVisitAll, False, None, False, False, False) for sampleNum in tqdm(range(0, len(trainingSampleData)), desc='Samples', leave=False, ascii=asciiFlag)])
         
         areaUnderCurveList, allRDTimesList, dataPrintout = [], [], [['','Average', '', 'Standard Deviation']]
-        for cNum in tqdm(range(0, len(cValues)), desc='c Value Evaluation', leave=True, ascii=asciiFlag):
+        for cNum in tqdm(range(0, len(cValues)), desc='Evaluation', leave=True, ascii=asciiFlag):
         
             #Double check that results were split correctly according to cValue
             if np.sum(np.diff([results[cNum][index].cValue for index in range(0, len(results[cNum]))]))>0: sys.exit('Error! - Results for c values were not split correctly.')
@@ -217,7 +216,8 @@ def optimizeC(trainingSampleData):
             dataPrintout.append([])
             
             #Extract percentage results at the specified precision
-            percents, trainMetricAvg = percResults([result.allAvgPSNRList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
+            if cAllChanOpt: percents, trainMetricAvg = percResults([result.allAvgPSNRList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
+            else: percents, trainMetricAvg = percResults([result.chanAvgPSNRList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
             
             #Visualize/save the averaged curve for the given c value
             np.savetxt(dir_TrainingResults+'optimizationCurve_c_' + str(cValues[cNum]) + '.csv', np.transpose([percents, trainMetricAvg]), delimiter=',')
@@ -225,6 +225,7 @@ def optimizeC(trainingSampleData):
             plt.rc('font', **font)
             f = plt.figure(figsize=(20,8))
             ax1 = f.add_subplot(1,1,1)
+            #ax1.plot(results[cNum][0].percsMeasured, results[cNum][0].chanAvgPSNRList, color='black')
             ax1.plot(percents, trainMetricAvg, color='black')
             ax1.set_xlabel('% Measured')
             if cAllChanOpt: ax1.set_ylabel('Average Reconstruction PSNR (dB) of All Channels')
@@ -327,9 +328,10 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
     dataPrintout.append(['RD Compute Time (s)', np.mean(allRDTimes), '+/-', np.std(allRDTimes)])
     pd.DataFrame(dataPrintout).to_csv(dir_TrainingResults + 'trainingValidation_RDTimes.csv')
     
+    
     #Reference a result, call for result completion/printout, and sort into either training or validation sets
     trainingDatabase, validationDatabase = [], []
-    for index in tqdm(range(0, len(results)), desc='Visualization/Separation', leave=True, ascii=asciiFlag):
+    for index in tqdm(range(0, len(results)), desc='Processing', leave=True, ascii=asciiFlag):
         result = results[index]
         result.complete()
         for sample in results[index].samples: 

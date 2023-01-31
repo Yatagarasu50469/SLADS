@@ -57,7 +57,7 @@ dataAdjust = None
 #Should the final reconstructed data be saved in .imzML format
 imzMLExport = True
 
-#If using IDW reconstruction, how many neighbors should be considered; use 1 for nearest-neighbor
+#If using IDW reconstruction, how many neighbors should be considered
 numNeighbors = 10
 
 #Should parallelization calls be used; if memory overflow issues develop, try setting to False (massively increases computation time)
@@ -118,16 +118,18 @@ liveOutputFlag = False
 #POINTWISE OPTIONS
 #==================================================================
 
-#What percentage of points should be initially acquired (random) during testing/implementation
+#Percentage of points to initially acquire (random) during testing/implementation
 initialPercToScan = 1
 
-#Stopping percentage for number of acquired pixels during testing/implementation
+#Stopping percentage for number of acquired pixels 
 stopPerc = (1/3)*100
 
-#If group-wise, what percentage of points should be acquired; otherwise set to None
+#Percentage of points (group-based) to acquire during testing/implementation; otherwise set to None (default: None)
+#Temporarily sets reconstruction values as having been measured for updating the ERD. 
+#If an oracle run, will set the RD values in unmeasured locations, that would be impacted by selected scan positions, to zero
 percToScan = None
 
-#What percentage of points should be acquired between visualization steps; if all steps should be, then set to None
+#Percentage of points to acquire between visualizations; if all steps should be, then set to None (default: 1)
 percToViz = 1
 
 #==================================================================
@@ -162,20 +164,36 @@ startLinePositions = [0.25, 0.50, 0.75]
 #TRAINING DATA GENERATION
 #==================================================================
 
-#What percentage of points should be initially acquired (random) during training
+#What percentage of points should be initially acquired (random) during training and c value optimization
 initialPercToScanTrain = 1
 
-#Stopping percentage for number of acquired pixels for training; always out of total FOV
+#Stopping percentage for number of acquired pixels for training and c value optimization; always out of total FOV
 stopPercTrain = 30
-
-#Possible c values for RD approximation
-cValues = np.array([1, 2, 4, 8, 16, 32, 64])
-
-#Should the PSNR of all channels be used for c value optimization (True, computationally expensive), or just targeted channels (default: False)
-cAllChanOpt = False
 
 #How many masks should be used for each percentage during training
 numMasks = 1
+
+#==================================================================
+
+#==================================================================
+#PARAMETERS: L1-5
+#c VALUE OPTIMIZATION
+#==================================================================
+
+#Possible c values for RD approximation
+cValues = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
+#cValues = np.array([8])
+
+#When optimizing c, percentage of points (group-based) to acquire; otherwise set to None (default: 1)
+#Temporarily sets the RD values in unmeasured locations, that would be impacted by selected scan positions, to zero
+#Note that using percToVizC is a more accurate, but expensive method
+percToScanC = 1
+
+#When optimizing c, percentage of points to acquire between visualizations; if all steps should be, then set to None (default: None)
+percToVizC = None
+
+#Should the PSNR of all channels be used for c value optimization (True, computationally expensive), or just targeted channels (default: False)
+cAllChanOpt = False
 
 #==================================================================
 
@@ -265,15 +283,4 @@ asciiFlag = False
 
 ##################################################################
 #PARAMETERS: L4
-#DO NOT CHANGE - ALTERNATIVE OPTIONS NOT CURRENTLY FUNCTIONAL
-##################################################################
-
-##################################################################
-
-
-##################################################################
-#PARAMETERS: L5
-#DEBUG/DEPRECATED - OPTIONS LIKELY TO BE REMOVED IN FUTURE
-##################################################################
-
-##################################################################
+#DO NOT CHANGE - ALTERNATIVE OPTIONS NOT CUR

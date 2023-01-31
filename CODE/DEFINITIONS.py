@@ -29,6 +29,7 @@ class SampleData:
         self.chanFinalGrid = None
         self.newTimes = None
         self.scanRate = None
+        self.maxRadius = 0
         self.gaussianWindows = {}
         
         #Set global variables to indicate that OOM error states have not yet occurred; limited handle for ERD inferencing limitations
@@ -522,6 +523,8 @@ class TempScanData:
         self.neighborIndices = None
         self.neighborWeights = None
         self.neighborDistances = None
+        self.winStartPos = None
+        self.winStopPos = None
 
 #Relevant sample data at each time step; static information should be held in corresponding SampleData object
 class Sample:
@@ -564,10 +567,10 @@ class Sample:
         else: self.squareMask = copy.deepcopy(self.mask)
         
         #If updating using recon data identify new update locations in square dimensions, otherwise set to None
-        if updateRD: updateLocations = np.argwhere(prevSquareMask-self.squareMask)
+        if updateRD: updateLocations = np.argwhere(self.squareMask-prevSquareMask)
         else: updateLocations = []
         
-        #If not just updating the RD, get measurement values from equipment or the stored ground-truth
+        #If not just updating the RD, either get measurement values from equipment or the stored ground-truth
         if not updateRD:
         
             #Update the actual measurement iteration counter and percent measured
@@ -582,19 +585,17 @@ class Sample:
                 sampleData.mask = self.mask
                 equipWait()
                 sampleData.readScanData()
-        
-        #If not just updating the RD based on reconstruction data, or if  a simulated oracle run or optimizing the c value in training, then use the ground-truth data as 'measured'
-        if not updateRD or oracleFlag or bestCFlag:
             self.chanImages[:, newIdxs[:,0], newIdxs[:,1]] = sampleData.chanImages[:, newIdxs[:,0], newIdxs[:,1]]
             self.sumImage[newIdxs[:,0], newIdxs[:,1]] = sampleData.sumImage[newIdxs[:,0], newIdxs[:,1]]
-            
-        #Otherwise, temporarily set the reconstruction data as having been 'measured'
-        else:
-            self.chanImages[:, newIdxs[:,0], newIdxs[:,1]] = self.chanReconImages[:, newIdxs[:,0], newIdxs[:,1]]
-            self.sumImage[newIdxs[:,0], newIdxs[:,1]] = self.sumImageReconImage[newIdxs[:,0], newIdxs[:,1]]
         
-        #If not updating the RD, or using a SLADS model to update the ERD (in which case the RD is not expected to be updated with novel reconstruction data)
-        if not updateRD or (((erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net')) and not bestCFlag):
+        #Otherwise, (if not an oracle or c value optimization run) set the reconstruction data as having been 'measured'
+        else:
+            if not oracleFlag and not bestCFlag:
+                self.chanImages[:, newIdxs[:,0], newIdxs[:,1]] = self.chanReconImages[:, newIdxs[:,0], newIdxs[:,1]]
+                self.sumImage[newIdxs[:,0], newIdxs[:,1]] = self.sumReconImage[newIdxs[:,0], newIdxs[:,1]]
+        
+        #If not just updating the RD, or using a SLADS model to update the ERD
+        if not updateRD or (((erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net')) and not bestCFlag and not oracleFlag):
         
             #Extract measured and unmeasured locations, considering FOV mask if applicable
             tempScanData.squareMeasuredIdxs = np.transpose(np.where(self.squareMask==1))
@@ -602,24 +603,24 @@ class Sample:
             else: tempScanData.squareUnMeasuredIdxs = np.transpose(np.where(self.squareMask==0))
             
             #Determine neighbor information for unmeasured locations
-            if len(tempScanData.squareUnMeasuredIdxs) > 0: tempScanData.neighborIndices, tempScanData.neighborWeights, tempScanData.neighborDistances = findNeighbors(tempScanData)
+            if len(tempScanData.squareUnMeasuredIdxs) > 0: findNeighbors(tempScanData)
             else: tempScanData.neighborIndices, tempScanData.neighborWeights, tempScanData.neighborDistances = [], [], []
         
-        #If not updating the RD, then compute reconstructions (using square dimensionality), resizing to physical dimensions for DESI
+        #If not just updating the RD, then compute reconstructions (using square dimensionality), resizing to physical dimensions for DESI
         if not updateRD:
             if sampleData.sampleType == 'DESI':
-                self.squareSumImageReconImage = computeReconIDW(resize(self.sumImage, tuple(sampleData.squareDim), order=0), tempScanData)
+                self.squareSumReconImage = computeReconIDW(resize(self.sumImage, tuple(sampleData.squareDim), order=0), tempScanData)
                 self.squareChanReconImages = computeReconIDW(np.moveaxis(resize(np.moveaxis(self.chanImages, 0, -1), tuple(sampleData.squareDim), order=0), -1, 0), tempScanData)
-                self.sumImageReconImage = resize(self.squareSumImageReconImage, tuple(sampleData.finalDim), order=0)
+                self.sumReconImage = resize(self.squareSumReconImage, tuple(sampleData.finalDim), order=0)
                 self.chanReconImages = np.moveaxis(resize(np.moveaxis(self.squareChanReconImages , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)
             else:
-                self.squareSumImageReconImage = computeReconIDW(self.sumImage, tempScanData)
+                self.squareSumReconImage = computeReconIDW(self.sumImage, tempScanData)
                 self.squareChanReconImages = computeReconIDW(self.chanImages, tempScanData)
-                self.sumImageReconImage = self.squareSumImageReconImage
+                self.sumReconImage = self.squareSumReconImage
                 self.chanReconImages = self.squareChanReconImages
         
         #Compute feature information for for training/utilizing SLADS models
-        if (datagenFlag or ((erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net')) and not bestCFlag) and len(tempScanData.squareUnMeasuredIdxs) > 0: 
+        if (datagenFlag or ((erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net')) and not bestCFlag and not oracleFlag) and len(tempScanData.squareUnMeasuredIdxs) > 0: 
             t0 = time.time()
             self.polyFeatures = [computePolyFeatures(sampleData, tempScanData, squareChanReconImage) for squareChanReconImage in self.squareChanReconImages]
             t1 = time.time()
@@ -639,8 +640,9 @@ class Sample:
         #If the ground-truth data is known for training or oracle runs then compute the RDPPs and resulting RD
         elif oracleFlag or bestCFlag:
         
-            #If this is a full measurement step, compute the RDPP
+            #If this is a full measurement step, (i.e. whenever the reconstruction(s) are updated) compute the new RDPP
             if not updateRD: 
+            
                 #If dataAdjust is enabled, and using DLADS or GLANDS, then can optionally rescale RDPP computation inputs to between 0 and 1 or standardize them
                 if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
                     minValues, maxValues = np.min(sampleData.squareChanImages, axis=(1,2)), np.max(sampleData.squareChanImages, axis=(1,2))
@@ -650,8 +652,8 @@ class Sample:
                     meanValues, stdValues =  np.mean(sampleData.squareChanImages, axis=(1,2)), np.std(sampleData.squareChanImages, axis=(1,2))
                     self.RDPPs = np.moveaxis(abs(((np.moveaxis(sampleData.squareChanImages, 0, -1)-meanValues)/stdValues)-((np.moveaxis(self.squareChanReconImages, 0, -1)-meanValues)/stdValues)), -1, 0)
                 else: self.RDPPs = abs(sampleData.squareChanImages-self.squareChanReconImages)
-            
-            #Compute the RD and use it in place of an ERD
+        
+            #Compute/Update the RD and use it in place of an ERD
             t0 = time.time()
             computeRD(self, sampleData, tempScanData, cValue, bestCFlag, datagenFlag, result.liveOutputFlag, result.impModel, updateLocations)
             t1 = time.time()
@@ -742,10 +744,15 @@ class Result:
                 self.sampleData.allImagesFile = h5py.File(self.sampleData.allImagesPath, 'a')
                 self.sampleData.allImages = self.sampleData.allImagesFile['allImages'][:]
         
-    def update(self, sample):
+    def update(self, sample, completedRunFlag):
     
-        #Update measurement mask and percentage of FOV measured at this step 
+        #Update measurement mask
         self.lastMask = copy.deepcopy(sample.mask)
+        
+        #If optimizing c, then don't store sample data from the first iteration (except for the last mask), since it was not used in the determination of initial set locations
+        if self.bestCFlag and sample.iteration == 1: return
+        
+        #Update the percentage of FOV measured
         self.percsMeasured.append(copy.deepcopy(sample.percMeasured))
         
         #If outputs should be produced at every update step, then do so, determining related metrics as needed
@@ -755,16 +762,13 @@ class Result:
         
         #Save a copy of the measurement step for later evaluation
         self.samples.append(copy.deepcopy(sample))
-        self.finalTime = time.time()-self.startTime
-            
-        #If there is a results directory
-        if self.dir_Results != None: 
         
-            #If the filenames were unordered, then save the mapping from filename to physical row
-            if self.sampleData.unorderedNames: np.savetxt(self.dir_sampleResults+'physicalLineNums.csv', np.asarray(list(self.sampleData.physicalLineNums.items())), delimiter=',', fmt='%d')
-        
-            #Save a copy of the final measurement mask
-            np.savetxt(self.dir_sampleResults+'measuredMask.csv', self.lastMask, delimiter=',', fmt='%d')
+        #When completed, copy the final scan time, name-to-row conversion, and measurement mask
+        if completedRunFlag: 
+            self.finalTime = time.time()-self.startTime
+            if self.dir_Results != None: 
+                if self.sampleData.unorderedNames: np.savetxt(self.dir_sampleResults+'physicalLineNums.csv', np.asarray(list(self.sampleData.physicalLineNums.items())), delimiter=',', fmt='%d')
+                np.savetxt(self.dir_sampleResults+'measuredMask.csv', self.lastMask, delimiter=',', fmt='%d')
     
     #For a given measurement step find PSNR/SSIM of reconstructions, compute the RD, find PSNR of ERD
     def extractSimulationData(self, sample):
@@ -778,14 +782,14 @@ class Result:
         else: tempScanData.squareUnMeasuredIdxs = np.transpose(np.where(sample.squareMask==0))
                 
         #Determine neighbor information for unmeasured locations
-        if len(tempScanData.squareUnMeasuredIdxs) > 0: tempScanData.neighborIndices, tempScanData.neighborWeights, tempScanData.neighborDistances = findNeighbors(tempScanData)
+        if len(tempScanData.squareUnMeasuredIdxs) > 0: findNeighbors(tempScanData)
         else: tempScanData.neighborIndices, tempScanData.neighborWeights, tempScanData.neighborDistances = [], [], []
         
         #Find PSNR/SSIM scores for all channel reconstructions
         sample.chanImagesPSNRList = [compare_psnr(self.sampleData.chanImages[index], sample.chanReconImages[index], data_range=self.sampleData.chanImagesMax[index]) for index in range(0, len(self.sampleData.chanImages))]
-        sample.sumImagePSNR = compare_psnr(self.sampleData.sumImage, sample.sumImageReconImage, data_range=np.max(self.sampleData.sumImage))
+        sample.sumImagePSNR = compare_psnr(self.sampleData.sumImage, sample.sumReconImage, data_range=np.max(self.sampleData.sumImage))
         sample.chanImagesSSIMList = [compare_ssim(self.sampleData.chanImages[index], sample.chanReconImages[index], data_range=self.sampleData.chanImagesMax[index]) for index in range(0, len(self.sampleData.chanImages))]
-        sample.sumImageSSIM = compare_ssim(self.sampleData.sumImage, sample.sumImageReconImage, data_range=np.max(self.sampleData.sumImage))
+        sample.sumImageSSIM = compare_ssim(self.sampleData.sumImage, sample.sumReconImage, data_range=np.max(self.sampleData.sumImage))
         
         #MSI Specific; if enabled then perform and evaluate reconstructions over the whole spectrum for the data known at each considered measurement step
         if self.allChanEval and (self.sampleData.sampleType == 'MALDI' or self.sampleData.sampleType == 'DESI'):
@@ -1100,13 +1104,13 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
     
     if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (0,1))
     else: ax = plt.subplot2grid((1,3), (0,0))
-    im = ax.imshow(sample.sumImageReconImage, cmap='hot', aspect='auto', vmin=sumImageMinValue, vmax=sumImageMaxValue)
+    im = ax.imshow(sample.sumReconImage, cmap='hot', aspect='auto', vmin=sumImageMinValue, vmax=sumImageMaxValue)
     ax.set_title('Sum Image Reconstruction')
     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
     if sampleData.simulationFlag: 
         ax = plt.subplot2grid((2,3), (0,2))
-        im = ax.imshow(abs(sampleData.sumImage-sample.sumImageReconImage), cmap='hot', aspect='auto', vmin=sumImageMinValue, vmax=sumImageMaxValue)
+        im = ax.imshow(abs(sampleData.sumImage-sample.sumReconImage), cmap='hot', aspect='auto', vmin=sumImageMinValue, vmax=sumImageMaxValue)
         ax.set_title('Absolute Difference')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
     
@@ -1138,7 +1142,7 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
 
     #Borderless saves
     saveLocation = dir_progression + 'reconstruction_sumImage' + '_iter_' + str(sample.iteration) +  '_perc_' + str(sample.percMeasured) + '.png'
-    borderlessPlot(sample.sumImageReconImage, saveLocation, cmap='hot', vmin=sumImageMinValue, vmax=sumImageMaxValue)
+    borderlessPlot(sample.sumReconImage, saveLocation, cmap='hot', vmin=sumImageMinValue, vmax=sumImageMaxValue)
     
     saveLocation = dir_progression + 'mask_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
     borderlessPlot(sample.mask, saveLocation, cmap='gray')
@@ -1182,12 +1186,12 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, ora
     for initialSet in sampleData.initialSets: sample.performMeasurements(sampleData, tempScanData, result, initialSet, model, cValue, bestCFlag, oracleFlag, datagenFlag, False)
     
     #Check stopping criteria, just in case of a bad input
-    if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
-    elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
-    if not datagenFlag and np.sum(sample.physicalERD) == 0: completedRunFlag = True
+    if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): sys.exit('Error - All points were scanned or the stopping criteria have been met after the initial acquisition for sample: ' + sample.name)
+    elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: sys.exit('Error - All lines were scanned after the inital acquisition for sample: ' + sample.name)
+    if not datagenFlag and np.sum(sample.physicalERD) == 0: sys.exit('Error - Initial ERD indicates there are no places to scan for sample: ' + sample.name)
     
     #Perform the first update for the result
-    result.update(sample)
+    result.update(sample, completedRunFlag)
     
     #Until the stopping criteria has been met
     with tqdm(total = round(float(sampleData.stopPerc),2), desc = '% Sampled', leave=False, ascii=asciiFlag, disable=tqdmHide) as pbar:
@@ -1216,7 +1220,7 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, ora
             if not datagenFlag and np.sum(sample.physicalERD) == 0: completedRunFlag = True
             
             #If viz limit, only update when percToViz has been met; otherwise update every iteration
-            if ((percToViz != None) and ((sample.percMeasured-result.percsMeasured[-1]) >= percToViz)) or (percToViz == None) or (sampleData.scanMethod == 'linewise') or completedRunFlag: result.update(sample)
+            if ((percToViz != None) and ((sample.percMeasured-result.percsMeasured[-1]) >= percToViz)) or (percToViz == None) or (sampleData.scanMethod == 'linewise') or completedRunFlag: result.update(sample, completedRunFlag)
             
             #If using a global progress bar and percProgUpdate has been reached, then update the global sampling progress actor
             if samplingProgress_Actor != None and tqdmHide and (sample.percMeasured-lastPercMeasured >= percProgUpdate): 
@@ -1229,12 +1233,12 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, ora
                 pbar.refresh()
             
         #MSI experimental specific; after scanning has completed, store data as a readable hdf5 file on disk; optimize chunks for loading whole m/z images; close file reference and delete object
-        if not sampleData.simulationFlag and not sampleData.postFlag and (sampleData.sampleType == 'MALDI' or sampleData.sampleType == 'DESI'): 
+        if imzMLExport and not sampleData.simulationFlag and not sampleData.postFlag and (sampleData.sampleType == 'MALDI' or sampleData.sampleType == 'DESI'): 
             sampleData.allImages = sampleData.allImagesFile.create_dataset(name='allImages', data=sampleData.allImages, chunks=(1, sampleData.finalDim[0], sampleData.finalDim[1]))
             sampleData.allImagesFile.close()
             del sampleData.allImagesFile
             del sampleData.allImages
-            
+        
     return result
 
 #Compute approximated Reduction in Distortion (RD) values
@@ -1245,46 +1249,66 @@ def computeRD(sample, sampleData, tempScanData, cValue, bestCFlag, datagenFlag, 
         sigmaValues = tempScanData.neighborDistances[:,0]/cValue
         squareUnMeasuredLocations = tempScanData.squareUnMeasuredIdxs
         
-    #Otherwise if updating RD, then extract and calculate sigma values for locations that need to be recomputed
+    #Otherwise if updating RD (currently assumes the RDPP has not changed, as using prior reconstruction results
+    #If reconstructions and RDPP have changed, then extract and calculate sigma values for applicable, affected locations
     else:
         
-        #Identify unique unmeasured locations that will now have an update location as their nearest neighbor, if there are none then just return
-        indices = np.unique(np.concatenate([np.argwhere(np.sum(updateLocation >= tempScanData.startOffsetLocations, axis=1)+np.sum(updateLocation <= tempScanData.stopOffsetLocations, axis=1)==4) for updateLocation in updateLocations]).flatten())
+        #Identify unique unmeasured locations where the RD would be altered based on data at update locations (i.e., which unmeasured locations will have a new nearest measured neighbor), perform no update if there are none (Can happen with DESI)
+        indices = np.unique(np.concatenate([np.argwhere(np.sum(updateLocation >= tempScanData.winStartPos, axis=1)+np.sum(updateLocation <= tempScanData.winStopPos, axis=1)==4) for updateLocation in updateLocations]).flatten())
         if len(indices) == 0: return
         squareUnMeasuredLocations = tempScanData.squareUnMeasuredIdxs[indices]
         
-        #Compute their new nearest neighbor distances and sigma values
+        #Set RD Values at affected unmearued locations to 0
+        sample.squareRDs[:, squareUnMeasuredLocations[:,0], squareUnMeasuredLocations[:,1]] = 0
+    
+        #Set RD values at measured locations to zero
+        sample.squareRDs = sample.squareRDs*(1-sample.squareMask)
+    
+        #Average the results together to form a single RD, by which to make selections
+        sample.squareRD = np.mean(sample.squareRDs, axis=0)
+        
+        #Exit the method
+        return
+        
+        #Note: The only time that the RD may be updated, rather than fully computed, is in the case of an oracle run or c value optimization with percToScan enabled
+        #Therein, for SLADS and DLADS, the reconstructions and RDPPs are not being updated by ground-truth data, as that would require updating neighbor information
+        #Since this is trying to be avoided with percToScan, actually computing updated RD values would have no benefit over percToViz with the current reconstruction method
+        #Provided that IDW might be replaced in the future, the framework has been left to update RD values, assuming new reconstructions and RDPPs are available.
+        #For now, when using percToScan, with an oracle run or c value optimization, it is temorarily assumed that the RD values for locations dependent on newly measured data are zero
+        sys.exit('Error - RD values cannot be truly/correctly updated unless reconstructions and RDPPs have also been updated. As the current reconstruction method requires updating neighbor information, this cannot currently be performed and yield a performance improvement.')
+        
+        #Compute the affected locations' new nearest neighbor distances and sigma values
         neighborDistances, _ = NearestNeighbors(n_neighbors=1).fit(updateLocations).kneighbors(squareUnMeasuredLocations)
         sigmaValues = tempScanData.neighborDistances[:,0][indices]/cValue
-        
-    #Determine window sizes, ensuring odd values, and radii for Gaussian generation
+    
+    #Compute window sizes and positions for unmeasured locations, updating a persistant reference for updating RD
     if not staticWindow: windowSizes = np.ceil(2*dynWindowSigMult*sigmaValues).astype(int)+1
     else: windowSizes = (np.ones((len(sigmaValues)), dtype=np.float32)*staticWindowSize)
     windowSizes[windowSizes%2==0] += 1
     radii = (windowSizes//2).reshape(-1, 1).astype(int)
+    winStartPos, winStopPos = squareUnMeasuredLocations-radii, squareUnMeasuredLocations+radii
+    if len(updateLocations) == 0: tempScanData.winStartPos, tempScanData.winStopPos = winStartPos, winStopPos
+    else: tempScanData.winStartPos[indices], tempScanData.winStopPos[indices] = winStartPos, winStopPos
+
+    #Extract unique/new sigma values and their respective window sizes
+    newSigmaValues, newIndexes = np.unique(sigmaValues, return_index=True)
+    newWindows = windowSizes[newIndexes]
+    existingSigma = sampleData.gaussianWindows.keys()
+    newIndexes = [index for index in range(0, len(newSigmaValues)) if newSigmaValues[index] not in existingSigma]
+    newSigmaValues, newWindows = newSigmaValues[newIndexes], newWindows[newIndexes]
     
-    #Zero-pad the RDPPs and get offset positions according to maxRadius for window extraction (store/update information for perfoming RD updates)
+    #Store new Gaussian computations
+    if len(newSigmaValues) > 0:
+        gaussianSignals = [signal.gaussian(newWindows[index], newSigmaValues[index]) for index in range(0, len(newSigmaValues))]
+        sampleData.gaussianWindows.update(zip(newSigmaValues, [np.outer(gaussianSignals[index], gaussianSignals[index]) for index in range(0, len(gaussianSignals))]))
+    
+    #Zero-pad the RDPPs by the maximum radius and offset window positions accordingly
     maxRadius = np.max(radii)
     paddedRDPPs = np.pad(sample.RDPPs, [(0, 0), (maxRadius, maxRadius), (maxRadius, maxRadius)], mode='constant')
-    offsetLocations = squareUnMeasuredLocations + maxRadius
-    startOffsetLocations, stopOffsetLocations = offsetLocations-radii, offsetLocations+radii
-    if len(updateLocations) == 0: tempScanData.startOffsetLocations, tempScanData.stopOffsetLocations = startOffsetLocations, stopOffsetLocations
-    else: tempScanData.startOffsetLocations[indices], tempScanData.stopOffsetLocations[indices] = startOffsetLocations, stopOffsetLocations
-    
-    #Determine gaussian window parameters for each unmeasured location; act as keys to sampleData.gaussianWindows
-    gaussianParams = list(map(tuple, np.vstack((windowSizes, sigmaValues)).T))
-    
-    #Generate a Gaussian for each uniquen and previously uncomputed sigma/window, storing any new results in a global dictionary to prevent repeat computations
-    uniqueGaussianParams = list(map(tuple, np.unique(gaussianParams, axis=0)))
-    existingParams = sampleData.gaussianWindows.keys()
-    uniqueGaussianParams = [params for params in uniqueGaussianParams if params not in existingParams]
-    
-    if len(uniqueGaussianParams) > 0:
-        gaussianSignals = [signal.gaussian(windowSize, sigma) for windowSize, sigma in uniqueGaussianParams]
-        sampleData.gaussianWindows.update(zip(uniqueGaussianParams, [np.outer(gaussianSignals[index], gaussianSignals[index]) for index in range(0, len(gaussianSignals))]))
+    offsetWinStartPos, offsetWinStopPos = winStartPos+maxRadius, winStopPos+maxRadius
     
     #Compute RD Values
-    sample.squareRDs[:, squareUnMeasuredLocations[:,0], squareUnMeasuredLocations[:,1]] = np.asarray([np.sum(sampleData.gaussianWindows[gaussianParams[index]]*paddedRDPPs[:, startOffsetLocations[index][0]:stopOffsetLocations[index][0]+1, startOffsetLocations[index][1]:stopOffsetLocations[index][1]+1], axis=(1,2)) for index in range(0, len(offsetLocations))]).T
+    sample.squareRDs[:, squareUnMeasuredLocations[:,0], squareUnMeasuredLocations[:,1]] = np.asarray([np.sum(sampleData.gaussianWindows[sigmaValues[index]]*paddedRDPPs[:, offsetWinStartPos[index][0]:offsetWinStopPos[index][0]+1, offsetWinStartPos[index][1]:offsetWinStopPos[index][1]+1], axis=(1,2)) for index in range(0, len(squareUnMeasuredLocations))]).T
     
     #Set RD values at measured locations to zero
     sample.squareRDs = sample.squareRDs*(1-sample.squareMask)
@@ -1502,10 +1526,9 @@ def mzFastIndex(mz, values, mzLowerIndex, mzPrecision, mzRound, mzInitialCount):
     
 #Calculate k-nn and determine inverse distance weights
 def findNeighbors(tempScanData):
-    neighborDistances, neighborIndices = NearestNeighbors(n_neighbors=numNeighbors).fit(tempScanData.squareMeasuredIdxs).kneighbors(tempScanData.squareUnMeasuredIdxs)
-    unNormNeighborWeights = 1.0/(neighborDistances**2.0)
-    neighborWeights = unNormNeighborWeights/(np.sum(unNormNeighborWeights, axis=1))[:, np.newaxis]
-    return neighborIndices, neighborWeights, neighborDistances
+    tempScanData.neighborDistances, tempScanData.neighborIndices = NearestNeighbors(n_neighbors=numNeighbors).fit(tempScanData.squareMeasuredIdxs).kneighbors(tempScanData.squareUnMeasuredIdxs)
+    unNormNeighborWeights = 1.0/(tempScanData.neighborDistances**2.0)
+    tempScanData.neighborWeights = unNormNeighborWeights/(np.sum(unNormNeighborWeights, axis=1))[:, np.newaxis]
 
 #Perform the reconstruction using IDW (inverse distance weighting); retrieve measured values, compute reconstruction values, and combine into a new image; if 3D do all channels at once
 def computeReconIDW(inputImage, tempScanData):
