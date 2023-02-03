@@ -500,8 +500,8 @@ class SampleData:
                         self.chanImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.chanValues), np.asarray(chanDataLine, dtype='float64').T, bounds_error=False, fill_value=0)(self.chanFinalGrid).astype('float32')
                         self.sumImage[lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(sumImageLine, nan=0, posinf=0, neginf=0), left=0, right=0)
                     
-                    #Close the mzFile
-                    data.close()
+                        #Close the file
+                        data.close()
             
             #Otherwise read data in parallel and perform remaining interpolations of any remaining m/z data to regular grid in serial (parallel operation is too memory intensive)
             else:

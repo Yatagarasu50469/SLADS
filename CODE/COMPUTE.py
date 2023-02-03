@@ -14,7 +14,7 @@ numGPUs = len(gpus)
 
 #For model inferencing with DLADS and GLANDS, assign 1 GPU per server/actor (so as to potentially allow for multiple), otherwise assign 0
 if (erdModel == 'DLADS' or erdModel == 'GLANDS') and numGPUs>0: modelGPUs = 1
-else: modelGPUS = 0
+else: modelGPUs = 0
 
 #Set how many cpu threads are to be used in parallel, disabling if there is only one thread remaining
 if parallelization: 

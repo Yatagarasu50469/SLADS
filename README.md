@@ -8,7 +8,7 @@
 # GENERAL INFORMATION
 
     NAME:           SLADS/DLADS/GLANDS
-    VERSION:        0.9.4
+    VERSION:        0.9.5
     LICENSE:        GNU General Public License v3.0
     DESCRIPTION:    Dynamic sampling algorithms with updated/developing implementations of:
                        -SLADS-LS    Supervised Learning Approach for Dynamic Sampling, using Least-Squares (LS) regression

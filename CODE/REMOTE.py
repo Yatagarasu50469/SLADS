@@ -295,8 +295,8 @@ def msi_parhelper(allImagesActor, scanFileNames, indexData, mzOriginalIndices, m
                 allDataInterpFailTotal.append(allDataInterpFail)
                 mzDataTotal.append(mzDataLine)
         
-            #Close the mzFile
-            data.close()
+                #Close the file
+                data.close()
         
         #If there was new data read, transfer such to shared memory actor
         if len(newReadScanFiles) > 0: _ = ray.get(allImagesActor.setValues.remote(indexData, mzDataTotal, chanDataTotal, sumDataTotal, origTimesTotal, np.array(lineNumTotal), newReadScanFiles, allDataInterpFailTotal))

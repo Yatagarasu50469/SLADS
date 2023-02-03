@@ -7,9 +7,9 @@
 #╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝  █  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝  █   ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝
 #                                          █                                            █
 #
-#MODIFIED:	        2 February 2023
+#MODIFIED:	        3 February 2023
 #
-#VERSION:	        0.9.4
+#VERSION:	        0.9.5
 #
 #LICENSE:           GNU General Public License v3.0
 #
@@ -72,7 +72,7 @@
 #==================================================================
 
 #Current version information
-versionNum='0.9.4'
+versionNum='0.9.5'
 
 #Import needed libraries for subprocess initialization
 import glob
