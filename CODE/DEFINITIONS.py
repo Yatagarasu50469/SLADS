@@ -1392,9 +1392,9 @@ def computeERD(sample, sampleData, tempScanData, model):
         if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
             for chanNum in range(0, len(sample.squareERDs)): sample.squareERDs[chanNum, tempScanData.squareUnMeasuredIdxs[:, 0], tempScanData.squareUnMeasuredIdxs[:, 1]] = ray.get(model.generateERD.remote(sample.polyFeatures[chanNum]))
         elif erdModel == 'DLADS': 
+            
             #First try inferencing all m/z channels at the same time 
             if not sampleData.OOM_multipleChannels:
-                #try: sample.squareERDs = ray.get(model.generateERD.remote(makeCompatible([prepareInput(sample, chanNum) for chanNum in range(0, len(sample.squareERDs))]))).copy()
                 try: sample.squareERDs = ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample)))).copy()
                 except: 
                     sampleData.OOM_multipleChannels = True
