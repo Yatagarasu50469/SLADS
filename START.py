@@ -60,7 +60,7 @@
 #                   0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
 #                   0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
 #                   0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
-#                   0.9.4   Fix group-based and c value selection, distributed multi-GPU simulations
+#                   0.9.4   Fix group-based and c value selection, distributed multi-GPU simulations, updated Otsu segmented linwise
 #                   0.9.5   MALDI optical image input, option to disable whole spectra metrics, GLANDS
 #                   x.x.x+  Iterative feature selection mechanism for selection of target channels
 #                   x.x.x+  Experimental MALDI integration
