@@ -2,29 +2,20 @@
 #REMOTE METHODS FOR RAY
 #==================================================================
 
-#Define deployment for trained models
-@serve.deployment(route_prefix="/ModelServer", ray_actor_options={"num_gpus": numGPUs})
-class ModelServer:
-    def __init__(self, erdModel, modelPath):
-        warnings.filterwarnings("ignore")
-        loggerServe.setLevel(logging.ERROR)
-        self.erdModel = erdModel
-        if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': self.model = np.load(modelPath+'.npy', allow_pickle=True).item()
-        elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': self.model = tf.function(tf.keras.models.load_model(modelPath, compile=False), experimental_relax_shapes=True)
-
-    def __call__(self, data):
-        if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': return self.model.predict(data)
-        elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': return self.model(data, training=False)[:,:,:,0].numpy()
-
-#Define actor for utilizing trained models
-@ray.remote(num_gpus=numGPUs)
+#Define actor for utilizing trained models, enabling worker reuse
+@ray.remote(num_gpus=modelGPUs)
 class Model_Actor:
-    def __init__(self, erdModel, modelPath):
+    def __init__(self, erdModel, modelPath, gpuNum=-1):
         warnings.filterwarnings("ignore")
         loggerServe.setLevel(logging.ERROR)
         self.erdModel = erdModel
         if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': self.model = np.load(modelPath+'.npy', allow_pickle=True).item()
-        elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': self.model = tf.function(tf.keras.models.load_model(modelPath, compile=False), experimental_relax_shapes=True)
+        elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS':         
+            if gpuNum >= 0:
+                with tf.device('/device:GPU:'+str(gpuNum)): 
+                    self.model = tf.function(tf.keras.models.load_model(modelPath, compile=False), experimental_relax_shapes=True)
+            else: self.model = tf.function(tf.keras.models.load_model(modelPath, compile=False), experimental_relax_shapes=True)
+    
     def generateERD(self, data):
         if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': return self.model.predict(data)
         elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': return self.model(data, training=False)[:,:,:,0].numpy()

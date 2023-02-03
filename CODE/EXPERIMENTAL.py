@@ -17,10 +17,13 @@ def equipWait():
 #Perform SLADS with external equipment
 def performImplementation(optimalC, modelName):
 
-    #Deploy model, running once for pre-compilation on GPU (otherwise affects reported timings)
-    model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName)
-    if erdModel == 'DLADS': _ = ray.get(model.generateERD.remote(np.empty((1,512,512,3), dtype=np.float32)))
-
+    #Setup a model only on a single GPU (if available), running once on for pre-compilation (otherwise affects reported timings)
+    if (erdModel == 'DLADS' or erdModel == 'GLANDS') and numGPUs > 0: 
+        model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName, 0)
+        _ = ray.get(model.generateERD.remote(np.empty((1,512,512,3), dtype=np.float32)))
+    else: 
+        model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName)
+    
     #Wait for equipment to initialize scan
     equipWait()
     
@@ -34,9 +37,6 @@ def performImplementation(optimalC, modelName):
     print('Writing DONE')
     with open(dir_ImpDataFinal + 'DONE', 'w') as filehandle: filehandle.writelines('')
     if os.path.isfile(dir_ImpDataFinal + 'LOCK'): os.remove(dir_ImpDataFinal + 'LOCK')
-
-    #Shutdown the server to ensure resources are returned to ray
-    serve.shutdown()
 
     #Call for completion/printout
     print('Generating Visualizations')

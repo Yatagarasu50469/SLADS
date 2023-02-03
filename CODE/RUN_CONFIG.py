@@ -81,12 +81,12 @@ else:
 #If a model needs to be simulated with validation data
 if validationModel:
     sectionTitle('PERFORMING SIMULATION ON VALIDATION SET')
-    simulateSLADS([sampleData.sampleFolder for sampleData in validationSampleData], dir_ValidationResults, optimalC, modelName)
+    simulateSampling([sampleData.sampleFolder for sampleData in validationSampleData], dir_ValidationResults, optimalC, modelName)
 
 #If a model needs to be simulated with testing data
 if testingModel:
     sectionTitle('PERFORMING SIMULATION ON TESTING SET')
-    simulateSLADS(natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False), dir_TestingResults, optimalC, modelName)
+    simulateSampling(natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False), dir_TestingResults, optimalC, modelName)
 
 #If a model is to be used in an implementation
 if impModel:

@@ -57,8 +57,8 @@
                     0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
                     0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
                     0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
-                    0.9.4   MALDI optical image input, fix for group-based and c value selection, option to disable whole spectra metrics
-                    0.9.5   GLANDS
+                    0.9.4   Fix group-based and c value selection, distributed multi-GPU simulations, updated Otsu segmented linwise
+                    0.9.5   MALDI optical image input, option to disable whole spectra metrics, GLANDS
                     x.x.x+  Iterative feature selection mechanism for selection of target channels
                     x.x.x+  Experimental MALDI integration
                     ~1.0.0  Release installation method for python package manager
@@ -253,7 +253,7 @@ This code has been verified to function on Windows 10/11, CentOS 7/8 (through Do
     scipy              1.10.0
     sobol              0.9
     sobol-seq          0.2.0
-    tensorflow-addons  0.19.0
+    tensorflow-addons  0.18.0
     tensorflow-gpu     2.8.4 
     tqdm               4.64.1
 
@@ -288,7 +288,7 @@ The actual location of the specified file may vary depending on potential past V
 Open a new command prompt (critically, not as an administrator!) and enter the following commands (If GPU acceleration is not to be used change tensorflow-gpu==2.8.4 below to tensorflow==2.8.4):
 
     $ python -m pip install --upgrade pip
-    $ pip3 install datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve]==2.1.0 scipy sobol sobol-seq natsort multiprocess scikit-image scikit-learn tensorflow-gpu==2.8.4 tensorflow-addons tqdm opencv-python pydot graphviz aiorwlock pyimzml colorama
+    $ pip3 install datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve]==2.1.0 scipy sobol sobol-seq natsort multiprocess scikit-image scikit-learn tensorflow-gpu==2.8.4 tensorflow-addons==0.18.0 tqdm opencv-python pydot graphviz aiorwlock pyimzml colorama
     $ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
 
 Either switch back to, or open a new command prompt as an administrator and enter the following command:
@@ -470,7 +470,7 @@ While it does not currently function for some MSI formats, (verified operational
     $ python -m pip install --upgrade pip
     $ sudo apt-get update
     $ sudo apt-get install -y wget git python3-opencv
-    $ pip3 install datetime glob2 IPython joblib pandas pathlib2 psutil matplotlib numba pillow ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow-gpu=2.8.4 tensorflow-addons tqdm numpy opencv-python pydot graphviz aiorwlock pyimzml colorama
+    $ pip3 install datetime glob2 IPython joblib pandas pathlib2 psutil matplotlib numba pillow ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow-gpu=2.8.4 tensorflow-addons==0.18.0 tqdm numpy opencv-python pydot graphviz aiorwlock pyimzml colorama
     $ wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
     $ sudo dpkg -i packages-microsoft-prod.deb
     $ rm packages-microsoft-prod.deb

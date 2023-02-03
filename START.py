@@ -7,7 +7,7 @@
 #╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝  █  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝  █   ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝
 #                                          █                                            █
 #
-#MODIFIED:	        30 January 2023
+#MODIFIED:	        2 February 2023
 #
 #VERSION:	        0.9.4
 #
@@ -60,8 +60,8 @@
 #                   0.9.1   Parallel sample loading, unique model names, post-processing mode, replace avg. mz with TIC
 #                   0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
 #                   0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
-#                   0.9.4   MMALDI optical image input, fix for group-based and c value selection, option to disable whole spectra metrics
-#                   0.9.5   GLANDS
+#                   0.9.4   Fix group-based and c value selection, distributed multi-GPU simulations
+#                   0.9.5   MALDI optical image input, option to disable whole spectra metrics, GLANDS
 #                   x.x.x+  Iterative feature selection mechanism for selection of target channels
 #                   x.x.x+  Experimental MALDI integration
 #                   ~1.0.0  Release installation method for python package manager
@@ -82,8 +82,8 @@ import subprocess
 #Obtain list of configuration files
 configFileNames = natsort.natsorted(glob.glob('./CONFIG_*.py'))
 
-#If there is more than one configuration file, validate their syntax
-if len(configFileNames) > 1: [exec(open(configFileName, encoding='utf-8').read()) for configFileName in configFileNames]
+#Validate syntax of any configuration files
+_ = [exec(open(configFileName, encoding='utf-8').read()) for configFileName in configFileNames]
 
 #Run each configuration sequentially as a subprocess (GPU VRAM not cleared by Tensorflow, leading to crash otherwise); pass interrupts to active subprocess
 for configFileName in configFileNames: 

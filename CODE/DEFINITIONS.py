@@ -9,8 +9,7 @@ class SampleData:
         #Save options as internal variables
         self.scanMethod = scanMethod
         self.initialPercToScan = initialPercToScan
-        if lineVisitAll and self.scanMethod == 'linewise': sampleData.stopPerc = 100
-        else: self.stopPerc = stopPerc
+        self.stopPerc = stopPerc
         self.lineRevist = lineRevist
         self.postFlag = postFlag
         self.simulationFlag = simulationFlag
@@ -31,6 +30,14 @@ class SampleData:
         self.scanRate = None
         self.maxRadius = 0
         self.gaussianWindows = {}
+
+        #If linewise and visiting all lines, then set the % per line as the original stop percentage and the latter to 100
+        if self.scanMethod == 'linewise' and lineVisitAll: 
+            self.linePerc = copy.deepcopy(stopPerc)
+            self.stopPerc = 100.0
+        else: 
+            self.linePerc = 0.0
+            self.stopPerc = stopPerc
         
         #Set global variables to indicate that OOM error states have not yet occurred; limited handle for ERD inferencing limitations
         self.OOM_multipleChannels, self.OOM_singleChannel = False, False
@@ -343,7 +350,7 @@ class SampleData:
                 if lineMethod == 'percLine':
                     newIdxs = copy.deepcopy(self.linesToScan[lineIndex])
                     np.random.shuffle(newIdxs)
-                    newIdxs = newIdxs[:int(np.ceil((self.stopPerc/100)*len(newIdxs)))]
+                    newIdxs = newIdxs[:int(np.ceil((self.linePerc/100)*len(newIdxs)))]
                 else: 
                     newIdxs = [pt for pt in self.linesToScan[lineIndex]]
                 
@@ -418,13 +425,13 @@ class SampleData:
         elif self.sampleType == 'DESI':
         
             #If line revisiting is disabled, identify which files have not yet been scanned
-            if self.lineRevist == False: scanFileNames = natsort.natsorted(list(set(scanFileNames)-set(self.readScanFiles)), reverse=False)
+            if not self.lineRevist: scanFileNames = natsort.natsorted(list(set(scanFileNames)-set(self.readScanFiles)), reverse=False)
             
             #If parallelization is disabled then read in data sequentially
             if not parallelization:
             
                 #Extract line number from the filenames, removing leading zeros, subtract 1 for zero indexing, and obtain correct physical row indexes from LUT if applicable
-                for scanFileName in scanFileNames:
+                for scanFileName in tqdm(scanFileNames, total = len(scanFileNames), desc='Reading', leave=False, ascii=asciiFlag):
                     
                     #Load the line data and flag errors during the process (primarily checking for files without data)
                     errorFlag = False
@@ -808,8 +815,8 @@ class Result:
                 else: self.reconImages = self.sampleData.allImages*sample.squareMask
                 self.reconImages = np.array([computeReconIDW(self.reconImages[index], tempScanData) for index in range(0, len(self.reconImages))], dtype=np.float32)
                 if self.sampleData.sampleType == 'DESI': self.reconImages = np.moveaxis(resize(np.moveaxis(self.reconImages, 0, -1), tuple(self.sampleData.finalDim), order=0), -1, 0)
-                self.allImagesPSNRList = [compare_psnr(self.sampleData.allImages[index], self.reconImages[index], data_range=self.allImagesMax[index]) for index in range(0, len(self.sampleData.allImages))]
-                self.allImagesSSIMList = [compare_ssim(self.sampleData.allImages[index], self.reconImages[index], data_range=self.allImagesMax[index]) for index in range(0, len(self.sampleData.allImages))]
+                self.allImagesPSNRList = [compare_psnr(self.sampleData.allImages[index], self.reconImages[index], data_range=self.sampleData.allImagesMax[index]) for index in range(0, len(self.sampleData.allImages))]
+                self.allImagesSSIMList = [compare_ssim(self.sampleData.allImages[index], self.reconImages[index], data_range=self.sampleData.allImagesMax[index]) for index in range(0, len(self.sampleData.allImages))]
         
         #Otherwise assume all images results are the same as for targeted channels; i.e. all channels were targeted
         else:
@@ -1013,8 +1020,8 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
         #Generate and apply a plot title, with metrics if applicable
         plotTitle = r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Channel:\ }$" + chanLabel + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured
         if sampleData.simulationFlag and not datagenFlag:
-            plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted Channel Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel:\ }$" + chanImagesPSNR
-            plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted Channel Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel:\ }$" + chanImagesSSIM
+            plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel:\ }$" + chanImagesPSNR
+            plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel:\ }$" + chanImagesSSIM
         plt.suptitle(plotTitle)
         
         if sampleData.simulationFlag: 
@@ -1167,8 +1174,8 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, ora
     
     #If groupwise is active, specify how many points should be scanned each step
     if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random') and percToScan != None: sampleData.pointsToScan = int(np.ceil(((sampleData.stopPerc/100)*sampleData.area)/(sampleData.stopPerc/percToScan)))
-    elif sampleData.scanMethod == 'linewise' and sampleData.useMaskFOV: sampleData.pointsToScan = [int(np.ceil((sampleData.stopPerc/100)*np.sum(sampleData.maskFOV[lineIndex]))) for lineIndex in range(0, sampleData.finalDim[0])]
-    elif sampleData.scanMethod == 'linewise': sampleData.pointsToScan = [int(np.ceil((sampleData.stopPerc/100)*sampleData.finalDim[1])) for _ in range(0, sampleData.finalDim[0])]
+    elif sampleData.scanMethod == 'linewise' and lineMethod=='percLine' and sampleData.useMaskFOV: sampleData.pointsToScan = [int(np.ceil((sampleData.linePerc/100)*np.sum(sampleData.maskFOV[lineIndex]))) for lineIndex in range(0, sampleData.finalDim[0])]
+    elif sampleData.scanMethod == 'linewise' and lineMethod=='percLine': sampleData.pointsToScan = [int(np.ceil((sampleData.linePerc/100)*sampleData.finalDim[1])) for _ in range(0, sampleData.finalDim[0])]
     
     #Create a segmented storage object for variables that must be referenced over the length of scanning, yet (for better memory overhead) are not desired to be retained in the result object
     tempScanData = TempScanData()
@@ -1194,51 +1201,54 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, ora
     result.update(sample, completedRunFlag)
     
     #Until the stopping criteria has been met
-    with tqdm(total = round(float(sampleData.stopPerc),2), desc = '% Sampled', leave=False, ascii=asciiFlag, disable=tqdmHide) as pbar:
+    if not tqdmHide: pbar = tqdm(total = round(float(sampleData.stopPerc),2), desc = '% Sampled', leave=False, ascii=asciiFlag, disable=tqdmHide)
 
-        #Initialize progress bar state according to % measured
+    #Initialize progress bar state according to % measured
+    if not tqdmHide:
+        pbar.n = np.clip(round(sample.percMeasured,2), 0, sampleData.stopPerc)
+        pbar.refresh()
+    if samplingProgress_Actor != None and tqdmHide: 
+        _ = ray.get(samplingProgress_Actor.update.remote(sample.percMeasured))
+        lastPercMeasured = copy.deepcopy(sample.percMeasured)
+    
+    #Until the program has completed
+    while not completedRunFlag:
+
+        #Find next measurement locations
+        newIdxs = findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cValue, percToScan, oracleFlag, bestCFlag, datagenFlag)
+        
+        #Perform measurements, reconstructions and ERD/RD computations
+        if len(newIdxs) != 0: sample.performMeasurements(sampleData, tempScanData, result, newIdxs, model, cValue, bestCFlag, oracleFlag, datagenFlag, False)
+        else: break
+        
+        #Check stopping criteria
+        if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
+        elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
+        if not datagenFlag and np.sum(sample.physicalERD) == 0: completedRunFlag = True
+        
+        #If viz limit, only update when percToViz has been met; otherwise update every iteration
+        if ((percToViz != None) and ((sample.percMeasured-result.percsMeasured[-1]) >= percToViz)) or (percToViz == None) or (sampleData.scanMethod == 'linewise') or completedRunFlag: result.update(sample, completedRunFlag)
+        
+        #If using a global progress bar and percProgUpdate has been reached, then update the global sampling progress actor
+        if samplingProgress_Actor != None and tqdmHide and (sample.percMeasured-lastPercMeasured >= percProgUpdate): 
+            _ = ray.get(samplingProgress_Actor.update.remote(sample.percMeasured-lastPercMeasured))
+            lastPercMeasured = copy.deepcopy(sample.percMeasured)
+
+        #Update the progress bar
         if not tqdmHide:
             pbar.n = np.clip(round(sample.percMeasured,2), 0, sampleData.stopPerc)
             pbar.refresh()
-        if samplingProgress_Actor != None and tqdmHide: 
-            _ = ray.get(samplingProgress_Actor.update.remote(sample.percMeasured))
-            lastPercMeasured = copy.deepcopy(sample.percMeasured)
         
-        #Until the program has completed
-        while not completedRunFlag:
-
-            #Find next measurement locations
-            newIdxs = findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cValue, percToScan, oracleFlag, bestCFlag, datagenFlag)
-            
-            #Perform measurements, reconstructions and ERD/RD computations
-            if len(newIdxs) != 0: sample.performMeasurements(sampleData, tempScanData, result, newIdxs, model, cValue, bestCFlag, oracleFlag, datagenFlag, False)
-            else: break
-            
-            #Check stopping criteria
-            if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
-            elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
-            if not datagenFlag and np.sum(sample.physicalERD) == 0: completedRunFlag = True
-            
-            #If viz limit, only update when percToViz has been met; otherwise update every iteration
-            if ((percToViz != None) and ((sample.percMeasured-result.percsMeasured[-1]) >= percToViz)) or (percToViz == None) or (sampleData.scanMethod == 'linewise') or completedRunFlag: result.update(sample, completedRunFlag)
-            
-            #If using a global progress bar and percProgUpdate has been reached, then update the global sampling progress actor
-            if samplingProgress_Actor != None and tqdmHide and (sample.percMeasured-lastPercMeasured >= percProgUpdate): 
-                _ = ray.get(samplingProgress_Actor.update.remote(sample.percMeasured-lastPercMeasured))
-                lastPercMeasured = copy.deepcopy(sample.percMeasured)
-
-            #Update the progress bar
-            if not tqdmHide:
-                pbar.n = np.clip(round(sample.percMeasured,2), 0, sampleData.stopPerc)
-                pbar.refresh()
-            
-        #MSI experimental specific; after scanning has completed, store data as a readable hdf5 file on disk; optimize chunks for loading whole m/z images; close file reference and delete object
-        if imzMLExport and not sampleData.simulationFlag and not sampleData.postFlag and (sampleData.sampleType == 'MALDI' or sampleData.sampleType == 'DESI'): 
-            sampleData.allImages = sampleData.allImagesFile.create_dataset(name='allImages', data=sampleData.allImages, chunks=(1, sampleData.finalDim[0], sampleData.finalDim[1]))
-            sampleData.allImagesFile.close()
-            del sampleData.allImagesFile
-            del sampleData.allImages
-        
+    #MSI experimental specific; after scanning has completed, store data as a readable hdf5 file on disk; optimize chunks for loading whole m/z images; close file reference and delete object
+    if imzMLExport and not sampleData.simulationFlag and not sampleData.postFlag and (sampleData.sampleType == 'MALDI' or sampleData.sampleType == 'DESI'): 
+        sampleData.allImages = sampleData.allImagesFile.create_dataset(name='allImages', data=sampleData.allImages, chunks=(1, sampleData.finalDim[0], sampleData.finalDim[1]))
+        sampleData.allImagesFile.close()
+        del sampleData.allImagesFile
+        del sampleData.allImages
+    
+    #Delete progress bar reference if it had been made
+    if not tqdmHide: del pbar
+    
     return result
 
 #Compute approximated Reduction in Distortion (RD) values
@@ -1384,6 +1394,7 @@ def computeERD(sample, sampleData, tempScanData, model):
         elif erdModel == 'DLADS': 
             #First try inferencing all m/z channels at the same time 
             if not sampleData.OOM_multipleChannels:
+                #try: sample.squareERDs = ray.get(model.generateERD.remote(makeCompatible([prepareInput(sample, chanNum) for chanNum in range(0, len(sample.squareERDs))]))).copy()
                 try: sample.squareERDs = ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample)))).copy()
                 except: 
                     sampleData.OOM_multipleChannels = True
@@ -1447,71 +1458,55 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
             newIdxs = np.asarray([sample.unMeasuredIdxs[np.argmax(sample.physicalERD[sample.unMeasuredIdxs[:,0], sample.unMeasuredIdxs[:,1]])].tolist()])
             
     elif sampleData.scanMethod == 'linewise':
-
-        #Create a list to hold the chosen scanning locations
-        newIdxs = []
-
-        #Choose the line with maximum physical ERD and extract the actual indices
-        lineToScanIdx = np.nanargmax(np.nansum(sample.physicalERD, axis=1))
-
-        #If points on the line should be chosen one-by-one, temporarily using reconstruction values for updating the ERD
-        if lineMethod == 'percLine' and linePointSelection == 'single': 
-            
-            #Until the stopPerc has been reached, substitute reconstruction values for actual measurements
+        
+        #If all locations on a chosen line should be scanned, select the line with maximum sum physical ERD
+        if lineMethod =='fullLine':
+            lineToScanIdx = np.nanargmax(np.nansum(sample.physicalERD, axis=1))
+            indexes = np.sort(np.argsort(sample.physicalERD[lineToScanIdx])[::-1])
+            newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
+        
+        #If points on a chosen line should be chosen one-by-one, temporarily using reconstruction values for updating the ERD, selecting the line with maximum sum physical ERD
+        elif lineMethod == 'percLine' and linePointSelection == 'single': 
+            newIdxs = []
+            lineToScanIdx = np.nanargmax(np.nansum(sample.physicalERD, axis=1))
             while True:
                 
-                #If there are no points to scan on this line with physical ERD > 0, break from loop
-                if np.sum(sample.physicalERD[lineToScanIdx]) <= 0: break
+                #If there are no remaining points to scan on this line with physical ERD > 0 or enough new locations have been found, break from loop
+                if (np.sum(sample.physicalERD[lineToScanIdx]) <= 0) or (len(newIdxs) >= sampleData.pointsToScan[lineToScanIdx]): break
                 
                 #Identify the next scanning location and store it for later, actual measurement
-                nextIndex = np.argmax(sample.physicalERD[lineToScanIdx])
-                
-                #Store that choice for later actual measurement
-                newIdxs.append([lineToScanIdx, nextIndex])
+                newIdxs.append([lineToScanIdx, np.argmax(sample.physicalERD[lineToScanIdx])])
                 
                 #Perform the measurement using values from reconstruction 
                 sample.performMeasurements(sampleData, tempScanData, result, np.asarray(newIdxs[-1]), model, cValue, bestCFlag, oracleFlag, datagenFlag, True)
                 
-                #When enough new locations have been determined, break from loop
-                if len(newIdxs) >= sampleData.pointsToScan[lineToScanIdx]: break
-                
-            #Convert to array for indexing
+            #Convert to array for indexing, sorting columns according to physical scanning order
             newIdxs = np.asarray(newIdxs)
-            
-            #Sort columns for progressive physical scanning order
             newIdxs[:,1] = np.sort(newIdxs[:,1])
-            
-        #If points on the line should be selected in one step/group
+        
+        #If locations on the line should be selected in one step/group, select that group on the line with maximum sum physical ERD
         elif lineMethod == 'percLine' and linePointSelection == 'group':
+            lineToScanIdx = np.nanargmax(np.nansum(sample.physicalERD, axis=1))
             indexes = np.sort(np.argsort(sample.physicalERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
             newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
         
-        #If all the points on a chosen line should be scanned
-        if lineMethod =='fullLine':
-            indexes = np.sort(np.argsort(sample.physicalERD[lineToScanIdx])[::-1])
-            newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
-        
-        #==========================================
-        #PARTIAL LINE BY START/END POINTS
-        #==========================================
-        #Choose segment to scan on line
-        if lineMethod == 'segLine': 
-            if segLineMethod == 'otsu':
-                indexes = np.sort(np.where(sample.physicalERD[lineToScanIdx]>skimage.filters.threshold_otsu(sample.physicalERD, nbins=100))[0])
-                if len(indexes)>0: 
-                    indexes = np.arange(indexes[0],indexes[-1]+1)
-                    newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
-            elif segLineMethod == 'minPerc':
-                indexes = np.sort(np.argsort(sample.physicalERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
-                if len(indexes)>0: newIdxs = np.column_stack([np.ones(indexes[-1]-indexes[0]+1, dtype=np.float32)*lineToScanIdx, np.arange(indexes[0],indexes[-1]+1)]).astype(int)
-        #==========================================
-        
-        #==========================================
-        #SELECTION SAFEGUARD
-        #==========================================
+        #If a segment of a line should be scanned using a minimum percentage, choose the line with maximum sum physical ERD
+        elif lineMethod == 'segLine' and segLineMethod == 'minPerc': 
+           lineToScanIdx = np.nanargmax(np.nansum(sample.physicalERD, axis=1))
+           indexes = np.sort(np.argsort(sample.physicalERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
+           if len(indexes)>0: newIdxs = np.column_stack([np.ones(indexes[-1]-indexes[0]+1, dtype=np.float32)*lineToScanIdx, np.arange(indexes[0],indexes[-1]+1)]).astype(int)
+
+        #If a segment of a line should be scanned using Otsu, choose the line with the most scannable positions
+        elif lineMethod == 'segLine' and segLineMethod == 'otsu': 
+            otsuMask = sample.physicalERD>=skimage.filters.threshold_otsu(sample.physicalERD, nbins=100)
+            lineToScanIdx = np.nanargmax(np.nansum(otsuMask, axis=1))
+            indexes = np.sort(np.where(otsuMask[lineToScanIdx])[0])
+            if len(indexes)>0: 
+                indexes = np.arange(indexes[0],indexes[-1]+1)
+                newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
+
         #If there are not enough locations selected, then return no new measurement locations which will terminate scanning
         if len(newIdxs) < int(round(0.01*sample.mask.shape[1])): return []
-        #==========================================
         
     return newIdxs
 

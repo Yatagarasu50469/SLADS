@@ -9,7 +9,12 @@ def resetRay(numberCPUS):
 
 #Limit GPU(s) if indicated
 if availableGPUs != 'None': os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
-numGPUs = len(tf.config.experimental.list_physical_devices('GPU'))
+gpus = tf.config.list_physical_devices('GPU')
+numGPUs = len(gpus)
+
+#For model inferencing with DLADS and GLANDS, assign 1 GPU per server/actor (so as to potentially allow for multiple), otherwise assign 0
+if (erdModel == 'DLADS' or erdModel == 'GLANDS') and numGPUs>0: modelGPUs = 1
+else: modelGPUS = 0
 
 #Set how many cpu threads are to be used in parallel, disabling if there is only one thread remaining
 if parallelization: 
@@ -21,7 +26,6 @@ if not parallelization: numberCPUS = 1
 resetRay(numberCPUS)
 
 #Allow partial GPU memory allocation; allows better analysis of utilization
-gpus = tf.config.list_physical_devices('GPU')
 for gpu in gpus: tf.config.experimental.set_memory_growth(gpu, True)
 
 #If the number of gpus to be used is greater than 1, then increase the configuration's batch size accordingly to accomodate the distribution strategy

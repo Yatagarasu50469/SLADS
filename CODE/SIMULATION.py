@@ -3,7 +3,7 @@
 #==================================================================
 
 #Given a set of sample paths, perform simulations using a trained SLADS Model
-def simulateSLADS(sortedSampleFolders, dir_Results, optimalC, modelName):
+def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
     
     #If consistency in the random generator is desired for comparisons, then reset seed
     if consistentSeed: 
@@ -11,17 +11,22 @@ def simulateSLADS(sortedSampleFolders, dir_Results, optimalC, modelName):
         random.seed(0)
 
     #Load the samples
-    sampleDataset = [SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, lineRevist, False, True, False) for sampleFolder in tqdm(sortedSampleFolders, desc='Reading', leave=True, ascii=asciiFlag)]
-    
+    sampleDataset = [SampleData(sampleFolder, initialPercToScan, stopPerc, scanMethod, lineRevist, False, True, False) for sampleFolder in tqdm(sortedSampleFolders, desc='Imports', leave=True, ascii=asciiFlag)]
+    numJobs = len(sampleDataset)
+
     #Store the complete databases to disk; sometimes useful/needed for post-processing and results writeup
     if storeTestingSampleData: pickle.dump(sampleDataset, open(dir_TestingResults + 'testingSampleData.p', 'wb'))
     
-    #Deploy model, running once for pre-compilation on GPU (otherwise affects reported timings)
-    model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName)
-    if erdModel == 'DLADS': _ = ray.get(model.generateERD.remote(np.empty((1,512,512,3), dtype=np.float32)))
+    #Setup a model for each GPU available (provided there is a job for it), running once on for pre-compilation (otherwise affects reported timings)
+    if (erdModel == 'DLADS' or erdModel == 'GLANDS') and numGPUs > 0: 
+        models = [Model_Actor.remote(erdModel, dir_TrainingResults+modelName, gpuNum) for gpuNum in range(0, np.clip(numGPUs, 0, numJobs))]
+        _ = [ray.get(model.generateERD.remote(np.empty((1,512,512,3), dtype=np.float32))) for model in models]
+    else: 
+        models = [Model_Actor.remote(erdModel, dir_TrainingResults+modelName)]
+    numModels = len(models)
     
     #Run algorithm for each of the samples, in parallel if possible, timing and storing metric progression for each; (1 less CPU in pool for model server deployment)
-    if parallelization and len(sampleDataset)>1: 
+    if parallelization and numJobs>1: 
     
         #Initialize a global progress bar
         maxProgress = round(float(np.sum([sampleData.stopPerc for sampleData in sampleDataset])), 2)
@@ -29,8 +34,9 @@ def simulateSLADS(sortedSampleFolders, dir_Results, optimalC, modelName):
         samplingProgress_Actor = SamplingProgress_Actor.remote()
         
         #Start parallel sampling operations
-        futures = [(sampleDataset[sampleNum], optimalC, model, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False, False, True, samplingProgress_Actor, 1.0) for sampleNum in range(0,len(sampleDataset))]
-        computePool = Pool(numberCPUS-1)
+        if numGPUs > 0: futures = [(sampleDataset[sampleNum], optimalC, models[sampleNum%numModels], percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False, False, True, samplingProgress_Actor, 1.0) for sampleNum in range(0, numJobs)]
+        else: futures = [(sampleDataset[sampleNum], optimalC, models[0], percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False, False, True, samplingProgress_Actor, 1.0) for sampleNum in range(0, numJobs)]
+        computePool = Pool(numberCPUS-numModels)
         results = computePool.starmap_async(runSampling, futures)
         computePool.close()
         
@@ -50,7 +56,7 @@ def simulateSLADS(sortedSampleFolders, dir_Results, optimalC, modelName):
         results = results.get()
         del samplingProgress_Actor
         resetRay(numberCPUS)
-    else: results = [runSampling(sampleDataset[sampleNum], optimalC, model, percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False, False, False) for sampleNum in tqdm(range(0,len(sampleDataset)), desc='Samples', position=0, leave=True, ascii=asciiFlag)]
+    else: results = [runSampling(sampleDataset[sampleNum], optimalC, models[0], percToScan, percToViz, False, False, lineVisitAll, liveOutputFlag, dir_Results, False, False, False) for sampleNum in tqdm(range(0, numJobs), desc='Samples', position=0, leave=True, ascii=asciiFlag)]
     
     #Perform completion/visualization routines
     chanAvgPSNR_Results, allAvgPSNR_Results, sumImagePSNR_Results, ERDPSNR_Results = [], [], [], []
@@ -142,15 +148,15 @@ def simulateSLADS(sortedSampleFolders, dir_Results, optimalC, modelName):
     basicPlot(quantityMeasured, ERDSSIM_Results_mean, dir_Results+'SSIM_ERD'+'.png', xLabel=xLabel, yLabel='Average SSIM')
 
     #Find the final results for each image
-    lastQuantityMeasured = [quantityMeasured_Results[i][-1] for i in range(0, len(sampleDataset))]
-    lastChanAvgPSNR = [chanAvgPSNR_Results[i][-1] for i in range(0, len(sampleDataset))]
-    lastAllAvgPSNR = [allAvgPSNR_Results[i][-1] for i in range(0, len(sampleDataset))]
-    lastSumImagePSNR = [sumImagePSNR_Results[i][-1] for i in range(0, len(sampleDataset))]
-    lastERDPSNR = [ERDPSNR_Results[i][-1] for i in range(0, len(sampleDataset))]
-    lastChanAvgSSIM = [chanAvgSSIM_Results[i][-1] for i in range(0, len(sampleDataset))]
-    lastAllAvgSSIM = [chanAvgSSIM_Results[i][-1] for i in range(0, len(sampleDataset))]
-    lastSumImageSSIM = [sumImageSSIM_Results[i][-1] for i in range(0, len(sampleDataset))]
-    lastERDSSIM = [ERDSSIM_Results[i][-1] for i in range(0, len(sampleDataset))]
+    lastQuantityMeasured = [quantityMeasured_Results[i][-1] for i in range(0, numJobs)]
+    lastChanAvgPSNR = [chanAvgPSNR_Results[i][-1] for i in range(0, numJobs)]
+    lastAllAvgPSNR = [allAvgPSNR_Results[i][-1] for i in range(0, numJobs)]
+    lastSumImagePSNR = [sumImagePSNR_Results[i][-1] for i in range(0, numJobs)]
+    lastERDPSNR = [ERDPSNR_Results[i][-1] for i in range(0, numJobs)]
+    lastChanAvgSSIM = [chanAvgSSIM_Results[i][-1] for i in range(0, numJobs)]
+    lastAllAvgSSIM = [chanAvgSSIM_Results[i][-1] for i in range(0, numJobs)]
+    lastSumImageSSIM = [sumImageSSIM_Results[i][-1] for i in range(0, numJobs)]
+    lastERDSSIM = [ERDSSIM_Results[i][-1] for i in range(0, numJobs)]
     allERDTimes = np.concatenate(allERDTimes)
     
     #Print out final results 
