@@ -549,7 +549,7 @@ class SampleData:
                                 scanData = np.array(data.scan(pos, 'profile'))
                                 mzs, ints = scanData[:,0], scanData[:,1]
                             filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
-                            mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices))
+                            if self.readAllMSI: mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices))
                             for mzRangeNum in range(0, len(self.mzRanges)):
                                 mzRange = self.mzRanges[mzRangeNum]
                                 chanDataLine[mzRangeNum].append(np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]))
