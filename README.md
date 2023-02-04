@@ -58,7 +58,8 @@
                     0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
                     0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
                     0.9.4   Fix group-based and c value selection, distributed multi-GPU simulations, updated Otsu segmented linewise
-                    0.9.5   MALDI optical image input, option to disable whole spectra metrics, GLANDS
+                    0.9.5   MALDI optical image input, option to disable whole spectra reading, metrics, and final .imzML output
+                    0.9.6   GLANDS
                     x.x.x+  Iterative feature selection mechanism for selection of target channels
                     x.x.x+  Experimental MALDI integration
                     ~1.0.0  Release installation method for python package manager

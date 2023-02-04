@@ -99,14 +99,15 @@ class Recon_Actor:
 class Reader_MSI_Actor:
     
     #Create buffers for holding all MSI images, the specified channel images, and the sum of all values
-    def __init__(self, sampleType, mzNum, chanNum, yDim, xDim, allImagesPath, squareAllImagesPath):
+    def __init__(self, sampleType, readAllMSI, mzNum, chanNum, yDim, xDim, allImagesPath, squareAllImagesPath):
+        self.readAllMSI = readAllMSI
         warnings.filterwarnings("ignore")
         self.sampleType = sampleType
         self.yDim = yDim
         self.xDim = xDim
         self.allImagesPath = allImagesPath
         self.squareAllImagesPath = squareAllImagesPath
-        self.allImages = np.zeros((yDim, xDim, mzNum), dtype=np.float32)
+        if self.readAllMSI: self.allImages = np.zeros((yDim, xDim, mzNum), dtype=np.float32)
         self.chanImages = np.zeros((yDim, xDim, chanNum), dtype=np.float32)
         self.sumImage = np.zeros((yDim, xDim), dtype=np.float32)
         if sampleType == 'DESI': self.mzDataComplete, self.origTimesComplete, self.lineNumComplete, self.readScanFiles = [], [], [], []
@@ -119,18 +120,18 @@ class Reader_MSI_Actor:
     def setValues(self, indexData, mzDataTotal, chanDataTotal, sumDataTotal, origTimesTotal=None, lineNumTotal=None, newReadScanFiles=None, allDataInterpFailTotal=None):
         if self.sampleType == 'MALDI':
             yLocations, xLocations = self.coordinates[indexData,1], self.coordinates[indexData,0]
-            self.allImages[yLocations, xLocations, :] = mzDataTotal
+            if self.readAllMSI: self.allImages[yLocations, xLocations, :] = mzDataTotal
             self.chanImages[yLocations, xLocations, :] = chanDataTotal
             self.sumImage[yLocations, xLocations] = sumDataTotal
         elif self.sampleType == 'DESI':
             self.sumImage[lineNumTotal, :] = sumDataTotal
             self.chanImages[lineNumTotal, :, :] = chanDataTotal
-            for indexNum in range(0, len(indexData)):
+            for indexNum in range(0, len(mzDataTotal)):
                 if allDataInterpFailTotal[indexNum]: 
                     self.mzDataComplete.append(mzDataTotal[indexNum])
                     self.origTimesComplete.append(copy.deepcopy(origTimesTotal[indexNum]))
                     self.lineNumComplete.append(lineNumTotal[indexNum])
-                else: self.allImages[lineNumTotal[indexNum], :, :] = mzDataTotal[indexNum]
+                elif self.readAllMSI: self.allImages[lineNumTotal[indexNum], :, :] = mzDataTotal[indexNum]
                 self.readScanFiles.append(newReadScanFiles[indexNum])
     
     #Write data to a .hdf5 file at the prespecified location on disk and return the max value for each m/z; for DESI save square varations as well for later reconstructions
@@ -172,7 +173,7 @@ class Reader_MSI_Actor:
     
 #Read in the sample MSI data for a set of indexes and set those values in shared memory location; must use blocking call (ray.get) to prevent data corruption
 @ray.remote
-def msi_parhelper(allImagesActor, scanFileNames, indexData, mzOriginalIndices, mzRanges, sampleType, mzLowerBound, mzUpperBound, mzLowerIndex, mzPrecision, mzRound, mzInitialCount, mask, newTimes, finalDim, sampleWidth, scanRate, mzFinal=None, mzFinalGrid=None, chanValues=None, chanFinalGrid=None, impModel=None, postModel=None, impOffset=None, scanMethod=None, lineMethod=None, physicalLineNums=None, ignoreMissingLines=None, missingLines=None, unorderedNames=None):
+def msi_parhelper(allImagesActor, readAllMSI, scanFileNames, indexData, mzOriginalIndices, mzRanges, sampleType, mzLowerBound, mzUpperBound, mzLowerIndex, mzPrecision, mzRound, mzInitialCount, mask, newTimes, finalDim, sampleWidth, scanRate, mzFinal=None, mzFinalGrid=None, chanValues=None, chanFinalGrid=None, impFlag=False, postFlag=False, impOffset=None, scanMethod=None, lineMethod=None, physicalLineNums=None, ignoreMissingLines=None, missingLines=None, unorderedNames=None):
     warnings.filterwarnings("ignore")
     mzDataTotal, chanDataTotal, sumDataTotal = [], [], []
     if sampleType == 'MALDI':
@@ -185,7 +186,7 @@ def msi_parhelper(allImagesActor, scanFileNames, indexData, mzOriginalIndices, m
             mzs, ints = data.getspectrum(index)
             sumDataTotal.append(np.sum(ints))
             filtIndexLow, filtIndexHigh = bisect_left(mzs, mzLowerBound), bisect_right(mzs, mzUpperBound)
-            mzDataTotal.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
+            if readAllMSI: mzDataTotal.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
             chanDataTotal.append(np.asarray([np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]) for mzRange in mzRanges]))      
         _ = ray.get(allImagesActor.setValues.remote(indexData, mzDataTotal, chanDataTotal, sumDataTotal))
 
@@ -197,7 +198,7 @@ def msi_parhelper(allImagesActor, scanFileNames, indexData, mzOriginalIndices, m
         #Duplicate input in this space so as to be writable for regular grid interpolation
         chanValues = copy.deepcopy(chanValues) 
         
-        #Keep for trying all mz interp in parallel
+        #Keep for trying all m/z interp in parallel
         mzFinal = copy.deepcopy(mzFinal)
         
         #Process each of the files assigned to this helper
@@ -212,7 +213,7 @@ def msi_parhelper(allImagesActor, scanFileNames, indexData, mzOriginalIndices, m
             try: data = mzFile(scanFileName)
             except: errorFlag = True
             
-            #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number
+            #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number minus 1
             if not errorFlag:
                 fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
                 if unorderedNames: 
@@ -243,12 +244,9 @@ def msi_parhelper(allImagesActor, scanFileNames, indexData, mzOriginalIndices, m
                 #Offset the original measurement times, such that the first position's time equals 0
                 origTimes -= np.min(origTimes)
                 
-                #Process data for each measured location
-                chanDataLine, mzDataLine = [[] for _ in range(0, len(mzRanges))], []
-                
                 #If the data is being sparesly acquired in lines, then the listed times in the file need to be shifted
-                if (impModel or postModel) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(mask[lineNum]==1).min()/finalDim[1])*(((sampleWidth*1e3)/scanRate)/60)
-                elif (impModel or postModel) and impOffset: sys.exit('Error - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
+                if (impFlag or postFlag) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(mask[lineNum]==1).min()/finalDim[1])*(((sampleWidth*1e3)/scanRate)/60)
+                elif (impFlag or postFlag) and impOffset: sys.exit('Error - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
             
                 #Seup storage locations for each measured location
                 chanDataLine, mzDataLine = [[] for _ in range(0, len(mzRanges))], []
@@ -267,7 +265,7 @@ def msi_parhelper(allImagesActor, scanFileNames, indexData, mzOriginalIndices, m
                         scanData = np.array(data.scan(pos, 'profile'))
                         mzs, ints = scanData[:,0], scanData[:,1]
                     filtIndexLow, filtIndexHigh = bisect_left(mzs, mzLowerBound), bisect_right(mzs, mzUpperBound)
-                    mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
+                    if readAllMSI: mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
                     for mzRangeNum in range(0, len(mzRanges)):
                         mzRange = mzRanges[mzRangeNum]
                         chanDataLine[mzRangeNum].append(np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]))
@@ -278,22 +276,23 @@ def msi_parhelper(allImagesActor, scanFileNames, indexData, mzOriginalIndices, m
                 chanDataTotal.append(scipy.interpolate.RegularGridInterpolator((origTimes, chanValues), np.asarray(chanDataLine, dtype='float64').T, bounds_error=False, fill_value=0)(chanFinalGrid).astype('float32').T)
                 sumDataTotal.append(np.interp(newTimes, origTimes, np.nan_to_num(sumImageLine, nan=0, posinf=0, neginf=0), left=0, right=0))
                 
-                #If mz line data cannot be interpolated in set time, then try to initiate a fallback method to do so sequentially later
+                #If reading all MSI data and m/z line data cannot be interpolated in set time, then try to initiate a fallback method to do so sequentially later
                 #Note that if system is sufficiently memory bottlenecked for this to happen, this method may crash from OOM in transmission to shared memory actor anyways
-                timeOutCounter, allDataInterpFail = 0, False
-                while True:
-                    try: 
-                        mzDataLine = scipy.interpolate.RegularGridInterpolator((origTimes, mzFinal), np.asarray(mzDataLine, dtype='float64'), bounds_error=False, fill_value=0)(mzFinalGrid).astype('float32').T
-                        break
-                    except: 
-                        if timeOutCounter==10: print('Warning - Interpolation of m/z line data in parallel failed, due to memory limit. This process will retry, but if this warning occurs repeatedly, better perfomance might be achieved by increasing the number of reserved threads, or disabling parallelization.')
-                        time.sleep(1)
-                        timeOutCounter += 1
-                        if timeOutCounter == 20: 
-                            print('Warning - Interpolation of m/z line data in parallel failed multiple times due to memory limit, initiating fallback for file import. If this warning occurs repeatedly, better perfomance might be achieved by increasing the number of reserved threads, or disabling parallelization.')
-                            allDataInterpFail = True
-                allDataInterpFailTotal.append(allDataInterpFail)
-                mzDataTotal.append(mzDataLine)
+                if readAllMSI: 
+                    timeOutCounter, allDataInterpFail = 0, False
+                    while True:
+                        try: 
+                            mzDataLine = scipy.interpolate.RegularGridInterpolator((origTimes, mzFinal), np.asarray(mzDataLine, dtype='float64'), bounds_error=False, fill_value=0)(mzFinalGrid).astype('float32').T
+                            break
+                        except: 
+                            if timeOutCounter==10: print('Warning - Interpolation of m/z line data in parallel failed, due to memory limit. This process will retry, but if this warning occurs repeatedly, better perfomance might be achieved by increasing the number of reserved threads, or disabling parallelization.')
+                            time.sleep(1)
+                            timeOutCounter += 1
+                            if timeOutCounter == 20: 
+                                print('Warning - Interpolation of m/z line data in parallel failed multiple times due to memory limit, initiating fallback for file import. If this warning occurs repeatedly, better perfomance might be achieved by increasing the number of reserved threads, or disabling parallelization.')
+                                allDataInterpFail = True
+                    allDataInterpFailTotal.append(allDataInterpFail)
+                    mzDataTotal.append(mzDataLine)
         
                 #Close the file
                 data.close()

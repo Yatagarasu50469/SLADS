@@ -16,9 +16,11 @@ if chanSingle: modelName += 'chanSingle_'
 else: modelName += 'chanMultiple_'
 if staticWindow: modelName += 'statWin_' + str(staticWindowSize) + '_'
 if not staticWindow: modelName += 'dynWin_' + str(dynWindowSigMult) + '_'
+if applyOptical != None: modelName += 'optical' + applyOptical + '_'
 
 #Data input directories
 dir_InputData = '.' + os.path.sep + 'INPUT' + os.path.sep
+if overrideInputsFolder != None: dir_InputData = overrideInputsFolder
 dir_TrainingData = dir_InputData + 'TRAIN' + os.path.sep
 dir_TestingData = dir_InputData + 'TEST' + os.path.sep
 dir_PostData = dir_InputData + 'POST' + os.path.sep

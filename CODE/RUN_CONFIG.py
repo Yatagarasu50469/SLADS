@@ -90,7 +90,7 @@ if testingModel:
 
 #If a model is to be used in an implementation
 if impModel:
-    sectionTitle('IMPLEMENTING MODEL')
+    sectionTitle('PERFORMING PHYSICAL EXPERIMENT')
     performImplementation(optimalC, modelName)
 
 #If post-processing is to be performed

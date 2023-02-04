@@ -13,14 +13,14 @@ def postprocess(sortedSampleFolders, optimalC, modelName):
         model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName)
     
     #Load in data, creating corresponding sample and result objects
-    sampleDataset = [SampleData(sampleFolder, 0, stopPerc, scanMethod, lineRevist, True, True, False) for sampleFolder in tqdm(sortedSampleFolders, desc='Samples', leave=True, ascii=asciiFlag)]
+    sampleDataset = [SampleData(sampleFolder, 0, stopPerc, scanMethod, lineRevist, True, False, False, False, liveOutputFlag, False, True, False) for sampleFolder in tqdm(sortedSampleFolders, desc='Samples', leave=True, ascii=asciiFlag)]
     samples = [Sample(sampleData) for sampleData in sampleDataset]
-    results = [Result(sampleData, liveOutputFlag, dir_PostResults, False, False, optimalC, False) for sampleData in sampleDataset]
+    results = [Result(sampleData, dir_PostResults, optimalC) for sampleData in sampleDataset]
     
     #Perform computations for the measurement state and update corresponding result objects
     for sampleNum in range(0, len(sortedSampleFolders)):
-        samples[sampleNum].performMeasurements(sampleDataset[sampleNum], results[sampleNum], [], model, optimalC, False, False, False, False)
+        samples[sampleNum].performMeasurements(sampleDataset[sampleNum], results[sampleNum], [], model, optimalC, False)
         results[sampleNum].update(samples[sampleNum])
 
     #Call completion/printout function for each result
-    _ = [result.complete() for result in tqdm(results, desc='Visualization', position=0, leave=True, ascii=True)]
+    _ = [result.complete() for result in tqdm(results, desc='Visualizing', position=0, leave=True, ascii=True)]

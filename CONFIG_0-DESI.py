@@ -70,11 +70,21 @@ erdModel = 'DLADS'
 scanMethod = 'linewise'
 
 #If pointwise stopping percentage for number of acquired locations
-#If linewise and percLine method, percentage of locations to acquire per line
+#If linewise and segLine method, percentage of locations to acquire per line
 stopPerc = (1/3)*100
 
-#Should the final reconstructed data be saved in .imzML format
-imzMLExport = True
+#Should the final reconstructed data of all channels be saved in .imzML format (MSI only; default: False)
+imzMLExport = False
+
+#Should data from all channels be read in during a scan and exported in .imzML format at the end of scanning (MSI only; default: False)
+allChanRead = False
+
+#Should an evaluation of reconstructions be performed across all channels; overrides allChanRead (MSI only; default: False)
+allChanEval = False
+
+#If all samples have FOV aligned optical image files, how should they be utilized: 'modelInput', 'biasDistortion' or None (default: None)
+#This parameter must be consistently applied for optimizing c value, training a model, and eventual testing/implementation
+applyOptical = None
 
 #Should inputs to model and RDPP calculations be adjusted: 'rescale', 'standardize', or None (default: None)
 #Only affects DLADS and GLANDS pipelines; setting must match between model training and use
@@ -82,12 +92,6 @@ dataAdjust = None
 
 #If using IDW reconstruction, how many neighbors should be considered
 numNeighbors = 10
-
-#Should static window be used in RD generation
-staticWindow = False
-
-#If a static window is to be used, what size (symmetric) should it be ([15,15] for SLADS(-Net))
-staticWindowSize = 15
 
 #If a dynamic window is to be used, what multiple of the sigma value should be used
 dynWindowSigMult = 3
@@ -106,7 +110,7 @@ impInputDir = None
 #If the measurement times listed in the acquried MSI files do not start with 0 being at the left-side of the FOV
 impOffset = True
 
-#Should output visualizations be generated during acquisition? (Not recommended; substantially reduces performance)
+#Should output visualizations be generated during acquisition? Highly not recommended (expensive) nor regularly validated (default: False)
 liveOutputFlag = False
 
 #==================================================================
@@ -124,7 +128,7 @@ initialPercToScan = 1
 #If an oracle run, will set the RD values in unmeasured locations, that would be impacted by selected scan positions, to zero
 percToScan = None
 
-#Percentage of points to acquire between visualizations; if all steps should be, then set to None (default: 1)
+#Percentage of points to acquire between visualizations; if all steps should be, then set to None (pointwise default: 1; linewise default: None)
 percToViz = None
 
 #==================================================================
@@ -142,6 +146,9 @@ linePointSelection = 'group'
 
 #If using a segLine, how should the start and end points be determined (minPerc, left/right most of the top stopPerc ERD values) (otsu, left/right most of the foreground ERD found with Otsu)
 segLineMethod = 'otsu'
+
+#Should lines be allowed to be revisited
+lineRevist = False
 
 #Should all lines be scanned at least once
 lineVisitAll = True
@@ -165,6 +172,9 @@ stopPercTrain = 30
 #How many masks should be used for each percentage during training
 numMasks = 1
 
+#Should visualizations of the training/validation samples be generated during database generation (default: False)
+visualizeTrainingData = False
+
 #==================================================================
 
 #==================================================================
@@ -173,7 +183,7 @@ numMasks = 1
 #==================================================================
 
 #Possible c values for RD approximation
-cValues = np.array([1, 2, 4, 8, 16, 32, 64, 128, 256])
+cValues = [1, 2, 4, 8, 16, 32, 64, 128, 256]
 
 #When optimizing c, percentage of points (group-based) to acquire; otherwise set to None (default: 1)
 #Temporarily sets the RD values in unmeasured locations, that would be impacted by selected scan positions, to zero
@@ -182,9 +192,6 @@ percToScanC = 1
 
 #When optimizing c, percentage of points to acquire between visualizations; if all steps should be, then set to None (default: None)
 percToVizC = None
-
-#Should the PSNR of all channels be used for c value optimization (True, computationally expensive), or just targeted channels (default: False)
-cAllChanOpt = False
 
 #==================================================================
 
@@ -232,9 +239,6 @@ minimumEpochs = 10
 #What percentage of the training data should be used for training (setting as 1.0 or using one input sample will use training loss for early stopping criteria)
 trainingSplit = 0.8
 
-#Should visualizations of the training/validation samples be generated during database generation
-visualizeTrainingData = True
-
 #Should visualizations of the training progression be generated
 trainingProgressionVisuals = True
 
@@ -250,6 +254,18 @@ trainingVizSteps = 10
 #PARAMETERS: L3
 #GENERALLY NOT CHANGED
 ##################################################################
+
+#If an alternate .csv file should be used instead of './channels.csv', in the event that a sample does not include its own, specify it here (default: None)
+overrideChannelsFile = None
+
+#If a folder other than the default './INPUT/' should be used, specify it here (default: None)
+overrideInputsFolder = None
+
+#Should static window be used in RD generation
+staticWindow = False
+
+#If a static window is to be used, what size (symmetric) should it be ([15,15] for SLADS(-Net))
+staticWindowSize = 15
 
 #Should only a single channel be used as the network input (MSI uses first channel in channels.csv local/global file, IMAGE uses first channel read)
 chanSingle = False
@@ -272,7 +288,7 @@ overWriteFile = None
 #Should testing/simulation sample data object be saved; sometimes needed for post-processing and results writeup
 storeTestingSampleData = False
 
-#Shoud progress bars use ascii formatting
+#Should progress bars use ascii formatting
 asciiFlag = False
 
 ##################################################################
@@ -283,6 +299,10 @@ asciiFlag = False
 #DO NOT CHANGE - ALTERNATIVE OPTIONS NOT CURRENTLY FUNCTIONAL
 ##################################################################
 
+#Should m/z channels be automatically selected based on the training data (MSI Specific)
+#Not currently implemented; initial import would readScanData with no channels, then determine m/z channels, then readScanData with channels...
+mzAutoSelection = False
+
 ##################################################################
 
 
@@ -290,9 +310,6 @@ asciiFlag = False
 #PARAMETERS: L5
 #DEBUG/DEPRECATED - OPTIONS LIKELY TO BE REMOVED IN FUTURE
 ##################################################################
-
-#Should lines be allowed to be revisited
-lineRevist = False
 
 ##################################################################
 

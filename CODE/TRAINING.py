@@ -137,20 +137,25 @@ class EpochEnd(Callback):
             f.savefig(self.dir_TrainingModelResults + 'epoch_' +str(epoch) + '.png', bbox_inches='tight')
             plt.close()
 
-#Read in training and validation data; do not this section with parallelization, makes optimizeC inconsistent, forcing seed in SampleData initialization reduces training data variance
+#Read in training and validation data; do not run this section with parallelization, makes optimizeC behavior inconsistent
 def importInitialData(sortedSampleFolders):
     if consistentSeed: 
         np.random.seed(0)
         random.seed(0)
-    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPercTrain, 'pointwise', lineRevist, False, True, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Imports', leave=True, ascii=asciiFlag)], dtype='object')
+    trainingValidationSampleData = np.asarray([SampleData(sampleFolder, initialPercToScan, stopPercTrain, 'pointwise', lineRevist, True, True, True, False, False, False, False, True) for sampleFolder in tqdm(sortedSampleFolders, desc='Imports', leave=True, ascii=asciiFlag)], dtype='object')
     pickle.dump(trainingValidationSampleData, open(dir_TrainingResults + 'trainingValidationSampleData.p', 'wb'))
     return trainingValidationSampleData
 
 #Given a set of samples, determine an optimal c value
-def optimizeC(trainingSampleData):
+def optimizeC(sampleDataSet):
     
     #If there are more than one c value, determine which maximizes the progressive PSNR in the samples; force pointwise acquisition (done during initial import!)
     if len(cValues)>1:
+        
+        #Set bestCFlag to true and datagenFlag to false for each of the sampleData that will be used
+        for sampleNum in range(0, len(sampleDataSet)): 
+            sampleDataSet[sampleNum].bestCFlag = True
+            sampleDataSet[sampleNum].datagenFlag = False
         
         t0 = time.time()
         if parallelization:
@@ -161,9 +166,9 @@ def optimizeC(trainingSampleData):
             #Setup sampling jobs and determine total amount of work that is going to be done
             futures, maxProgress = [], 0.0
             for cNum in range(0, len(cValues)):
-                for sampleNum in range(0, len(trainingSampleData)):
-                    futures.append((trainingSampleData[sampleNum], cValues[cNum], False, percToScanC, percToVizC, True, False, lineVisitAll, False, None, False, False, True, samplingProgress_Actor, 1.0))
-                    maxProgress += trainingSampleData[sampleNum].stopPerc
+                for sampleNum in range(0, len(sampleDataSet)):
+                    futures.append((sampleDataSet[sampleNum], cValues[cNum], False, percToScanC, percToVizC, lineVisitAll, None, True, samplingProgress_Actor, 1.0))
+                    maxProgress += sampleDataSet[sampleNum].stopPerc
             maxProgress = round(maxProgress, 2)
             
             #Initialize a global progress bar and start parallel sampling operations
@@ -191,7 +196,7 @@ def optimizeC(trainingSampleData):
         else:
             results = []
             for cNum in tqdm(range(0, len(cValues)), desc='c Value Sampling', leave=True, ascii=asciiFlag):
-                results.append([runSampling(trainingSampleData[sampleNum], cValues[cNum], False, percToScanC, percToVizC, True, False, lineVisitAll, False, None, False, False, False) for sampleNum in tqdm(range(0, len(trainingSampleData)), desc='Samples', leave=False, ascii=asciiFlag)])
+                results.append([runSampling(sampleDataSet[sampleNum], cValues[cNum], False, percToScanC, percToVizC, lineVisitAll, None, False) for sampleNum in tqdm(range(0, len(sampleDataSet)), desc='Samples', leave=False, ascii=asciiFlag)])
         
         areaUnderCurveList, allRDTimesList, dataPrintout = [], [], [['','Average', '', 'Standard Deviation']]
         for cNum in tqdm(range(0, len(cValues)), desc='Evaluation', leave=True, ascii=asciiFlag):
@@ -201,8 +206,7 @@ def optimizeC(trainingSampleData):
             
             #Compute and save area under the PSNR curve
             for result in tqdm(results[cNum], desc='Samples', leave=False, ascii=asciiFlag): result.complete()
-            if cAllChanOpt: AUC = [np.trapz(result.allAvgPSNRList, result.percsMeasured) for result in results[cNum]]
-            else: AUC = [np.trapz(result.chanAvgPSNRList, result.percsMeasured) for result in results[cNum]]
+            AUC = [np.trapz(result.chanAvgPSNRList, result.percsMeasured) for result in results[cNum]]
             areaUnderCurveList.append(np.mean(AUC))
             
             #Extract RD computation times
@@ -210,14 +214,12 @@ def optimizeC(trainingSampleData):
             
             #Save information for output to file
             dataPrintout.append(['c Value', cValues[cNum]])
-            if cAllChanOpt: dataPrintout.append(['PSNR (dB) Area Under Curve for Targeted Channels:', np.mean(AUC), '+/-', np.std(AUC)])
-            else: dataPrintout.append(['PSNR (dB) Area Under Curve for All Channels:', np.mean(AUC), '+/-', np.std(AUC)])
+            dataPrintout.append(['PSNR (dB) Area Under Curve for Targeted Channels:', np.mean(AUC), '+/-', np.std(AUC)])
             dataPrintout.append(['Average RD Compute Time (s)', np.mean(allRDTimes), '+/-', np.std(allRDTimes)])
             dataPrintout.append([])
             
             #Extract percentage results at the specified precision
-            if cAllChanOpt: percents, trainMetricAvg = percResults([result.allAvgPSNRList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
-            else: percents, trainMetricAvg = percResults([result.chanAvgPSNRList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
+            percents, trainMetricAvg = percResults([result.chanAvgPSNRList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
             
             #Visualize/save the averaged curve for the given c value
             np.savetxt(dir_TrainingResults+'optimizationCurve_c_' + str(cValues[cNum]) + '.csv', np.transpose([percents, trainMetricAvg]), delimiter=',')
@@ -228,8 +230,7 @@ def optimizeC(trainingSampleData):
             #ax1.plot(results[cNum][0].percsMeasured, results[cNum][0].chanAvgPSNRList, color='black')
             ax1.plot(percents, trainMetricAvg, color='black')
             ax1.set_xlabel('% Measured')
-            if cAllChanOpt: ax1.set_ylabel('Average Reconstruction PSNR (dB) of All Channels')
-            else: ax1.set_ylabel('Average Reconstruction PSNR (dB) of Targeted Channels')
+            ax1.set_ylabel('Average Reconstruction PSNR (dB) of Targeted Channels')
             ax1.set_title('Area Under Curve: ' + str(areaUnderCurveList[-1]), fontsize=15, fontweight='bold')
             plt.savefig(dir_TrainingResults + 'optimizationCurve_c_' + str(cValues[cNum]) + '.png')
             plt.close()
@@ -239,6 +240,11 @@ def optimizeC(trainingSampleData):
         
         #Select the c value and corresponding model that maximizes the PSNR across the samples' progression
         bestCIndex = np.argmax(areaUnderCurveList)
+        
+        #Reset bestCFlag and datagenFlag back to False and True for each of the sampleData used
+        for sampleNum in range(0, len(sampleDataSet)): 
+            sampleDataSet[sampleNum].bestCFlag = False
+            sampleDataSet[sampleNum].datagenFlag = True
         
     else: bestCIndex = 0
         
@@ -269,31 +275,30 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
     #If parallelization, setup an actor to hold global sampling progress across multiple processes
     if parallelization: samplingProgress_Actor = SamplingProgress_Actor.remote()
     
-    #For the number of mask iterations specified, create new masks and scan them with the specified method
+    #For the number of mask iterations specified, create new masks (should not be done in parallel) and scan them with the specified method
     t0 = time.time()
-    valThresh = round(trainingSplit*len(trainingValidationSampleData))*numMasks
-    results, futures, maxProgress = [], [], 0.0
+    valThresh = int(np.floor(trainingSplit*len(trainingValidationSampleData)))-1
+    results, futures, maxProgress, trainSampleBoolList = [], [], 0.0, []
     for index in tqdm(range(0, len(trainingValidationSampleData)), desc = 'Samples', leave=True, ascii=asciiFlag, disable=parallelization):
+        if index <= valThresh: trainSampleBool = True
+        else: trainSampleBool = False
         for maskNum in tqdm(range(0,numMasks), desc = 'Masks', leave=False, ascii=asciiFlag, disable=parallelization):
             
-            #Make a copy of the sampleData
+            #Make a copy of the sampleData with a new initial measurement mask
             sampleData = copy.deepcopy(trainingValidationSampleData[index])
-            
-            #Create new measurement mask
-            sampleData.initialPercToScan = initialPercToScanTrain
-            sampleData.stopPerc = stopPercTrain
             sampleData.generateInitialSets('random')
             
-            #Change location for results/visuals depending on if sample belongs to training or validation sets
-            if (index*numMasks)+maskNum < valThresh: saveLocation = trainSaveLocations[maskNum]
+            #Change location and a boolean flag for results/visuals depending on if sample belongs to training or validation sets
+            trainSampleBoolList.append(trainSampleBool)
+            if trainSampleBool: saveLocation = trainSaveLocations[maskNum]
             else: saveLocation = valSaveLocations[maskNum]
             
             #If parallel, then add job to list, otherwise just run and collect the result
             if parallelization: 
-                futures.append((sampleData, optimalC, False, 1, None, False, True, lineVisitAll, False, saveLocation, True, False, True, samplingProgress_Actor, 1.0))
+                futures.append((sampleData, optimalC, False, 1, None, lineVisitAll, saveLocation, True, samplingProgress_Actor, 1.0))
                 maxProgress+=sampleData.stopPerc
             else: 
-                results.append(runSampling(sampleData, optimalC, False, 1, None, False, True, lineVisitAll, False, saveLocation, True, False, False))
+                results.append(runSampling(sampleData, optimalC, False, 1, None, lineVisitAll, saveLocation, False))
     maxProgress = round(maxProgress, 2)
     
     #If parallel, initialize a global progress bar, start jobs, and wait for results, regularly updating progress bar
@@ -328,7 +333,6 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
     dataPrintout.append(['RD Compute Time (s)', np.mean(allRDTimes), '+/-', np.std(allRDTimes)])
     pd.DataFrame(dataPrintout).to_csv(dir_TrainingResults + 'trainingValidation_RDTimes.csv')
     
-    
     #Reference a result, call for result completion/printout, and sort into either training or validation sets
     trainingDatabase, validationDatabase = [], []
     for index in tqdm(range(0, len(results)), desc='Processing', leave=True, ascii=asciiFlag):
@@ -341,7 +345,7 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
             #Also, make sure allImages aren't being unneccessarily loaded for this...
             #del sample.iteration, sample.percMeasured, sample.squareERD, sample.squareERDS, sample.mask
             
-            if index < valThresh: trainingDatabase.append(sample)
+            if trainSampleBoolList[index]: trainingDatabase.append(sample)
             else: validationDatabase.append(sample)
     
     #Store the complete databases to disk

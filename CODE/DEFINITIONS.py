@@ -4,16 +4,28 @@
 
 #Object for initializing and storing sample metadata
 class SampleData:
-    def __init__(self, sampleFolder, initialPercToScan, stopPerc, scanMethod, lineRevist, postFlag, simulationFlag, trainFlag):
+    def __init__(self, sampleFolder, initialPercToScan, stopPerc, scanMethod, lineRevist, simulationFlag, trainFlag, datagenFlag, bestCFlag, liveOutputFlag, impFlag, postFlag, oracleFlag, name='NoSampleName_0'):
         
         #Save options as internal variables
-        self.scanMethod = scanMethod
+        self.sampleFolder = sampleFolder
         self.initialPercToScan = initialPercToScan
         self.stopPerc = stopPerc
+        self.scanMethod = scanMethod
         self.lineRevist = lineRevist
         self.postFlag = postFlag
         self.simulationFlag = simulationFlag
         self.trainFlag = trainFlag
+        self.liveOutputFlag = liveOutputFlag
+        self.impFlag = impFlag
+        self.oracleFlag = oracleFlag
+        self.name = name
+        
+        #These flags should not be changed or used directly during this __init__ metthod
+        self.datagenFlag = datagenFlag
+        self.bestCFlag = bestCFlag
+        
+        #Setup expected initial variables with default values
+        self.allChanEvalFlag = False
         self.lineExt = None
         self.mask = None
         self.unorderedNames = False
@@ -30,7 +42,20 @@ class SampleData:
         self.scanRate = None
         self.maxRadius = 0
         self.gaussianWindows = {}
-
+        self.dataMSI = False
+        self.readAllMSI = False
+        self.mzOriginalIndices = None
+        self.mzLowerIndex = None
+        self.mzInitialCount = None
+        self.mzInitialDist = None
+        self.mzFinal = []
+        self.mzLowerValues = None
+        self.mzUpperValues = None
+        self.mzDistIndices = None
+        self.mzIndices = None
+        self.allImagesPath = None
+        self.squareAllImagesPath = None
+        
         #If linewise and visiting all lines, then set the % per line as the original stop percentage and the latter to 100
         if self.scanMethod == 'linewise' and lineVisitAll: 
             self.linePerc = copy.deepcopy(stopPerc)
@@ -39,13 +64,11 @@ class SampleData:
             self.linePerc = 0.0
             self.stopPerc = stopPerc
         
+        #Store location of MSI data and sample name
+        if self.name == 'NoSampleName_0': self.name = os.path.basename(sampleFolder)
+        
         #Set global variables to indicate that OOM error states have not yet occurred; limited handle for ERD inferencing limitations
         self.OOM_multipleChannels, self.OOM_singleChannel = False, False
-        
-        #Store location of MSI data and sample name
-        self.sampleFolder = sampleFolder
-        self.name = os.path.basename(sampleFolder)
-        if impModel: self.name = impSampleName
         
         #Note which files have already been read
         self.readScanFiles = []
@@ -141,7 +164,17 @@ class SampleData:
 
         #MSI specific
         if self.sampleType == 'MALDI' or self.sampleType == 'DESI':
-        
+            
+            #Indicate MSI data in a shorter variable
+            self.dataMSI = True
+            
+            #If all specturm channel data should be read, then only do so if a non-training simulation or an implementation, or a post-processing run
+            if ((self.simulationFlag and not self.trainFlag) or self.impFlag or self.postFlag) and (allChanEval or allChanRead): 
+                self.readAllMSI = True
+                
+                #If all channels are to be evaluated, then set an internal flag to that effect
+                if allChanEval: self.allChanEvalFlag = True
+            
             #Whether lines are to be ignored or not is dependent on whether the run is a simulation 
             self.ignoreMissingLines = self.simulationFlag
             
@@ -162,18 +195,21 @@ class SampleData:
             self.finalDim = [int(self.sampleHeight), int(self.sampleWidth)]
             self.squareDim = self.finalDim
         
-        #If this is a DESI simulation sample, then get filetype extension and check for missing lines if applicable
-        if self.sampleType == 'DESI' and self.simulationFlag:
+        #If this is an simulation sample, then get filetype extension and check for missing lines in DESI if applicable
+        if self.simulationFlag:
             extensions = list(map(lambda x:x, np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
-            if 'd' in extensions: self.lineExt = '.d'
-            elif 'D' in extensions: self.lineExt = '.D'
-            elif 'raw' in extensions: self.lineExt = '.raw'
-            elif 'RAW' in extensions: self.lineExt = '.RAW'
-            elif 'png' in extensions: self.lineExt = '.png'
-            elif 'jpg' in extensions: self.lineExt = '.jpg'
-            elif 'tiff' in extensions: self.lineExt = '.tiff'
-            elif 'imzML' in extensions: self.lineExt = '.imzML'
-            else: sys.exit('Error! - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
+            if self.dataMSI:
+                if 'd' in extensions: self.lineExt = '.d'
+                elif 'D' in extensions: self.lineExt = '.D'
+                elif 'raw' in extensions: self.lineExt = '.raw'
+                elif 'RAW' in extensions: self.lineExt = '.RAW'
+                elif 'imzML' in extensions: self.lineExt = '.imzML'
+                else: sys.exit('Error! - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
+            elif self.sampleType == 'IMAGE':
+                if 'png' in extensions: self.lineExt = '.png'
+                elif 'jpg' in extensions: self.lineExt = '.jpg'
+                elif 'tiff' in extensions: self.lineExt = '.tiff'
+                else: sys.exit('Error! - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
             scanFileNames = natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'+self.lineExt), reverse=False)
             if self.sampleType == 'DESI' and self.ignoreMissingLines:
                 self.missingLines = np.asarray(list(set(np.arange(1, self.finalDim[0]).tolist()) - set([int(scanFileName.split('line-')[1].split('.')[0].lstrip('0')) for scanFileName in scanFileNames])))-1
@@ -217,13 +253,14 @@ class SampleData:
         #If not just post-processing, setup initial sets
         if not self.postFlag: self.generateInitialSets(self.scanMethod)
         
-        #Determine non-overlapping bins for MSI data based on ppm
-        if self.sampleType=='DESI' or self.sampleType=='MALDI':
-            
-            #Determine minimum difference between m/z at the lower m/z boundary and extract releavant precision information
+        #If MSI data, determine minimum difference between m/z at the lower m/z boundary and extract releavant precision information
+        if self.dataMSI:
             mzMinDiff = (self.mzLowerBound*self.ppmPos)-(self.mzLowerBound*self.ppmNeg)
             self.mzPrecision = truncate(mzMinDiff, -int(np.floor(np.log10(mzMinDiff))))
             self.mzRound = -math.floor(np.log10(self.mzPrecision))
+        
+        #If reading in all MSI Data determine set of non-overlapping bins based on ppm
+        if self.dataMSI and self.readAllMSI:
             
             #Compute the unshifted lower m/z bound's index position
             self.mzLowerIndex = int(self.mzLowerBound/self.mzPrecision)
@@ -255,12 +292,6 @@ class SampleData:
             #Find unique index mapping between maximum precision distribution and the non-overlapping ppm bins
             self.mzIndices, self.mzOriginalIndices = np.unique(self.mzDistIndices, return_index=True)
             
-            #Load targeted m/z values and set corresponding ranges 
-            try: self.chanValues = np.loadtxt(self.sampleFolder+os.path.sep+'channels.csv', delimiter=',')
-            except: self.chanValues = np.loadtxt('channels.csv', delimiter=',')
-            self.numChannels = len(self.chanValues)
-            self.mzRanges = np.round(np.column_stack((self.chanValues*self.ppmNeg, self.chanValues*self.ppmPos)), self.mzRound)
-            
             #Now that all of the final dimensions have been determined, setup .hdf5 file locations, and either a shared memory actor or array, for storing results 
             self.allImagesPath = self.sampleFolder+os.path.sep+'allImages.hdf5'
             if os.path.exists(self.allImagesPath): os.remove(self.allImagesPath)
@@ -269,6 +300,17 @@ class SampleData:
             elif self.sampleType=='DESI':
                 self.squareAllImagesPath = self.sampleFolder+os.path.sep+'squareAllImages.hdf5'
                 if os.path.exists(self.squareAllImagesPath): os.remove(self.squareAllImagesPath)
+            
+        #If MSI data, regardless of if all channel data is to be loaded or not
+        if self.dataMSI:
+            
+            #Load targeted m/z values, preferring those in the sample folders if available, and set corresponding ranges 
+            try: self.chanValues = np.loadtxt(self.sampleFolder+os.path.sep+'channels.csv', delimiter=',')
+            except: 
+                if overrideChannelsFile == None: self.chanValues = np.loadtxt('channels.csv', delimiter=',')
+                else: self.chanValues = np.loadtxt(overrideChannelsFile, delimiter=',')
+            self.numChannels = len(self.chanValues)
+            self.mzRanges = np.round(np.column_stack((self.chanValues*self.ppmNeg, self.chanValues*self.ppmPos)), self.mzRound)
             
             #For DESI MSI samples, create regular grids for interpolating all/targeted m/z data
             if self.sampleType == 'DESI': 
@@ -283,7 +325,7 @@ class SampleData:
             #Setup shared memory actor for operations in parallel, or local memory for serial execution
             if parallelization: 
                 self.mzOriginalIndices_id, self.mzRanges_id = ray.put(self.mzOriginalIndices), ray.put(self.mzRanges)
-                self.reader_MSI_Actor = Reader_MSI_Actor.remote(self.sampleType, len(self.mzFinal), len(self.chanValues), self.finalDim[0], self.finalDim[1], self.allImagesPath, self.squareAllImagesPath)
+                self.reader_MSI_Actor = Reader_MSI_Actor.remote(self.sampleType, self.readAllMSI, len(self.mzFinal), len(self.chanValues), self.finalDim[0], self.finalDim[1], self.allImagesPath, self.squareAllImagesPath)
             else: 
                 self.allImages = np.zeros((len(self.mzFinal), self.finalDim[0], self.finalDim[1]), dtype=np.float32)
         
@@ -291,26 +333,40 @@ class SampleData:
         self.chanImages = np.zeros((self.numChannels, self.finalDim[0], self.finalDim[1]), dtype=np.float32)
         self.sumImage = np.zeros((self.finalDim), dtype=np.float32)
 
-        #If a simulation or post-processing, read all of the sample data and save in hdf5, optimized for loading whole channel images, force clear the actor memory
+        #If an MSI sample and an optical image is to be used try loading different extensions
+        if self.dataMSI and applyOptical != None:
+            opticalImageFound = False
+            for extension in ['.png', '.jpg', '.tiff']:
+                try: 
+                    opticalImage = cv2.imread('optical'+extension, 0)
+                    opticalImageFound = True
+                except: pass
+            if not opticalImageFound: sys.exit('Error - applyOptical was enabled, but no optical image was found for sample: ' + sample.name)
+            self.squareOpticalImage = resize(opticalImage, tuple(self.squareDim), order=0)
+            self.opticalImage = resize(opticalImage, tuple(self.finalDim), order=0)
+            Tracer()
+            
+        #If a simulation or post-processing, read all the sample data and save in hdf5 if applicable, optimized for loading whole channel images, force clear the actor memory
         if self.simulationFlag or self.postFlag: 
             self.readScanData()
-            if self.sampleType == 'MALDI' or self.sampleType == 'DESI': 
+            if self.dataMSI: 
                 if parallelization: 
-                    self.allImagesMax = ray.get(self.reader_MSI_Actor.writeToDisk.remote(self.squareDim))
+                    if self.readAllMSI: self.allImagesMax = ray.get(self.reader_MSI_Actor.writeToDisk.remote(self.squareDim))
                     del self.reader_MSI_Actor, self.mzOriginalIndices_id, self.mzRanges_id
                     if self.sampleType == 'DESI': del self.mzFinalGrid_id, self.chanFinalGrid_id
                     gc.collect()
                 else:
-                    self.allImagesMax = np.max(self.allImages, axis=(1,2))
-                    allImagesFile = h5py.File(self.allImagesPath, 'a')
-                    _ = allImagesFile.create_dataset(name='allImages', data=self.allImages, chunks=(1, self.finalDim[0], self.finalDim[1]), dtype=np.float32)
-                    allImagesFile.close()
-                    if self.sampleType=='DESI':
-                        self.allImages = np.moveaxis(resize(np.moveaxis(self.allImages, 0, -1), tuple(self.squareDim), order=0), -1, 0)
-                        squareAllImagesFile = h5py.File(self.squareAllImagesPath, 'a')
-                        _ = squareAllImagesFile.create_dataset(name='squareAllImages', data=self.allImages, chunks=(1, self.squareDim[0], self.squareDim[1]), dtype=np.float32)
-                        squareAllImagesFile.close()
-                    del self.allImages
+                    if self.readAllMSI: 
+                        self.allImagesMax = np.max(self.allImages, axis=(1,2))
+                        allImagesFile = h5py.File(self.allImagesPath, 'a')
+                        _ = allImagesFile.create_dataset(name='allImages', data=self.allImages, chunks=(1, self.finalDim[0], self.finalDim[1]), dtype=np.float32)
+                        allImagesFile.close()
+                        if self.sampleType=='DESI':
+                            self.allImages = np.moveaxis(resize(np.moveaxis(self.allImages, 0, -1), tuple(self.squareDim), order=0), -1, 0)
+                            squareAllImagesFile = h5py.File(self.squareAllImagesPath, 'a')
+                            _ = squareAllImagesFile.create_dataset(name='squareAllImages', data=self.allImages, chunks=(1, self.squareDim[0], self.squareDim[1]), dtype=np.float32)
+                            squareAllImagesFile.close()
+                        del self.allImages
                 del self.mzFinalGrid, self.chanFinalGrid
                     
     #Generate initial scanning mask; allows changing the scan method without rescanning all of the data
@@ -373,15 +429,18 @@ class SampleData:
         #Get the MSI file extension automatically if it isn't already known
         if self.lineExt == None:
             extensions = list(map(lambda x:x, np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
-            if 'd' in extensions: self.lineExt = '.d'
-            elif 'D' in extensions: self.lineExt = '.D'
-            elif 'raw' in extensions: self.lineExt = '.raw'
-            elif 'RAW' in extensions: self.lineExt = '.RAW'
-            elif 'png' in extensions: self.lineExt = '.png'
-            elif 'jpg' in extensions: self.lineExt = '.jpg'
-            elif 'tiff' in extensions: self.lineExt = '.tiff'
-            elif 'imzML' in extensions: self.lineExt = '.imzML'
-            else: sys.exit('Error! - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
+            if self.dataMSI:
+                if 'd' in extensions: self.lineExt = '.d'
+                elif 'D' in extensions: self.lineExt = '.D'
+                elif 'raw' in extensions: self.lineExt = '.raw'
+                elif 'RAW' in extensions: self.lineExt = '.RAW'
+                elif 'imzML' in extensions: self.lineExt = '.imzML'
+                else: sys.exit('Error! - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
+            elif self.sampleType == 'IMAGE':
+                if 'png' in extensions: self.lineExt = '.png'
+                elif 'jpg' in extensions: self.lineExt = '.jpg'
+                elif 'tiff' in extensions: self.lineExt = '.tiff'
+                else: sys.exit('Error! - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
         
         #TODO: MALDI experimental operation is not yet implemented, where the program should just read new positions referencing the chosen new idxs
         
@@ -412,11 +471,11 @@ class SampleData:
                     mzs, ints = data.getspectrum(i)
                     self.sumImage[y, x] = np.sum(ints)
                     filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
-                    self.allImages[:, y, x] = np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices).astype(np.float32)
+                    if self.readAllMSI: self.allImages[:, y, x] = np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices).astype(np.float32)
                     self.chanImages[:, y, x] = [np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]) for mzRange in self.mzRanges]
             else:
                 _ = ray.get(self.reader_MSI_Actor.setCoordinates.remote(coordinates))
-                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate) for indexes in np.array_split(np.arange(0, len(coordinates)), numberCPUS)])
+                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate) for indexes in np.array_split(np.arange(0, len(coordinates)), numberCPUS)])
             
             #Close the MSI file
             del data
@@ -438,7 +497,7 @@ class SampleData:
                     try: data = mzFile(scanFileName)
                     except: errorFlag = True
                     
-                    #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number
+                    #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number minus 1
                     if not errorFlag:
                         fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
                         if self.unorderedNames: 
@@ -470,8 +529,8 @@ class SampleData:
                         origTimes -= np.min(origTimes)
                         
                         #If the data is being sparesly acquired in lines, then the listed times in the file need to be shifted
-                        if (impModel or postModel) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(self.mask[lineNum]==1).min()/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
-                        elif (impModel or postModel) and impOffset: sys.exit('Error - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
+                        if (self.impFlag or self.postFlag) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(self.mask[lineNum]==1).min()/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
+                        elif (self.impFlag or self.postFlag) and impOffset: sys.exit('Error - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
                         
                         #Seup storage locations for each measured location
                         chanDataLine, mzDataLine = [[] for _ in range(0, len(self.mzRanges))], []
@@ -496,7 +555,7 @@ class SampleData:
                                 chanDataLine[mzRangeNum].append(np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]))
                                 
                         #Create regular grid interpolators, aligning all/targeted m/z data, and storing results
-                        self.allImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.mzFinal), np.asarray(mzDataLine, dtype='float64'), bounds_error=False, fill_value=0)(self.mzFinalGrid).astype('float32')
+                        if self.readAllMSI: self.allImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.mzFinal), np.asarray(mzDataLine, dtype='float64'), bounds_error=False, fill_value=0)(self.mzFinalGrid).astype('float32')
                         self.chanImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.chanValues), np.asarray(chanDataLine, dtype='float64').T, bounds_error=False, fill_value=0)(self.chanFinalGrid).astype('float32')
                         self.sumImage[lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(sumImageLine, nan=0, posinf=0, neginf=0), left=0, right=0)
                     
@@ -505,14 +564,14 @@ class SampleData:
             
             #Otherwise read data in parallel and perform remaining interpolations of any remaining m/z data to regular grid in serial (parallel operation is too memory intensive)
             else:
-                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.mzFinal, self.mzFinalGrid_id, self.chanValues, self.chanFinalGrid_id, impModel, postModel, impOffset, scanMethod, lineMethod, self.physicalLineNums, self.ignoreMissingLines, self.missingLines, self.unorderedNames) for indexes in np.array_split(np.arange(0, len(scanFileNames)), numberCPUS)])
-                _ = ray.get(self.reader_MSI_Actor.interpolateDESI.remote(self.mzFinal, self.mzFinalGrid))
+                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.mzFinal, self.mzFinalGrid_id, self.chanValues, self.chanFinalGrid_id, self.impFlag, self.postFlag, impOffset, scanMethod, lineMethod, self.physicalLineNums, self.ignoreMissingLines, self.missingLines, self.unorderedNames) for indexes in np.array_split(np.arange(0, len(scanFileNames)), numberCPUS)])
+                if self.readAllMSI: _ = ray.get(self.reader_MSI_Actor.interpolateDESI.remote(self.mzFinal, self.mzFinalGrid))
                 for scanFileName in ray.get(self.reader_MSI_Actor.getReadScanFiles.remote()): self.readScanFiles.append(scanFileName)
 
         #If parallelization is enabled, and this is a MSI sample, then read MSI data in parallel, retrieve from shared memory, and process data into accessible shape
-        if parallelization and (self.sampleType == 'DESI' or self.sampleType == 'MALDI'):
+        if parallelization and self.dataMSI:
             self.chanImages = np.moveaxis(ray.get(self.reader_MSI_Actor.getChanImages.remote()), -1, 0)
-            #self.allImages = np.moveaxis(ray.get(self.reader_MSI_Actor.getAllImages.remote()), -1, 0)
+            #if self.readAllMSI: self.allImages = np.moveaxis(ray.get(self.reader_MSI_Actor.getAllImages.remote()), -1, 0)
             self.sumImage = ray.get(self.reader_MSI_Actor.getSumImage.remote())
             
         #If DESI MSI, then need to resize the images to obtain square dimensionality, otherwise the square dimensions are equal to the original
@@ -554,7 +613,7 @@ class Sample:
         if sampleData.postFlag: self.mask = sampleData.mask
     
     #Measure selected locations, computing reconstructions and E/RD as applicable for determination of future sampling locations
-    def performMeasurements(self, sampleData, tempScanData, result, newIdxs, model, cValue, bestCFlag, oracleFlag, datagenFlag, updateRD):
+    def performMeasurements(self, sampleData, tempScanData, result, newIdxs, model, cValue, updateRD):
         
         #Ensure newIdxs are indexible in 2 dimensions and update mask; post-processing will send empty set
         if not sampleData.postFlag:
@@ -597,12 +656,12 @@ class Sample:
         
         #Otherwise, (if not an oracle or c value optimization run) set the reconstruction data as having been 'measured'
         else:
-            if not oracleFlag and not bestCFlag:
+            if not sampleData.oracleFlag and not sampleData.bestCFlag:
                 self.chanImages[:, newIdxs[:,0], newIdxs[:,1]] = self.chanReconImages[:, newIdxs[:,0], newIdxs[:,1]]
                 self.sumImage[newIdxs[:,0], newIdxs[:,1]] = self.sumReconImage[newIdxs[:,0], newIdxs[:,1]]
         
         #If not just updating the RD, or using a SLADS model to update the ERD
-        if not updateRD or (((erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net')) and not bestCFlag and not oracleFlag):
+        if not updateRD or (((erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net')) and not sampleData.bestCFlag and not sampleData.oracleFlag):
         
             #Extract measured and unmeasured locations, considering FOV mask if applicable
             tempScanData.squareMeasuredIdxs = np.transpose(np.where(self.squareMask==1))
@@ -627,7 +686,7 @@ class Sample:
                 self.chanReconImages = self.squareChanReconImages
         
         #Compute feature information for for training/utilizing SLADS models
-        if (datagenFlag or ((erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net')) and not bestCFlag and not oracleFlag) and len(tempScanData.squareUnMeasuredIdxs) > 0: 
+        if (sampleData.datagenFlag or ((erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net')) and not sampleData.bestCFlag and not sampleData.oracleFlag) and len(tempScanData.squareUnMeasuredIdxs) > 0: 
             t0 = time.time()
             self.polyFeatures = [computePolyFeatures(sampleData, tempScanData, squareChanReconImage) for squareChanReconImage in self.squareChanReconImages]
             t1 = time.time()
@@ -636,7 +695,7 @@ class Sample:
         
         #If every location has been scanned all E/RD values are zero
         if len(tempScanData.squareUnMeasuredIdxs) == 0:
-            if oracleFlag or bestCFlag: 
+            if sampleData.oracleFlag or sampleData.bestCFlag: 
                 self.RD = np.zeros(sampleData.finalDim, dtype=np.float32)
                 self.squareRD = np.zeros(sampleData.squareDim, dtype=np.float32)
                 self.squareRDs = np.zeros((sampleData.numChannels, sampleData.squareDim[0], sampleData.squareDim[1]), dtype=np.float32)
@@ -645,7 +704,7 @@ class Sample:
             else: self.squareERD = np.zeros(sampleData.squareDim, dtype=np.float32)
         
         #If the ground-truth data is known for training or oracle runs then compute the RDPPs and resulting RD
-        elif oracleFlag or bestCFlag:
+        elif sampleData.oracleFlag or sampleData.bestCFlag:
         
             #If this is a full measurement step, (i.e. whenever the reconstruction(s) are updated) compute the new RDPP
             if not updateRD: 
@@ -662,7 +721,7 @@ class Sample:
         
             #Compute/Update the RD and use it in place of an ERD
             t0 = time.time()
-            computeRD(self, sampleData, tempScanData, cValue, bestCFlag, datagenFlag, result.liveOutputFlag, result.impModel, updateLocations)
+            computeRD(self, sampleData, tempScanData, cValue, updateLocations)
             t1 = time.time()
             if not updateRD: result.computeRDTimes.append(t1-t0)
             self.squareRDValues = self.squareRDs[:, tempScanData.squareUnMeasuredIdxs[:,0], tempScanData.squareUnMeasuredIdxs[:,1]]
@@ -690,7 +749,7 @@ class Sample:
         else: self.physicalERD = copy.deepcopy(self.ERD)
         
         #Tracer() #This is one location to try injecting the optical image
-        #if sampleData.biasOptical: self.physicalERD *= sampleData.opticalMask
+        #if sampleData.biasOptical: self.physicalERD *= sampleData.squareOpticalImage
         
         self.physicalERD[self.physicalERD<0] = 0
         if np.max(self.physicalERD) != 0: self.physicalERD = ((self.physicalERD-np.min(self.physicalERD))/(np.max(self.physicalERD)-np.min(self.physicalERD)))*100
@@ -698,25 +757,19 @@ class Sample:
 
 #Sample scanning progress and final results processing
 class Result:
-    def __init__(self, sampleData, liveOutputFlag, dir_Results, bestCFlag, datagenFlag, cValue, impModel):
+    def __init__(self, sampleData, dir_Results, cValue):
         self.startTime = time.time()
         self.finalTime = time.time()
         self.sampleData = sampleData
+        self.dir_Results = dir_Results
         self.cValue = cValue
-        self.impModel = impModel
-        self.bestCFlag = bestCFlag
-        self.datagenFlag = datagenFlag
+        
         self.samples = []
         self.cSelectionList = []
-        self.lastMask = None
         self.percsMeasured = []
-        self.liveOutputFlag = liveOutputFlag
-        self.dir_Results = dir_Results
-        self.computeRDTimes, self.computeERDTimes = [], []
-        
-        #Determine if all channel evaluation is going to be performed at completion
-        if self.sampleData.simulationFlag and not self.liveOutputFlag and not self.datagenFlag and ((self.bestCFlag and cAllChanOpt) or not self.bestCFlag): self.allChanEval = True
-        else: self.allChanEval = False
+        self.computeRDTimes = []
+        self.computeERDTimes = []
+        self.lastMask = None
         
         #If there is to be a results directory, then ensure it is setup
         if self.dir_Results != None:
@@ -740,7 +793,7 @@ class Result:
             os.makedirs(self.dir_videos)
             
         #MSI Specific; if this is a simulation with live output enabled, then load all images data
-        if (self.sampleData.sampleType == 'MALDI' or self.sampleData.sampleType == 'DESI') and self.sampleData.simulationFlag and self.liveOutputFlag:
+        if self.sampleData.dataMSI and self.sampleData.simulationFlag and self.sampleData.liveOutputFlag:
             
             #If operating in parallel, create actors for reconstruction and load portions of the data into each, otherwise load data into main memory
             if parallelization:
@@ -757,15 +810,15 @@ class Result:
         self.lastMask = copy.deepcopy(sample.mask)
         
         #If optimizing c, then don't store sample data from the first iteration (except for the last mask), since it was not used in the determination of initial set locations
-        if self.bestCFlag and sample.iteration == 1: return
+        if self.sampleData.bestCFlag and sample.iteration == 1: return
         
         #Update the percentage of FOV measured
         self.percsMeasured.append(copy.deepcopy(sample.percMeasured))
         
         #If outputs should be produced at every update step, then do so, determining related metrics as needed
-        if self.liveOutputFlag: 
+        if self.sampleData.liveOutputFlag: 
             if self.sampleData.simulationFlag: self.extractSimulationData(sample, self.sampleData)
-            visualize_serial(sample, self.sampleData, self.dir_progression, self.dir_chanProgressions, self.datagenFlag)
+            visualize_serial(sample, self.sampleData, self.dir_progression, self.dir_chanProgressions)
         
         #Save a copy of the measurement step for later evaluation
         self.samples.append(copy.deepcopy(sample))
@@ -778,7 +831,7 @@ class Result:
                 np.savetxt(self.dir_sampleResults+'measuredMask.csv', self.lastMask, delimiter=',', fmt='%d')
     
     #For a given measurement step find PSNR/SSIM of reconstructions, compute the RD, find PSNR of ERD
-    def extractSimulationData(self, sample):
+    def extractSimulationData(self, sample, lastReconOnly=False):
         
         #Create a segmented storage object for variables that must be referenced
         tempScanData = TempScanData()
@@ -793,13 +846,14 @@ class Result:
         else: tempScanData.neighborIndices, tempScanData.neighborWeights, tempScanData.neighborDistances = [], [], []
         
         #Find PSNR/SSIM scores for all channel reconstructions
-        sample.chanImagesPSNRList = [compare_psnr(self.sampleData.chanImages[index], sample.chanReconImages[index], data_range=self.sampleData.chanImagesMax[index]) for index in range(0, len(self.sampleData.chanImages))]
-        sample.sumImagePSNR = compare_psnr(self.sampleData.sumImage, sample.sumReconImage, data_range=np.max(self.sampleData.sumImage))
-        sample.chanImagesSSIMList = [compare_ssim(self.sampleData.chanImages[index], sample.chanReconImages[index], data_range=self.sampleData.chanImagesMax[index]) for index in range(0, len(self.sampleData.chanImages))]
-        sample.sumImageSSIM = compare_ssim(self.sampleData.sumImage, sample.sumReconImage, data_range=np.max(self.sampleData.sumImage))
+        if not lastReconOnly:
+            sample.chanImagesPSNRList = [compare_psnr(self.sampleData.chanImages[index], sample.chanReconImages[index], data_range=self.sampleData.chanImagesMax[index]) for index in range(0, len(self.sampleData.chanImages))]
+            sample.sumImagePSNR = compare_psnr(self.sampleData.sumImage, sample.sumReconImage, data_range=np.max(self.sampleData.sumImage))
+            sample.chanImagesSSIMList = [compare_ssim(self.sampleData.chanImages[index], sample.chanReconImages[index], data_range=self.sampleData.chanImagesMax[index]) for index in range(0, len(self.sampleData.chanImages))]
+            sample.sumImageSSIM = compare_ssim(self.sampleData.sumImage, sample.sumReconImage, data_range=np.max(self.sampleData.sumImage))
         
-        #MSI Specific; if enabled then perform and evaluate reconstructions over the whole spectrum for the data known at each considered measurement step
-        if self.allChanEval and (self.sampleData.sampleType == 'MALDI' or self.sampleData.sampleType == 'DESI'):
+        #MSI Specific; if enabled then perform and evaluate reconstructions over the whole spectrum for the data known at the given measurement step
+        if (self.sampleData.allChanEvalFlag or lastReconOnly) and self.sampleData.dataMSI:
             
             #If operating in parallel, utilize actors created in the complete() method, or at initialization for live simulation; for serial, could vectorize, but extremely RAM intensive and usable batch size is unpredictable per system
             if parallelization:
@@ -807,24 +861,26 @@ class Result:
                 _ = ray.get([recon_Actor.applyMask.remote(squareMask_id) for recon_Actor in self.recon_Actors])
                 _ = ray.get([recon_Actor.computeRecon.remote(tempScanData_id) for recon_Actor in self.recon_Actors])
                 _ = ray.get([recon_Actor.computeMetrics.remote() for recon_Actor in self.recon_Actors])
-                sample.allImagesPSNRList = np.concatenate([ray.get(recon_Actor.getPSNR.remote()) for recon_Actor in self.recon_Actors])
-                sample.allImagesSSIMList = np.concatenate([ray.get(recon_Actor.getSSIM.remote()) for recon_Actor in self.recon_Actors])
+                if not lastReconOnly:
+                    sample.allImagesPSNRList = np.concatenate([ray.get(recon_Actor.getPSNR.remote()) for recon_Actor in self.recon_Actors])
+                    sample.allImagesSSIMList = np.concatenate([ray.get(recon_Actor.getSSIM.remote()) for recon_Actor in self.recon_Actors])
                 del tempScanData_id, squareMask_id
             else:
                 if self.sampleData.sampleType == 'DESI': self.reconImages = self.sampleData.squareAllImages*sample.squareMask
                 else: self.reconImages = self.sampleData.allImages*sample.squareMask
                 self.reconImages = np.array([computeReconIDW(self.reconImages[index], tempScanData) for index in range(0, len(self.reconImages))], dtype=np.float32)
                 if self.sampleData.sampleType == 'DESI': self.reconImages = np.moveaxis(resize(np.moveaxis(self.reconImages, 0, -1), tuple(self.sampleData.finalDim), order=0), -1, 0)
-                self.allImagesPSNRList = [compare_psnr(self.sampleData.allImages[index], self.reconImages[index], data_range=self.sampleData.allImagesMax[index]) for index in range(0, len(self.sampleData.allImages))]
-                self.allImagesSSIMList = [compare_ssim(self.sampleData.allImages[index], self.reconImages[index], data_range=self.sampleData.allImagesMax[index]) for index in range(0, len(self.sampleData.allImages))]
+                if not lastReconOnly:
+                    sample.allImagesPSNRList = [compare_psnr(self.sampleData.allImages[index], self.reconImages[index], data_range=self.sampleData.allImagesMax[index]) for index in range(0, len(self.sampleData.allImages))]
+                    sample.allImagesSSIMList = [compare_ssim(self.sampleData.allImages[index], self.reconImages[index], data_range=self.sampleData.allImagesMax[index]) for index in range(0, len(self.sampleData.allImages))]
         
         #Otherwise assume all images results are the same as for targeted channels; i.e. all channels were targeted
-        else:
+        elif not lastReconOnly:
             sample.allImagesPSNRList = sample.chanImagesPSNRList
             sample.allImagesSSIMList = sample.chanImagesSSIMList
             
         #Prior to and for model training there is RD, but no ERD
-        if not self.sampleData.trainFlag:
+        if not self.sampleData.trainFlag and not lastReconOnly:
             
             #Compute RD; if every location has been scanned all positions are zero
             if len(tempScanData.squareUnMeasuredIdxs) == 0: 
@@ -841,7 +897,7 @@ class Result:
                     sample.RDPPs = np.moveaxis(abs(((np.moveaxis(self.sampleData.squareChanImages, 0, -1)-meanValues)/stdValues)-((np.moveaxis(sample.squareChanReconImages, 0, -1)-meanValues)/stdValues)), -1, 0)
                 else: sample.RDPPs = abs(self.sampleData.squareChanImages-sample.squareChanReconImages)
                 
-                computeRD(sample, self.sampleData, tempScanData, self.cValue, self.bestCFlag, self.datagenFlag, self.liveOutputFlag, self.impModel, [])
+                computeRD(sample, self.sampleData, tempScanData, self.cValue, [])
 
             #Determine SSIM/PSNR between averaged RD and ERD
             maxRangeValue = np.max([sample.squareRD, sample.squareERD])
@@ -849,7 +905,7 @@ class Result:
             sample.ERDSSIM = compare_ssim(sample.squareRD, sample.squareERD, data_range=maxRangeValue)
         
         #Resize RD(s) for final visualizations; has to be done here for live output case, but in complete() method otherwise
-        if self.liveOutputFlag: self.resizeRD(sample)
+        if self.sampleData.liveOutputFlag and not lastReconOnly: self.resizeRD(sample)
 
     #Resize RD(s) for final visualization if DESI, otherwise set variable name 
     def resizeRD(self, sample):
@@ -867,10 +923,10 @@ class Result:
         self.samples = copy.deepcopy(self.samples)
         
         #If this is an MSI sample
-        if self.sampleData.sampleType == 'DESI' or self.sampleData.sampleType == 'MALDI':
+        if self.sampleData.dataMSI:
         
             #If all channel reconstructions are needed, then setup actors if in parallel, or load data into main memory
-            if self.allChanEval or (imzMLExport and not self.sampleData.trainFlag):
+            if self.sampleData.allChanEvalFlag or (imzMLExport and not self.sampleData.trainFlag):
                 if parallelization:
                     self.recon_Actors = [Recon_Actor.remote(indexes, self.sampleData.sampleType, self.sampleData.squareDim, self.sampleData.finalDim, self.sampleData.allImagesMax) for indexes in np.array_split(np.arange(0, len(self.sampleData.mzFinal)), numberCPUS)]
                     _ = ray.get([recon_Actor.setup.remote(self.sampleData.allImagesPath, self.sampleData.squareAllImagesPath) for recon_Actor in self.recon_Actors])
@@ -885,12 +941,15 @@ class Result:
                         self.sampleData.squareAllImages = self.sampleData.squareAllImagesFile['squareAllImages']
         
         #Extract metrics for samples if a simulation, and neither already done live, nor creating samples for training
-        if (self.sampleData.simulationFlag and not self.liveOutputFlag and not self.datagenFlag):
+        if (self.sampleData.simulationFlag and not self.sampleData.liveOutputFlag and not self.sampleData.datagenFlag):
             for sample in tqdm(self.samples, desc='RD/Metrics Extraction', leave=False, ascii=asciiFlag): self.extractSimulationData(sample)
         
+        #If not evaluating all channels, but the final reconstructions are still to be generated
+        if imzMLExport and not self.sampleData.allChanEvalFlag: self.extractSimulationData(self.samples[-1], imzMLExport)
+        
         #If this is an MSI sample
-        if self.sampleData.sampleType == 'DESI' or self.sampleData.sampleType == 'MALDI':
-                
+        if self.sampleData.dataMSI:
+            
             #If exporting final reconstruction data to .imzML
             if imzMLExport and not self.sampleData.trainFlag:
                 
@@ -898,11 +957,11 @@ class Result:
                 coordinates = list(map(tuple, list(np.ndindex(tuple(self.sampleData.finalDim)))))
                 
                 #Export all measured, reconstructed data in .imzML format
-                reconImages = np.concatenate([ray.get(recon_Actor.getReconImages.remote()) for recon_Actor in self.recon_Actors])
+                if parallelization: self.reconImages = np.concatenate([ray.get(recon_Actor.getReconImages.remote()) for recon_Actor in self.recon_Actors])
                 writer = ImzMLWriter(self.dir_sampleResults+self.sampleData.name+'_reconstructed', intensity_dtype=np.float32, mz_dtype=np.float32, spec_type='profile', mode='processed')
-                for coord in coordinates: writer.addSpectrum(self.sampleData.mzFinal, reconImages[:, coord[0], coord[1]], (coord[1]+1, coord[0]+1))
+                _  = [writer.addSpectrum(self.sampleData.mzFinal, self.reconImages[:, coord[0], coord[1]], (coord[1]+1, coord[0]+1)) for coord in coordinates]
                 writer.close()
-                del reconImages, writer
+                del self.reconImages, writer
                 
                 #Export the equivalent ground-truth measured data here to .imzML format if needed
                 #allImages = np.concatenate([ray.get(recon_Actor.getAllImages.remote()) for recon_Actor in self.recon_Actors])
@@ -912,10 +971,10 @@ class Result:
                 #del allImages, writer
             
             #If all channel evaluation or imzMLExport (not training), close all images file reference if applicable, remove all recon images from memory, purge/reset ray
-            if self.allChanEval or (imzMLExport and not self.sampleData.trainFlag):
+            if self.sampleData.allChanEvalFlag or (imzMLExport and not self.sampleData.trainFlag):
                 if not parallelization:
                     self.sampleData.allImagesFile.close()
-                    del self.sampleData.allImages, self.reconImages, self.sampleData.allImagesFile
+                    del self.sampleData.allImages, self.sampleData.allImagesFile
                     if self.sampleData.sampleType == 'DESI':
                         self.sampleData.squareAllImagesFile.close()
                         del self.sampleData.squareAllImages, self.sampleData.squareAllImagesFile
@@ -925,19 +984,16 @@ class Result:
                     del self.recon_Actors
                 
         #If this is a simulation, not for training database generation, then summarize PSNR/SSIM scores across all measurement steps
-        if self.sampleData.simulationFlag and not self.datagenFlag:
+        if self.sampleData.simulationFlag and not self.sampleData.datagenFlag:
             self.chanAvgPSNRList = [np.nanmean(sample.chanImagesPSNRList) for sample in self.samples]
             self.sumImagePSNRList = [sample.sumImagePSNR for sample in self.samples]
             self.chanAvgSSIMList = [np.nanmean(sample.chanImagesSSIMList) for sample in self.samples]
             self.sumImageSSIMList = [sample.sumImageSSIM for sample in self.samples]
             
-            #If not MSI, then all image results are the same as for targeted channels
-            if self.sampleData.sampleType == 'MALDI' or self.sampleData.sampleType == 'DESI':
+            #Compute all channel results if applicable
+            if self.sampleData.allChanEvalFlag and self.sampleData.dataMSI:
                 self.allAvgPSNRList = [np.nanmean(sample.allImagesPSNRList) for sample in self.samples]
                 self.allAvgSSIMList = [np.nanmean(sample.allImagesSSIMList) for sample in self.samples]
-            else:
-                self.allAvgPSNRList = self.chanAvgPSNRList
-                self.allAvgSSIMList = self.chanAvgSSIMList
 
         #If ERD was computed (i.e., when not a training run) summarize ERD PSNR/SSIM scores
         if not self.sampleData.trainFlag:
@@ -945,20 +1001,45 @@ class Result:
             self.ERDSSIMList = [sample.ERDSSIM for sample in self.samples]
         
         #Do not generate visuals for c value optimization or in training if visualizeTrainingData disabled
-        if not self.bestCFlag and ((self.datagenFlag and visualizeTrainingData) or not self.datagenFlag): 
-        
-            #Resize RDs and generate visualizations if they were not created during operation; if in parallel purge/reset ray after computation
-            if not self.liveOutputFlag:
+        if not self.sampleData.bestCFlag and ((self.sampleData.datagenFlag and visualizeTrainingData) or not self.sampleData.datagenFlag): 
+            
+            #generate visualizations if they were not created during operation
+            if not self.sampleData.liveOutputFlag:
+                
+                #Resize RDs
                 for sample in self.samples: self.resizeRD(sample)
+                
                 if parallelization:
-                    futures = [(self.samples[index], self.sampleData, self.dir_progression, self.dir_chanProgressions, self.datagenFlag) for index in range(0, len(self.samples))]
+                
+                    #Setup an actor to hold global sampling progress across multiple processes
+                    samplingProgress_Actor = SamplingProgress_Actor.remote()
+            
+                    #Setup visualization jobs and determine total amount of work that is going to be done
+                    futures = [(self.samples[index], self.sampleData, self.dir_progression, self.dir_chanProgressions, parallelization, samplingProgress_Actor) for index in range(0, len(self.samples))]
+                    maxProgress = len(futures)
+                    
+                    #Initialize a global progress bar and start parallel sampling operations
+                    pbar = tqdm(total=maxProgress, desc = 'Visualizing', leave=False, ascii=asciiFlag)                    
                     computePool = Pool(numberCPUS)
                     results = computePool.starmap_async(visualize_serial, futures)
                     computePool.close()
+                    
+                    #While some results have yet to be returned, regularly update the global progress bar, then obtain results and purge/reset ray
+                    pbar.n = 0
+                    pbar.refresh()
+                    while (True):
+                        pbar.n = np.clip(round(ray.get(samplingProgress_Actor.getCurrent.remote()),0), 0, maxProgress)
+                        pbar.refresh()
+                        if results.ready(): 
+                            pbar.n = maxProgress
+                            pbar.refresh()
+                            pbar.close()
+                            break
+                        time.sleep(0.1)
                     computePool.join()
                     resetRay(numberCPUS)
                 else: 
-                    _ = [visualize_serial(sample, self.sampleData, self.dir_progression, self.dir_chanProgressions, self.datagenFlag) for sample in tqdm(self.samples, desc='Steps', leave=False, ascii=asciiFlag)]
+                    _ = [visualize_serial(sample, self.sampleData, self.dir_progression, self.dir_chanProgressions) for sample in tqdm(self.samples, desc='Visualizing', leave=False, ascii=asciiFlag)]
 
             #Combine total progression and individual channel images into animations
             dataFileNames = natsort.natsorted(glob.glob(self.dir_progression + 'progression_*.png'))
@@ -976,7 +1057,7 @@ class Result:
                 animation = None
         
 #Visualize single sample progression step
-def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, datagenFlag):
+def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, parallelization=False, samplingProgress_Actor=None):
 
     #If running visualization in parallel, reset backend to avoid main thread/loop issues
     if parallelization: matplotlib.use('Agg')
@@ -985,13 +1066,17 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
     percMeasured = "{:.2f}".format(sample.percMeasured)
     
     #Turn metrics into strings
-    if sampleData.simulationFlag and not datagenFlag: 
+    if sampleData.simulationFlag and not sampleData.datagenFlag: 
         sumImagePSNR = "{:.2f}".format(sample.sumImagePSNR)
         sumImageSSIM = "{:.2f}".format(sample.sumImageSSIM)
         chanImageAvgPSNR = "{:.2f}".format(np.nanmean(sample.chanImagesPSNRList))
         chanImageAvgSSIM = "{:.2f}".format(np.nanmean(sample.chanImagesSSIMList))
-        allImageAvgPSNR = "{:.2f}".format(np.nanmean(sample.allImagesPSNRList))
-        allImageAvgSSIM = "{:.2f}".format(np.nanmean(sample.allImagesSSIMList))
+        if sampleData.allChanEvalFlag and sampleData.dataMSI: 
+            allImageAvgPSNR = "{:.2f}".format(np.nanmean(sample.allImagesPSNRList))
+            allImageAvgSSIM = "{:.2f}".format(np.nanmean(sample.allImagesSSIMList))
+        else: 
+            allImageAvgPSNR = "N/A"
+            allImageAvgSSIM = "N/A"
     if sampleData.simulationFlag and not sampleData.trainFlag: 
         erdPSNR = "{:.2f}".format(sample.ERDPSNR)
         erdSSIM = "{:.2f}".format(sample.ERDSSIM)
@@ -1004,7 +1089,7 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
         
         #Turn metrics into strings
         chanLabel = str(sampleData.chanValues[chanNum])
-        if sampleData.simulationFlag and not datagenFlag:
+        if sampleData.simulationFlag and not sampleData.datagenFlag:
             chanImagesPSNR = "{:.2f}".format(sample.chanImagesPSNRList[chanNum])
             chanImagesSSIM = "{:.2f}".format(sample.chanImagesSSIMList[chanNum])
         
@@ -1013,13 +1098,13 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
         else: f = plt.figure(figsize=(20,5.3865))
         
         #TODO: If a simulation, then need room on visualizations for showing ERD, ground-truth, and ground-truth difference; if no metrics, then don't need extra title room?
-        #if sampleData.simulationFlag and not datagenFlag: f = plt.figure(figsize=(20,9))
+        #if sampleData.simulationFlag and not sampleData.datagenFlag: f = plt.figure(figsize=(20,9))
         #elif sampleData.simulationFlag: f = plt.figure(figsize=(20,10))
         #else: f = plt.figure(figsize=(20,5.3865))
         
         #Generate and apply a plot title, with metrics if applicable
         plotTitle = r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Channel:\ }$" + chanLabel + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured
-        if sampleData.simulationFlag and not datagenFlag:
+        if sampleData.simulationFlag and not sampleData.datagenFlag:
             plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel:\ }$" + chanImagesPSNR
             plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel:\ }$" + chanImagesSSIM
         plt.suptitle(plotTitle)
@@ -1044,7 +1129,7 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
         
         if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (1,0))
         else: ax = plt.subplot2grid((1,3), (0,1))
-        im = ax.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
+        im = ax.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1, interpolation='none')
         ax.set_title('Measurement Mask')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
         
@@ -1095,10 +1180,10 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
 
     #Generate and apply a plot title, with metrics if applicable
     plotTitle = r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured
-    if sampleData.simulationFlag and not sampleData.trainFlag and not datagenFlag:
+    if sampleData.simulationFlag and not sampleData.trainFlag and not sampleData.datagenFlag:
         plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Sum\ Image: }$" + sumImagePSNR + r"$\bf{\ \ ERD:\ }$" + erdPSNR 
         plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM + r"$\bf{\ \ ERD:\ }$" + erdSSIM
-    elif sampleData.simulationFlag and sampleData.trainFlag and not datagenFlag:
+    elif sampleData.simulationFlag and sampleData.trainFlag and not sampleData.datagenFlag:
         plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Sum\ Image: }$" + sumImagePSNR
         plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM
     plt.suptitle(plotTitle)
@@ -1123,7 +1208,7 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
     
     if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (1,0))
     else: ax = plt.subplot2grid((1,3), (0,1))
-    im = ax.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1)
+    im = ax.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1, interpolation='none')
     ax.set_title('Measurement Mask')
     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
     
@@ -1164,9 +1249,11 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
     if sampleData.simulationFlag:
         saveLocation = dir_progression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
         borderlessPlot(sample.RD, saveLocation, cmap='viridis')
+    
+    if parallelization: _ = ray.get(samplingProgress_Actor.update.remote(1))
 
-def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, oracleFlag, lineVisitAll, liveOutputFlag, dir_Results, datagenFlag, impModel, tqdmHide, samplingProgress_Actor=None, percProgUpdate=None):
-
+def runSampling(sampleData, cValue, model, percToScan, percToViz, lineVisitAll, dir_Results, tqdmHide, samplingProgress_Actor=None, percProgUpdate=None):
+    
     #Make sure random selection is consistent
     if consistentSeed: 
         np.random.seed(0)
@@ -1187,15 +1274,15 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, ora
     completedRunFlag = False
     
     #Create a new result object to hold scanning progression
-    result = Result(sampleData, liveOutputFlag, dir_Results, bestCFlag, datagenFlag, cValue, impModel)
+    result = Result(sampleData, dir_Results, cValue)
     
     #Scan initial sets
-    for initialSet in sampleData.initialSets: sample.performMeasurements(sampleData, tempScanData, result, initialSet, model, cValue, bestCFlag, oracleFlag, datagenFlag, False)
+    for initialSet in sampleData.initialSets: sample.performMeasurements(sampleData, tempScanData, result, initialSet, model, cValue, False)
     
     #Check stopping criteria, just in case of a bad input
     if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): sys.exit('Error - All points were scanned or the stopping criteria have been met after the initial acquisition for sample: ' + sample.name)
     elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: sys.exit('Error - All lines were scanned after the inital acquisition for sample: ' + sample.name)
-    if not datagenFlag and np.sum(sample.physicalERD) == 0: sys.exit('Error - Initial ERD indicates there are no places to scan for sample: ' + sample.name)
+    if not sampleData.datagenFlag and np.sum(sample.physicalERD) == 0: sys.exit('Error - Initial ERD indicates there are no places to scan for sample: ' + sample.name)
     
     #Perform the first update for the result
     result.update(sample, completedRunFlag)
@@ -1215,16 +1302,16 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, ora
     while not completedRunFlag:
 
         #Find next measurement locations
-        newIdxs = findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cValue, percToScan, oracleFlag, bestCFlag, datagenFlag)
+        newIdxs = findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cValue, percToScan)
         
         #Perform measurements, reconstructions and ERD/RD computations
-        if len(newIdxs) != 0: sample.performMeasurements(sampleData, tempScanData, result, newIdxs, model, cValue, bestCFlag, oracleFlag, datagenFlag, False)
+        if len(newIdxs) != 0: sample.performMeasurements(sampleData, tempScanData, result, newIdxs, model, cValue, False)
         else: break
         
         #Check stopping criteria
         if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
         elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
-        if not datagenFlag and np.sum(sample.physicalERD) == 0: completedRunFlag = True
+        if not sampleData.datagenFlag and np.sum(sample.physicalERD) == 0: completedRunFlag = True
         
         #If viz limit, only update when percToViz has been met; otherwise update every iteration
         if ((percToViz != None) and ((sample.percMeasured-result.percsMeasured[-1]) >= percToViz)) or (percToViz == None) or (sampleData.scanMethod == 'linewise') or completedRunFlag: result.update(sample, completedRunFlag)
@@ -1240,7 +1327,7 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, ora
             pbar.refresh()
         
     #MSI experimental specific; after scanning has completed, store data as a readable hdf5 file on disk; optimize chunks for loading whole m/z images; close file reference and delete object
-    if imzMLExport and not sampleData.simulationFlag and not sampleData.postFlag and (sampleData.sampleType == 'MALDI' or sampleData.sampleType == 'DESI'): 
+    if imzMLExport and not sampleData.simulationFlag and not sampleData.postFlag and sampleData.dataMSI: 
         sampleData.allImages = sampleData.allImagesFile.create_dataset(name='allImages', data=sampleData.allImages, chunks=(1, sampleData.finalDim[0], sampleData.finalDim[1]))
         sampleData.allImagesFile.close()
         del sampleData.allImagesFile
@@ -1252,7 +1339,7 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, bestCFlag, ora
     return result
 
 #Compute approximated Reduction in Distortion (RD) values
-def computeRD(sample, sampleData, tempScanData, cValue, bestCFlag, datagenFlag, liveOutputFlag, impModel, updateLocations):
+def computeRD(sample, sampleData, tempScanData, cValue, updateLocations):
     
     #If not updating RD, then set locations and compute the sigma values of all unmeasured locations in square dimensionality
     if len(updateLocations) == 0:
@@ -1425,7 +1512,7 @@ def computeERD(sample, sampleData, tempScanData, model):
     sample.squareERD = np.mean(sample.squareERDs, axis=0)
 
 #Determine which unmeasured points of a sample should be scanned given the current E/RD
-def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cValue, percToScan, oracleFlag, bestCFlag, datagenFlag):
+def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cValue, percToScan):
 
     if sampleData.scanMethod == 'random':
         np.random.shuffle(sample.unMeasuredIdxs)
@@ -1446,7 +1533,7 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
                 newIdxs.append(newIdx.tolist())
                 
                 #Perform the measurement, using values from reconstruction 
-                sample.performMeasurements(sampleData, tempScanData, result, newIdx, model, cValue, bestCFlag, oracleFlag, datagenFlag, True)
+                sample.performMeasurements(sampleData, tempScanData, result, newIdx, model, cValue, True)
                 
                 #When enough new locations have been determined, break from loop
                 if (np.sum(sample.mask)-np.sum(result.lastMask)) >= sampleData.pointsToScan: break
@@ -1478,7 +1565,7 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
                 newIdxs.append([lineToScanIdx, np.argmax(sample.physicalERD[lineToScanIdx])])
                 
                 #Perform the measurement using values from reconstruction 
-                sample.performMeasurements(sampleData, tempScanData, result, np.asarray(newIdxs[-1]), model, cValue, bestCFlag, oracleFlag, datagenFlag, True)
+                sample.performMeasurements(sampleData, tempScanData, result, np.asarray(newIdxs[-1]), model, cValue, True)
                 
             #Convert to array for indexing, sorting columns according to physical scanning order
             newIdxs = np.asarray(newIdxs)
