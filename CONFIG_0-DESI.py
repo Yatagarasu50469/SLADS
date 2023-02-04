@@ -76,10 +76,7 @@ stopPerc = (1/3)*100
 #Should the final reconstructed data of all channels be saved in .imzML format (MSI only; default: False)
 imzMLExport = False
 
-#Should data from all channels be read in during a scan and exported in .imzML format at the end of scanning (MSI only; default: False)
-allChanRead = False
-
-#Should an evaluation of reconstructions be performed across all channels; overrides allChanRead (MSI only; default: False)
+#Should an evaluation of reconstructions be performed across all channels (MSI only; default: False)
 allChanEval = False
 
 #If all samples have FOV aligned optical image files, how should they be utilized: 'modelInput', 'biasDistortion' or None (default: None)

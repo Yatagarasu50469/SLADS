@@ -26,6 +26,7 @@ class SampleData:
         
         #Setup expected initial variables with default values
         self.allChanEvalFlag = False
+        self.imzMLExportFlag = False
         self.lineExt = None
         self.mask = None
         self.unorderedNames = False
@@ -168,12 +169,11 @@ class SampleData:
             #Indicate MSI data in a shorter variable
             self.dataMSI = True
             
-            #If all specturm channel data should be read, then only do so if a non-training simulation or an implementation, or a post-processing run
-            if ((self.simulationFlag and not self.trainFlag) or self.impFlag or self.postFlag) and (allChanEval or allChanRead): 
+            #If all spectrum channel data should be read, then only do so if a non-training simulation or an implementation, or a post-processing run; set internal flags as needed
+            if ((self.simulationFlag and not self.trainFlag) or self.impFlag or self.postFlag) and (allChanEval or imzMLExport): 
                 self.readAllMSI = True
-                
-                #If all channels are to be evaluated, then set an internal flag to that effect
                 if allChanEval: self.allChanEvalFlag = True
+                if imzMLExport: self.imzMLExportFlag = True
             
             #Whether lines are to be ignored or not is dependent on whether the run is a simulation 
             self.ignoreMissingLines = self.simulationFlag
@@ -926,7 +926,7 @@ class Result:
         if self.sampleData.dataMSI:
         
             #If all channel reconstructions are needed, then setup actors if in parallel, or load data into main memory
-            if self.sampleData.allChanEvalFlag or (imzMLExport and not self.sampleData.trainFlag):
+            if self.sampleData.allChanEvalFlag or (self.sampleData.imzMLExportFlag and not self.sampleData.trainFlag):
                 if parallelization:
                     self.recon_Actors = [Recon_Actor.remote(indexes, self.sampleData.sampleType, self.sampleData.squareDim, self.sampleData.finalDim, self.sampleData.allImagesMax) for indexes in np.array_split(np.arange(0, len(self.sampleData.mzFinal)), numberCPUS)]
                     _ = ray.get([recon_Actor.setup.remote(self.sampleData.allImagesPath, self.sampleData.squareAllImagesPath) for recon_Actor in self.recon_Actors])
@@ -944,14 +944,14 @@ class Result:
         if (self.sampleData.simulationFlag and not self.sampleData.liveOutputFlag and not self.sampleData.datagenFlag):
             for sample in tqdm(self.samples, desc='RD/Metrics Extraction', leave=False, ascii=asciiFlag): self.extractSimulationData(sample)
         
-        #If not evaluating all channels, but the final reconstructions are still to be generated
-        if imzMLExport and not self.sampleData.allChanEvalFlag: self.extractSimulationData(self.samples[-1], imzMLExport)
+        #If not evaluating all channels, but the final reconstructions for all channels are still to be generated
+        if self.sampleData.imzMLExportFlag and not self.sampleData.allChanEvalFlag: self.extractSimulationData(self.samples[-1], imzMLExport)
         
         #If this is an MSI sample
         if self.sampleData.dataMSI:
             
             #If exporting final reconstruction data to .imzML
-            if imzMLExport and not self.sampleData.trainFlag:
+            if self.sampleData.imzMLExportFlag:
                 
                 #Set the coordinates to save values for
                 coordinates = list(map(tuple, list(np.ndindex(tuple(self.sampleData.finalDim)))))
@@ -970,8 +970,8 @@ class Result:
                 #writer.close()
                 #del allImages, writer
             
-            #If all channel evaluation or imzMLExport (not training), close all images file reference if applicable, remove all recon images from memory, purge/reset ray
-            if self.sampleData.allChanEvalFlag or (imzMLExport and not self.sampleData.trainFlag):
+            #If all channel evaluation or imzMLExportFlag, close all images file reference if applicable, remove all recon images from memory, purge/reset ray
+            if self.sampleData.allChanEvalFlag or self.sampleData.imzMLExportFlag:
                 if not parallelization:
                     self.sampleData.allImagesFile.close()
                     del self.sampleData.allImages, self.sampleData.allImagesFile
@@ -1181,11 +1181,11 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
     #Generate and apply a plot title, with metrics if applicable
     plotTitle = r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured
     if sampleData.simulationFlag and not sampleData.trainFlag and not sampleData.datagenFlag:
-        plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Sum\ Image: }$" + sumImagePSNR + r"$\bf{\ \ ERD:\ }$" + erdPSNR 
-        plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM + r"$\bf{\ \ ERD:\ }$" + erdSSIM
+        plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Sum\ Image: }$" + sumImagePSNR + r"$\bf{\ \ ERD:\ }$" + erdPSNR 
+        plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM + r"$\bf{\ \ ERD:\ }$" + erdSSIM
     elif sampleData.simulationFlag and sampleData.trainFlag and not sampleData.datagenFlag:
-        plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Sum\ Image: }$" + sumImagePSNR
-        plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM
+        plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Sum\ Image: }$" + sumImagePSNR
+        plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM
     plt.suptitle(plotTitle)
     
     if sampleData.simulationFlag: 
@@ -1325,13 +1325,6 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, lineVisitAll, 
         if not tqdmHide:
             pbar.n = np.clip(round(sample.percMeasured,2), 0, sampleData.stopPerc)
             pbar.refresh()
-        
-    #MSI experimental specific; after scanning has completed, store data as a readable hdf5 file on disk; optimize chunks for loading whole m/z images; close file reference and delete object
-    if imzMLExport and not sampleData.simulationFlag and not sampleData.postFlag and sampleData.dataMSI: 
-        sampleData.allImages = sampleData.allImagesFile.create_dataset(name='allImages', data=sampleData.allImages, chunks=(1, sampleData.finalDim[0], sampleData.finalDim[1]))
-        sampleData.allImagesFile.close()
-        del sampleData.allImagesFile
-        del sampleData.allImages
     
     #Delete progress bar reference if it had been made
     if not tqdmHide: del pbar
