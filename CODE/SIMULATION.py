@@ -20,7 +20,7 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
     #Setup a model for each GPU available (provided there is a job for it), running once on for pre-compilation (otherwise affects reported timings)
     if (erdModel == 'DLADS' or erdModel == 'GLANDS') and numGPUs > 0: 
         models = [Model_Actor.remote(erdModel, dir_TrainingResults+modelName, gpuNum) for gpuNum in range(0, np.clip(numGPUs, 0, numJobs))]
-        _ = [ray.get(model.generateERD.remote(np.empty((1,512,512,3), dtype=np.float32))) for model in models]
+        _ = [ray.get(model.generateERD.remote(np.empty((1,512,512,len(inputChannels)), dtype=np.float32))) for model in models]
     else: 
         models = [Model_Actor.remote(erdModel, dir_TrainingResults+modelName)]
     numModels = len(models)

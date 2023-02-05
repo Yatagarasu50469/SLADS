@@ -8,7 +8,7 @@ def postprocess(sortedSampleFolders, optimalC, modelName):
     #Setup a model only on a single GPU (if available), running once on for pre-compilation (otherwise affects reported timings)
     if (erdModel == 'DLADS' or erdModel == 'GLANDS') and numGPUs > 0: 
         model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName, 0)
-        _ = ray.get(model.generateERD.remote(np.empty((1,512,512,3), dtype=np.float32)))
+        _ = ray.get(model.generateERD.remote(np.empty((1,512,512,len(inputChannels)), dtype=np.float32)))
     else: 
         model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName)
     
