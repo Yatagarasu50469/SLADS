@@ -79,7 +79,7 @@ imzMLExport = False
 #Should an evaluation of reconstructions be performed across all channels (MSI only; default: False)
 allChanEval = False
 
-#If all samples have FOV aligned optical image files, how should they be utilized: 'modelInput', 'biasDistortion' or None (default: None)
+#If all samples have FOV aligned optical image files, how should they be applied to the E/RD: 'directBias', 'secDerivBias' or None (default: None)
 #This parameter must be consistently applied for optimizing c value, training a model, and eventual testing/implementation
 applyOptical = None
 
@@ -199,6 +199,11 @@ percToVizC = None
 #PARAMETERS: L2
 #NEURAL NETWORK MODEL PARAMETERS
 ##################################################################
+
+#Specify what input data constitutes a model (DLADS or GLANDS) input (Options: 'opticalImage', 'mask', 'reconData', 'measureData')
+#DLADS default: ['mask', 'reconData', 'measureData']
+#GLANDS default: ['mask', 'measureData']
+inputChannels = ['mask', 'reconData', 'measureData']
 
 #Which model should be used for training (unet)
 modelDef = 'unet'

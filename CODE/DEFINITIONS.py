@@ -334,18 +334,25 @@ class SampleData:
         self.sumImage = np.zeros((self.finalDim), dtype=np.float32)
 
         #If an MSI sample and an optical image is to be used try loading different extensions
-        if self.dataMSI and applyOptical != None:
+        if self.dataMSI and (applyOptical != None or 'opticalData' in inputChannels):
             opticalImageFound = False
             for extension in ['.png', '.jpg', '.tiff']:
-                try: 
-                    opticalImage = cv2.imread('optical'+extension, 0)
+                if os.path.isfile(self.sampleFolder+os.path.sep+'optical'+extension): 
                     opticalImageFound = True
-                except: pass
+                    break
             if not opticalImageFound: sys.exit('Error - applyOptical was enabled, but no optical image was found for sample: ' + sample.name)
+            
+            #Load the optical image, rescaling range 0 to 1 and inversing non-zero values (remove background and positively weight structures)
+            opticalImage = (cv2.imread(self.sampleFolder+os.path.sep+'optical'+extension, 0)/255)
+            opticalMask = opticalImage!=0
+            opticalImage[opticalMask] = 1-opticalImage[opticalMask]
+            if applyOptical == 'secDerivBias': 
+                opticalImageSecDeriv = abs(cv2.Laplacian(opticalImage, cv2.CV_64F))
+                self.squareOpticalImageSecDeriv = resize(opticalImageSecDeriv, tuple(self.squareDim), order=0)
+                self.opticalImageSecDeriv = resize(opticalImageSecDeriv, tuple(self.finalDim), order=0)
             self.squareOpticalImage = resize(opticalImage, tuple(self.squareDim), order=0)
             self.opticalImage = resize(opticalImage, tuple(self.finalDim), order=0)
-            Tracer()
-            
+        
         #If a simulation or post-processing, read all the sample data and save in hdf5 if applicable, optimized for loading whole channel images, force clear the actor memory
         if self.simulationFlag or self.postFlag: 
             self.readScanData()
@@ -368,7 +375,7 @@ class SampleData:
                             squareAllImagesFile.close()
                         del self.allImages
                 del self.mzFinalGrid, self.chanFinalGrid
-                    
+    
     #Generate initial scanning mask; allows changing the scan method without rescanning all of the data
     def generateInitialSets(self, scanMethod):
     
@@ -553,7 +560,7 @@ class SampleData:
                             for mzRangeNum in range(0, len(self.mzRanges)):
                                 mzRange = self.mzRanges[mzRangeNum]
                                 chanDataLine[mzRangeNum].append(np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]))
-                                
+                        
                         #Create regular grid interpolators, aligning all/targeted m/z data, and storing results
                         if self.readAllMSI: self.allImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.mzFinal), np.asarray(mzDataLine, dtype='float64'), bounds_error=False, fill_value=0)(self.mzFinalGrid).astype('float32')
                         self.chanImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.chanValues), np.asarray(chanDataLine, dtype='float64').T, bounds_error=False, fill_value=0)(self.chanFinalGrid).astype('float32')
@@ -743,17 +750,18 @@ class Sample:
         else:
             self.ERD = self.squareERD
             self.ERDs = self.squareERDs
+        self.processedERD = copy.deepcopy(self.ERD)
         
-        #Mask the ERD used for selection by the FOV mask if applicable, set measured location values to 0, ensure >= 0 values remain , rescale for potential Otsu, and prevent line revisitation as configured
-        if sampleData.useMaskFOV: self.physicalERD = copy.deepcopy(self.ERD)*sampleData.maskFOV
-        else: self.physicalERD = copy.deepcopy(self.ERD)
+        #Bias E/RD by an optical image if applicable
+        if sampleData.dataMSI and (applyOptical == 'directBias' or applyOptical == 'secDerivBias'): 
+            if applyOptical == 'secDerivBias': self.processedERD *= sampleData.opticalImageSecDeriv
+            else: self.processedERD *= sampleData.opticalImage
         
-        #Tracer() #This is one location to try injecting the optical image
-        #if sampleData.biasOptical: self.physicalERD *= sampleData.squareOpticalImage
-        
-        self.physicalERD[self.physicalERD<0] = 0
-        if np.max(self.physicalERD) != 0: self.physicalERD = ((self.physicalERD-np.min(self.physicalERD))/(np.max(self.physicalERD)-np.min(self.physicalERD)))*100
-        if sampleData.scanMethod == 'linewise' and not sampleData.lineRevist: self.physicalERD[np.where(np.sum(self.mask, axis=1)>0)] = 0
+        #Mask the ERD used for selection by the FOV mask if applicable, set measured location values to 0, ensure >= 0 values remain, rescale for potential Otsu, and prevent line revisitation as configured
+        if sampleData.useMaskFOV: self.processedERD *= sampleData.maskFOV
+        self.processedERD[self.processedERD<0] = 0
+        if np.max(self.processedERD) != 0: self.processedERD = ((self.processedERD-np.min(self.processedERD))/(np.max(self.processedERD)-np.min(self.processedERD)))*100
+        if sampleData.scanMethod == 'linewise' and not sampleData.lineRevist: self.processedERD[np.where(np.sum(self.mask, axis=1)>0)] = 0
 
 #Sample scanning progress and final results processing
 class Result:
@@ -1181,8 +1189,8 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
     #Generate and apply a plot title, with metrics if applicable
     plotTitle = r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured
     if sampleData.simulationFlag and not sampleData.trainFlag and not sampleData.datagenFlag:
-        plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Sum\ Image: }$" + sumImagePSNR + r"$\bf{\ \ ERD:\ }$" + erdPSNR 
-        plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM + r"$\bf{\ \ ERD:\ }$" + erdSSIM
+        plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Sum\ Image: }$" + sumImagePSNR + r"$\bf{\ \ Avg ERD:\ }$" + erdPSNR 
+        plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM + r"$\bf{\ \ Avg ERD:\ }$" + erdSSIM
     elif sampleData.simulationFlag and sampleData.trainFlag and not sampleData.datagenFlag:
         plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Sum\ Image: }$" + sumImagePSNR
         plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM
@@ -1215,8 +1223,8 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
     if not sampleData.trainFlag:
         if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (1,1))
         else: ax = plt.subplot2grid((1,3), (0,2))
-        im = ax.imshow(sample.ERD, cmap='viridis', vmin=0, aspect='auto')
-        ax.set_title('ERD')
+        im = ax.imshow(sample.processedERD, cmap='viridis', vmin=0, aspect='auto')
+        ax.set_title('Processed ERD')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
     if sampleData.simulationFlag: 
@@ -1237,11 +1245,13 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
     borderlessPlot(sample.sumReconImage, saveLocation, cmap='hot', vmin=sumImageMinValue, vmax=sumImageMaxValue)
     
     saveLocation = dir_progression + 'mask_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-    borderlessPlot(sample.mask, saveLocation, cmap='gray')
+    borderlessPlot(sample.mask, saveLocation, cmap='gray', vmin=0, vmax=1, interpolation='none')
     
     if not sampleData.trainFlag:
         saveLocation = dir_progression + 'ERD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
         borderlessPlot(sample.ERD, saveLocation, cmap='viridis')
+        saveLocation = dir_progression + 'ERD_Processed_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
+        borderlessPlot(sample.processedERD, saveLocation, cmap='viridis')
     
     saveLocation = dir_progression + 'measured_sumImage_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
     borderlessPlot(sample.sumImage, saveLocation, cmap='hot', vmin=sumImageMinValue, vmax=sumImageMaxValue)
@@ -1282,7 +1292,7 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, lineVisitAll, 
     #Check stopping criteria, just in case of a bad input
     if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): sys.exit('Error - All points were scanned or the stopping criteria have been met after the initial acquisition for sample: ' + sample.name)
     elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: sys.exit('Error - All lines were scanned after the inital acquisition for sample: ' + sample.name)
-    if not sampleData.datagenFlag and np.sum(sample.physicalERD) == 0: sys.exit('Error - Initial ERD indicates there are no places to scan for sample: ' + sample.name)
+    if not sampleData.datagenFlag and np.sum(sample.processedERD) == 0: sys.exit('Error - Initial ERD indicates there are no places to scan for sample: ' + sample.name)
     
     #Perform the first update for the result
     result.update(sample, completedRunFlag)
@@ -1311,7 +1321,7 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, lineVisitAll, 
         #Check stopping criteria
         if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): completedRunFlag = True
         elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: completedRunFlag = True
-        if not sampleData.datagenFlag and np.sum(sample.physicalERD) == 0: completedRunFlag = True
+        if not sampleData.datagenFlag and np.sum(sample.processedERD) == 0: completedRunFlag = True
         
         #If viz limit, only update when percToViz has been met; otherwise update every iteration
         if ((percToViz != None) and ((sample.percMeasured-result.percsMeasured[-1]) >= percToViz)) or (percToViz == None) or (sampleData.scanMethod == 'linewise') or completedRunFlag: result.update(sample, completedRunFlag)
@@ -1445,16 +1455,28 @@ def computePolyFeatures(sampleData, tempScanData, reconImage):
 
 #Prepare data for DLADS or GLANDS model input; if a channel number was given then prepare it on its own, otherwise create a batch for the whole sample
 def prepareInput(sample, numChannel=None):
+    
+    inputStack = []
     if numChannel != None:
+        
+        #Normalize/Standardize/Rescale input data as configured
         inputReconImage = sample.squareChanReconImages[numChannel]
         if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
             minValue = np.min(inputReconImage)
             inputReconImage = (inputReconImage-minValue)/(np.max(inputReconImage)-minValue)
         elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
             inputReconImage = (inputReconImage-np.mean(inputReconImage))/np.std(inputReconImage)
-        if erdModel == 'DLADS': return np.dstack((sample.squareMask, inputReconImage*(1-sample.squareMask), inputReconImage*sample.squareMask))
-        elif erdModel == 'GLANDS': return np.dstack((sample.squareMask, inputReconImage*sample.squareMask))
+        
+        #Add channels to the input stack
+        if 'opticalData' in inputChannels: inputStack.append(sample.squareOpticalImage)
+        if 'mask' in inputChannels: inputStack.append(sample.squareMask)
+        if 'reconData' in inputChannels: inputStack.append(inputReconImage*(1-sample.squareMask))
+        if 'measureData' in inputChannels: inputStack.append(inputReconImage*sample.squareMask)
+        return np.dstack(inputStack)
+
     else: 
+        
+        #Normalize/Standardize/Rescale input data as configured
         inputReconImages = np.moveaxis(sample.squareChanReconImages, 0, -1)
         if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
             minValues = np.min(inputReconImages, axis=(0,1))
@@ -1462,9 +1484,14 @@ def prepareInput(sample, numChannel=None):
         elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
             inputReconImages = (inputReconImages-np.mean(inputReconImages))/np.std(inputReconImages)
         inputReconImages = np.moveaxis(inputReconImages, -1, 0)
-        if erdModel == 'DLADS': return np.stack((np.repeat(np.expand_dims(sample.squareMask, 0), len(inputReconImages), axis=0), inputReconImages*(1-sample.squareMask), inputReconImages*sample.squareMask), axis=-1)
-        elif erdModel == 'GLANDS': return np.stack((np.repeat(np.expand_dims(sample.squareMask, 0), len(inputReconImages), axis=0), inputReconImages*sample.squareMask), axis=-1)
-
+        
+        #Add channels to the input stack
+        if 'opticalData' in inputChannels: inputStack.append(np.repeat(np.expand_dims(sample.squareOpticalImage, 0), len(inputReconImages), axis=0))
+        if 'mask' in inputChannels: inputStack.append(np.repeat(np.expand_dims(sample.squareMask, 0), len(inputReconImages), axis=0))
+        if 'reconData' in inputChannels: inputStack.append(inputReconImages*(1-sample.squareMask))
+        if 'measureData' in inputChannels: inputStack.append(inputReconImages*sample.squareMask)
+        return np.stack(inputStack, axis=-1)
+        
 #Determine the Estimated Reduction in Distortion
 def computeERD(sample, sampleData, tempScanData, model):
     #Compute the ERD with the prescribed model; if configured to, only use a single channel
@@ -1522,7 +1549,7 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
             while True:
                 
                 #Find next measurement location and store the chosen scanning location for later, actual measurement
-                newIdx = sample.unMeasuredIdxs[np.argmax(sample.physicalERD[sample.unMeasuredIdxs[:,0], sample.unMeasuredIdxs[:,1]])]
+                newIdx = sample.unMeasuredIdxs[np.argmax(sample.processedERD[sample.unMeasuredIdxs[:,0], sample.unMeasuredIdxs[:,1]])]
                 newIdxs.append(newIdx.tolist())
                 
                 #Perform the measurement, using values from reconstruction 
@@ -1534,28 +1561,28 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
             #Convert to array for indexing
             newIdxs = np.asarray(newIdxs)
         else:
-            #Identify the unmeasured location with the highest physicalERD value; return in a list to ensure it is iterable
-            newIdxs = np.asarray([sample.unMeasuredIdxs[np.argmax(sample.physicalERD[sample.unMeasuredIdxs[:,0], sample.unMeasuredIdxs[:,1]])].tolist()])
+            #Identify the unmeasured location with the highest processedERD value; return in a list to ensure it is iterable
+            newIdxs = np.asarray([sample.unMeasuredIdxs[np.argmax(sample.processedERD[sample.unMeasuredIdxs[:,0], sample.unMeasuredIdxs[:,1]])].tolist()])
             
     elif sampleData.scanMethod == 'linewise':
         
         #If all locations on a chosen line should be scanned, select the line with maximum sum physical ERD
         if lineMethod =='fullLine':
-            lineToScanIdx = np.nanargmax(np.nansum(sample.physicalERD, axis=1))
-            indexes = np.sort(np.argsort(sample.physicalERD[lineToScanIdx])[::-1])
+            lineToScanIdx = np.nanargmax(np.nansum(sample.processedERD, axis=1))
+            indexes = np.sort(np.argsort(sample.processedERD[lineToScanIdx])[::-1])
             newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
         
         #If points on a chosen line should be chosen one-by-one, temporarily using reconstruction values for updating the ERD, selecting the line with maximum sum physical ERD
         elif lineMethod == 'percLine' and linePointSelection == 'single': 
             newIdxs = []
-            lineToScanIdx = np.nanargmax(np.nansum(sample.physicalERD, axis=1))
+            lineToScanIdx = np.nanargmax(np.nansum(sample.processedERD, axis=1))
             while True:
                 
                 #If there are no remaining points to scan on this line with physical ERD > 0 or enough new locations have been found, break from loop
-                if (np.sum(sample.physicalERD[lineToScanIdx]) <= 0) or (len(newIdxs) >= sampleData.pointsToScan[lineToScanIdx]): break
+                if (np.sum(sample.processedERD[lineToScanIdx]) <= 0) or (len(newIdxs) >= sampleData.pointsToScan[lineToScanIdx]): break
                 
                 #Identify the next scanning location and store it for later, actual measurement
-                newIdxs.append([lineToScanIdx, np.argmax(sample.physicalERD[lineToScanIdx])])
+                newIdxs.append([lineToScanIdx, np.argmax(sample.processedERD[lineToScanIdx])])
                 
                 #Perform the measurement using values from reconstruction 
                 sample.performMeasurements(sampleData, tempScanData, result, np.asarray(newIdxs[-1]), model, cValue, True)
@@ -1566,19 +1593,19 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
         
         #If locations on the line should be selected in one step/group, select that group on the line with maximum sum physical ERD
         elif lineMethod == 'percLine' and linePointSelection == 'group':
-            lineToScanIdx = np.nanargmax(np.nansum(sample.physicalERD, axis=1))
-            indexes = np.sort(np.argsort(sample.physicalERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
+            lineToScanIdx = np.nanargmax(np.nansum(sample.processedERD, axis=1))
+            indexes = np.sort(np.argsort(sample.processedERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
             newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
         
         #If a segment of a line should be scanned using a minimum percentage, choose the line with maximum sum physical ERD
         elif lineMethod == 'segLine' and segLineMethod == 'minPerc': 
-           lineToScanIdx = np.nanargmax(np.nansum(sample.physicalERD, axis=1))
-           indexes = np.sort(np.argsort(sample.physicalERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
+           lineToScanIdx = np.nanargmax(np.nansum(sample.processedERD, axis=1))
+           indexes = np.sort(np.argsort(sample.processedERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
            if len(indexes)>0: newIdxs = np.column_stack([np.ones(indexes[-1]-indexes[0]+1, dtype=np.float32)*lineToScanIdx, np.arange(indexes[0],indexes[-1]+1)]).astype(int)
 
         #If a segment of a line should be scanned using Otsu, choose the line with the most scannable positions
         elif lineMethod == 'segLine' and segLineMethod == 'otsu': 
-            otsuMask = sample.physicalERD>=skimage.filters.threshold_otsu(sample.physicalERD, nbins=100)
+            otsuMask = sample.processedERD>=skimage.filters.threshold_otsu(sample.processedERD, nbins=100)
             lineToScanIdx = np.nanargmax(np.nansum(otsuMask, axis=1))
             indexes = np.sort(np.where(otsuMask[lineToScanIdx])[0])
             if len(indexes)>0: 
@@ -1718,11 +1745,11 @@ def computeDifference(array1, array2):
 #Truncate a value to a given precision 
 def truncate(value, decimalPlaces=0): return np.trunc(value*10**decimalPlaces)/(10**decimalPlaces)
 
-def borderlessPlot(image, saveLocation, cmap='viridis', vmin=None, vmax=None):
+def borderlessPlot(image, saveLocation, cmap='viridis', vmin=None, vmax=None, interpolation=None):
     fig=plt.figure()
     ax=fig.add_subplot(1,1,1)
     plt.axis('off')
-    plt.imshow(image, cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax)
+    plt.imshow(image, cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax, interpolation=interpolation)
     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     plt.savefig(saveLocation, bbox_inches=extent)
     plt.close(fig)

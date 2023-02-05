@@ -16,7 +16,7 @@ if chanSingle: modelName += 'chanSingle_'
 else: modelName += 'chanMultiple_'
 if staticWindow: modelName += 'statWin_' + str(staticWindowSize) + '_'
 if not staticWindow: modelName += 'dynWin_' + str(dynWindowSigMult) + '_'
-if applyOptical != None: modelName += 'optical' + applyOptical + '_'
+if applyOptical != None: modelName += 'opt_' + applyOptical + '_'
 
 #Data input directories
 dir_InputData = '.' + os.path.sep + 'INPUT' + os.path.sep
