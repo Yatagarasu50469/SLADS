@@ -348,9 +348,11 @@ class SampleData:
             opticalImage[opticalMask] = 1-opticalImage[opticalMask]
             if applyOptical == 'secDerivBias': 
                 opticalImageSecDeriv = abs(cv2.Laplacian(opticalImage, cv2.CV_64F))
-                self.squareOpticalImageSecDeriv = resize(opticalImageSecDeriv, tuple(self.squareDim), order=0)
+                if self.sampleType == 'DESI': self.squareOpticalImageSecDeriv = resize(opticalImageSecDeriv, tuple(self.squareDim), order=0)
+                else: self.squareOpticalImageSecDeriv = opticalImageSecDeriv
                 self.opticalImageSecDeriv = resize(opticalImageSecDeriv, tuple(self.finalDim), order=0)
-            self.squareOpticalImage = resize(opticalImage, tuple(self.squareDim), order=0)
+            if self.sampleType == 'DESI': self.squareOpticalImage = resize(opticalImage, tuple(self.squareDim), order=0)
+            else: self.squareOpticalImage = opticalImage
             self.opticalImage = resize(opticalImage, tuple(self.finalDim), order=0)
         
         #If a simulation or post-processing, read all the sample data and save in hdf5 if applicable, optimized for loading whole channel images, force clear the actor memory
@@ -616,6 +618,9 @@ class Sample:
         self.percMeasured = 0
         self.iteration = 0
         
+        #If DLADS or GLANDS using MSI data and optical image is intended to be used as a network input
+        if (erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net') and self.dataMSI and ('opticalData' in inputChannels): self.squareOpticalImage = sampleData.squareOpticalImage
+        
         #If post-processing, link to the final sampled mask
         if sampleData.postFlag: self.mask = sampleData.mask
     
@@ -754,8 +759,18 @@ class Sample:
         
         #Bias E/RD by an optical image if applicable
         if sampleData.dataMSI and (applyOptical == 'directBias' or applyOptical == 'secDerivBias'): 
-            if applyOptical == 'secDerivBias': self.processedERD *= sampleData.opticalImageSecDeriv
-            else: self.processedERD *= sampleData.opticalImage
+            preWeightERD = copy.deepcopy(self.processedERD)
+            borderlessPlot(preWeightERD, './ERD-beforeWeighting.png', cmap='viridis')
+            borderlessPlot(self.mask, './mask.png', cmap='gray', vmin=0, vmax=1, interpolation='none')
+            if applyOptical == 'secDerivBias': 
+                self.processedERD *= sampleData.opticalImageSecDeriv
+                borderlessPlot(sampleData.opticalImageSecDeriv, './opticalApplied.png', cmap='gray')
+            else: 
+                self.processedERD *= sampleData.opticalImage
+                borderlessPlot(sampleData.opticalImage, './opticalApplied.png', cmap='gray')
+            borderlessPlot(self.processedERD, './ERD-afterWeighting.png', cmap='viridis')
+            borderlessPlot(abs(preWeightERD-self.processedERD), './ERD-diff.png', cmap='viridis')
+            sys.exit('Done')
         
         #Mask the ERD used for selection by the FOV mask if applicable, set measured location values to 0, ensure >= 0 values remain, rescale for potential Otsu, and prevent line revisitation as configured
         if sampleData.useMaskFOV: self.processedERD *= sampleData.maskFOV
