@@ -348,11 +348,9 @@ class SampleData:
             opticalImage[opticalMask] = 1-opticalImage[opticalMask]
             if applyOptical == 'secDerivBias': 
                 opticalImageSecDeriv = abs(cv2.Laplacian(opticalImage, cv2.CV_64F))
-                if self.sampleType == 'DESI': self.squareOpticalImageSecDeriv = resize(opticalImageSecDeriv, tuple(self.squareDim), order=0)
-                else: self.squareOpticalImageSecDeriv = opticalImageSecDeriv
+                self.squareOpticalImageSecDeriv = resize(opticalImageSecDeriv, tuple(self.squareDim), order=0)
                 self.opticalImageSecDeriv = resize(opticalImageSecDeriv, tuple(self.finalDim), order=0)
-            if self.sampleType == 'DESI': self.squareOpticalImage = resize(opticalImage, tuple(self.squareDim), order=0)
-            else: self.squareOpticalImage = opticalImage
+            self.squareOpticalImage = resize(opticalImage, tuple(self.squareDim), order=0)
             self.opticalImage = resize(opticalImage, tuple(self.finalDim), order=0)
         
         #If a simulation or post-processing, read all the sample data and save in hdf5 if applicable, optimized for loading whole channel images, force clear the actor memory
@@ -618,9 +616,6 @@ class Sample:
         self.percMeasured = 0
         self.iteration = 0
         
-        #If DLADS or GLANDS using MSI data and optical image is intended to be used as a network input
-        if (erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net') and self.dataMSI and ('opticalData' in inputChannels): self.squareOpticalImage = sampleData.squareOpticalImage
-        
         #If post-processing, link to the final sampled mask
         if sampleData.postFlag: self.mask = sampleData.mask
     
@@ -759,18 +754,8 @@ class Sample:
         
         #Bias E/RD by an optical image if applicable
         if sampleData.dataMSI and (applyOptical == 'directBias' or applyOptical == 'secDerivBias'): 
-            preWeightERD = copy.deepcopy(self.processedERD)
-            borderlessPlot(preWeightERD, './ERD-beforeWeighting.png', cmap='viridis')
-            borderlessPlot(self.mask, './mask.png', cmap='gray', vmin=0, vmax=1, interpolation='none')
-            if applyOptical == 'secDerivBias': 
-                self.processedERD *= sampleData.opticalImageSecDeriv
-                borderlessPlot(sampleData.opticalImageSecDeriv, './opticalApplied.png', cmap='gray')
-            else: 
-                self.processedERD *= sampleData.opticalImage
-                borderlessPlot(sampleData.opticalImage, './opticalApplied.png', cmap='gray')
-            borderlessPlot(self.processedERD, './ERD-afterWeighting.png', cmap='viridis')
-            borderlessPlot(abs(preWeightERD-self.processedERD), './ERD-diff.png', cmap='viridis')
-            sys.exit('Done')
+            if applyOptical == 'secDerivBias': self.processedERD *= sampleData.opticalImageSecDeriv
+            else: self.processedERD *= sampleData.opticalImage
         
         #Mask the ERD used for selection by the FOV mask if applicable, set measured location values to 0, ensure >= 0 values remain, rescale for potential Otsu, and prevent line revisitation as configured
         if sampleData.useMaskFOV: self.processedERD *= sampleData.maskFOV
@@ -1469,7 +1454,7 @@ def computePolyFeatures(sampleData, tempScanData, reconImage):
     return polyFeatures
 
 #Prepare data for DLADS or GLANDS model input; if a channel number was given then prepare it on its own, otherwise create a batch for the whole sample
-def prepareInput(sample, numChannel=None):
+def prepareInput(sample, sampleData, numChannel=None):
     
     inputStack = []
     if numChannel != None:
@@ -1483,7 +1468,7 @@ def prepareInput(sample, numChannel=None):
             inputReconImage = (inputReconImage-np.mean(inputReconImage))/np.std(inputReconImage)
         
         #Add channels to the input stack
-        if 'opticalData' in inputChannels: inputStack.append(sample.squareOpticalImage)
+        if 'opticalData' in inputChannels: inputStack.append(sampleData.squareOpticalImage)
         if 'mask' in inputChannels: inputStack.append(sample.squareMask)
         if 'reconData' in inputChannels: inputStack.append(inputReconImage*(1-sample.squareMask))
         if 'measureData' in inputChannels: inputStack.append(inputReconImage*sample.squareMask)
@@ -1501,7 +1486,7 @@ def prepareInput(sample, numChannel=None):
         inputReconImages = np.moveaxis(inputReconImages, -1, 0)
         
         #Add channels to the input stack
-        if 'opticalData' in inputChannels: inputStack.append(np.repeat(np.expand_dims(sample.squareOpticalImage, 0), len(inputReconImages), axis=0))
+        if 'opticalData' in inputChannels: inputStack.append(np.repeat(np.expand_dims(sampleData.squareOpticalImage, 0), len(inputReconImages), axis=0))
         if 'mask' in inputChannels: inputStack.append(np.repeat(np.expand_dims(sample.squareMask, 0), len(inputReconImages), axis=0))
         if 'reconData' in inputChannels: inputStack.append(inputReconImages*(1-sample.squareMask))
         if 'measureData' in inputChannels: inputStack.append(inputReconImages*sample.squareMask)
@@ -1517,7 +1502,7 @@ def computeERD(sample, sampleData, tempScanData, model):
             
             #First try inferencing all m/z channels at the same time 
             if not sampleData.OOM_multipleChannels:
-                try: sample.squareERDs = ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample)))).copy()
+                try: sample.squareERDs = ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample, sampleData)))).copy()
                 except: 
                     sampleData.OOM_multipleChannels = True
                     if (len(gpus) > 0): print('\nWarning - Could not inference ERD for all channels of sample '+sampleData.name+' simultaneously on system GPU; will try processing channels iteratively.')
@@ -1525,7 +1510,7 @@ def computeERD(sample, sampleData, tempScanData, model):
             
             #If multiple channels causes an OOM, then try running each channel through on its own
             if sampleData.OOM_multipleChannels and not sampleData.OOM_singleChannel:
-                try: sample.squareERDs = np.asarray([ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample, chanNum))))[0,:,:].copy() for chanNum in range(0, len(sample.squareERDs))])
+                try: sample.squareERDs = np.asarray([ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample, sampleData, chanNum))))[0,:,:].copy() for chanNum in range(0, len(sample.squareERDs))])
                 except: sampleData.OOM_singleChannel = True
             
             #If an OOM occured for both mutiple and single channel inferencing, then exit; need to either restart program with no GPUs, or there isn't enough system RAM
@@ -1537,7 +1522,7 @@ def computeERD(sample, sampleData, tempScanData, model):
             ERDValues = ray.get(model.generateERD.remote(sample.polyFeatures[0]))
             for chanNum in range(0, len(sample.squareERDs)): sample.squareERDs[chanNum, tempScanData.squareUnMeasuredIdxs[:, 0], tempScanData.squareUnMeasuredIdxs[:, 1]] = ERDValues
         elif erdModel == 'DLADS': 
-            sample.squareERDs[0] = ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample, 0))))[0,:,:].copy()
+            sample.squareERDs[0] = ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample, sampleData, 0))))[0,:,:].copy()
             for chanNum in range(1, len(sample.squareERDs)): sample.squareERDs[chanNum] = sample.squareERDs[0]
     
     #Remove any negative values, measured locations, nan, or inf values

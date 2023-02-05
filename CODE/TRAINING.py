@@ -104,7 +104,7 @@ class EpochEnd(Callback):
                 for vizSampleNum in range(0, len(self.vizSamples)):
                 
                     vizSample = self.vizSamples[vizSampleNum]
-                    sampleBatch = makeCompatible([prepareInput(vizSample, chanNum) for chanNum in range(0, len(vizSample.chanReconImages))])
+                    sampleBatch = makeCompatible([prepareInput(vizSample, self.vizSampleData, chanNum) for chanNum in range(0, len(vizSample.chanReconImages))])
                     squareERD = np.mean(self.model(sampleBatch, training=False)[:,:,:,0].numpy(), axis=0)
                     squareRD = vizSample.squareRD
                     
@@ -278,16 +278,23 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
     #For the number of mask iterations specified, create new masks (should not be done in parallel) and scan them with the specified method
     t0 = time.time()
     valThresh = int(np.floor(trainingSplit*len(trainingValidationSampleData)))-1
-    results, futures, maxProgress, trainSampleBoolList = [], [], 0.0, []
+    results, futures, maxProgress, trainSampleBoolList, sampleDataIndexList, sampleDataIndexList, sampleDataIndex = [], [], 0.0, [], [], [], -1
     for index in tqdm(range(0, len(trainingValidationSampleData)), desc = 'Samples', leave=True, ascii=asciiFlag, disable=parallelization):
+        
+        #Indicate if this is a training or validation set sample; reset sampleDataIndex when threshold has been reached
         if index <= valThresh: trainSampleBool = True
-        else: trainSampleBool = False
+        elif trainSampleBool: sampleDataIndex, trainSampleBool = -1, False
+        sampleDataIndex+=1
+        
         for maskNum in tqdm(range(0,numMasks), desc = 'Masks', leave=False, ascii=asciiFlag, disable=parallelization):
             
             #Make a copy of the sampleData with a new initial measurement mask
             sampleData = copy.deepcopy(trainingValidationSampleData[index])
             sampleData.generateInitialSets('random')
-            
+
+            #Store training/validation sampleData index to identify the corresponding reference during training procedure
+            sampleDataIndexList.append(sampleDataIndex)
+
             #Change location and a boolean flag for results/visuals depending on if sample belongs to training or validation sets
             trainSampleBoolList.append(trainSampleBool)
             if trainSampleBool: saveLocation = trainSaveLocations[maskNum]
@@ -316,6 +323,7 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
         while (True):
             pbar.n = np.clip(round(ray.get(samplingProgress_Actor.getCurrent.remote()),2), 0, maxProgress)
             pbar.refresh()
+            pbar.refresh()
             if results.ready(): 
                 pbar.n = maxProgress
                 pbar.refresh()
@@ -340,11 +348,11 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
         result.complete()
         for sample in results[index].samples: 
             
-            #Tracer()
-            #To save memory and storage space remove sample variables not needed for training here!
-            #Also, make sure allImages aren't being unneccessarily loaded for this...
+            #TODO: To save memory and storage space remove sample variables not needed for training here!
             #del sample.iteration, sample.percMeasured, sample.squareERD, sample.squareERDS, sample.mask
             
+            #Store the index for finding the sampleData corresponding to the sample in trainingSampleData/validationSampleData during training
+            sample.sampleDataIndex = sampleDataIndexList[index]
             if trainSampleBoolList[index]: trainingDatabase.append(sample)
             else: validationDatabase.append(sample)
     
@@ -395,7 +403,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
         trainInputImages, trainOutputImages = [], []
         for sample in tqdm(trainingDatabase, desc = 'Training Data Setup', leave=True, ascii=asciiFlag):
             for chanNum in range(0, len(sample.squareRDs)):
-                trainInputImages.append(tf.convert_to_tensor(prepareInput(sample, chanNum).astype(np.float32)))
+                trainInputImages.append(tf.convert_to_tensor(prepareInput(sample, trainingSampleData[sample.sampleDataIndex], chanNum).astype(np.float32)))
                 trainOutputImages.append(tf.convert_to_tensor(np.expand_dims(sample.squareRDs[chanNum], -1).astype(np.float32)))
         trainCount = len(trainInputImages)
         trainSteps = trainCount//batchSize
@@ -410,7 +418,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
             valInputImages, valOutputImages = [], []
             for sample in tqdm(validationDatabase, desc = 'Validation Data Setup', leave=True, ascii=asciiFlag):
                 for chanNum in range(0, len(sample.squareRDs)):
-                    valInputImages.append(tf.convert_to_tensor(prepareInput(sample, chanNum).astype(np.float32)))
+                    valInputImages.append(tf.convert_to_tensor(prepareInput(sample, validationSampleData[sample.sampleDataIndex], chanNum).astype(np.float32)))
                     valOutputImages.append(tf.convert_to_tensor(np.expand_dims(sample.squareRDs[chanNum], -1).astype(np.float32)))
             valCount = len(valInputImages)
             valSteps = valCount//batchSize
