@@ -277,7 +277,8 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
     
     #For the number of mask iterations specified, create new masks (should not be done in parallel) and scan them with the specified method
     t0 = time.time()
-    valThresh = int(np.floor(trainingSplit*len(trainingValidationSampleData)))-1
+    valThresh = int(math.floor(trainingSplit*len(trainingValidationSampleData)))-1
+    if valThresh < 0: valThresh = 0
     results, futures, maxProgress, trainSampleBoolList, sampleDataIndexList, sampleDataIndexList, sampleDataIndex = [], [], 0.0, [], [], [], -1
     for index in tqdm(range(0, len(trainingValidationSampleData)), desc = 'Samples', leave=True, ascii=asciiFlag, disable=parallelization):
         

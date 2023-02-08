@@ -233,7 +233,7 @@ def msi_parhelper(allImagesActor, readAllMSI, scanFileNames, indexData, mzOrigin
                 #Extract original measurement times and setup/read TIC data as applicable
                 if data.format == 'Bruker': 
                     sumImageLine = []
-                    origTimes = np.asarray(data.ms1_frames)[:,1]
+                    origTimes = np.asarray(data.ms1_frames)[:,1]/60
                 else: 
                     imageData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
                     origTimes, sumImageLine = imageData[:,0], imageData[:,1]
@@ -259,7 +259,8 @@ def msi_parhelper(allImagesActor, readAllMSI, scanFileNames, indexData, mzOrigin
                 for pos in positions:
                     if data.format == 'Bruker':
                         frameData = np.asarray(data.frame(pos))
-                        mzs, ints = frameData[:,0], frameData[:,2]
+                        indexes = np.argsort(frameData[:,0])
+                        mzs, ints = frameData[indexes,0], frameData[indexes,2]
                         sumImageLine.append(np.sum(ints))
                     else: 
                         scanData = np.array(data.scan(pos, 'profile'))

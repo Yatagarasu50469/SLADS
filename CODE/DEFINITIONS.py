@@ -524,7 +524,7 @@ class SampleData:
                         #Extract original measurement times and setup/read TIC data as applicable
                         if data.format == 'Bruker': 
                             sumImageLine = []
-                            origTimes = np.asarray(data.ms1_frames)[:,1]
+                            origTimes = np.asarray(data.ms1_frames)[:,1]/60
                         else: 
                             imageData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
                             origTimes, sumImageLine = imageData[:,0], imageData[:,1]
@@ -550,7 +550,8 @@ class SampleData:
                         for pos in positions:
                             if data.format == 'Bruker':
                                 frameData = np.asarray(data.frame(pos))
-                                mzs, ints = frameData[:,0], frameData[:,2]
+                                indexes = np.argsort(frameData[:,0])
+                                mzs, ints = frameData[indexes,0], frameData[indexes,2]
                                 sumImageLine.append(np.sum(ints))
                             else: 
                                 scanData = np.array(data.scan(pos, 'profile'))
@@ -565,7 +566,7 @@ class SampleData:
                         if self.readAllMSI: self.allImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.mzFinal), np.asarray(mzDataLine, dtype='float64'), bounds_error=False, fill_value=0)(self.mzFinalGrid).astype('float32')
                         self.chanImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.chanValues), np.asarray(chanDataLine, dtype='float64').T, bounds_error=False, fill_value=0)(self.chanFinalGrid).astype('float32')
                         self.sumImage[lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(sumImageLine, nan=0, posinf=0, neginf=0), left=0, right=0)
-                    
+                        
                         #Close the file
                         data.close()
             
