@@ -391,7 +391,7 @@ If a large number of new .png, .jpg, and/or .tiff images (extensions are case-se
 ###  **RUN**
 After configuration, to run the program perform the following command in the root directory:
 
-    $ python ./SLADS
+    $ python ./START.py
 
 ###  **RESULTS**
 All results will be placed in ./RESULTS/ as follows (presuming MSI data):
