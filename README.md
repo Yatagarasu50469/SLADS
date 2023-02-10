@@ -456,7 +456,7 @@ In the case that multiple configuration files are provided in the form of: CONFI
 
 4\. The program waits for **LOCK** to re-appear, which should be created after the requested data has been scanned into the implementation input directory. The data must follow the formatting specified in the TRAINING/TESTING PROCEDURE section of the README documentation. 
 
-5\. When the termination criteria has been met, the program produces a file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. 
+5\. When the termination criteria have been met, the program produces a file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. 
 
 # FAQ
 ###  **I read through the README thoroughly, but I'm still getting an error, am confused about how a feature should work, or would like a feature/option added**
