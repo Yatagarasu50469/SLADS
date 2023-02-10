@@ -444,7 +444,7 @@ In the case that multiple configuration files are provided in the form of: CONFI
 
 **Note:** In order to use a trained model in a physical implementation, the files resultant from the training procedure must be located within './RESULTS/TRAIN/'.
 
-1\. Prior to engaging the physical equipment, run the program with the **impModel** variable enabled in the configuration file. A custom implementation input directory, to use instead of the default: './INPUT/IMP/', may be specified with the **impInputDir** variable during configuration. All other testing and training flags within **Parameters: L0** should be disabled. 
+1\. Prior to engaging the physical equipment, run the program with the **impModel** variable enabled in the configuration file. A custom implementation input directory, to use instead of the default: './INPUT/IMP/', may be specified with the **impInputDir** variable, under section L1-1, during configuration. All other testing and training flags within in the configuration file, under section L0, should be disabled. 
 
 2\. Initialize the program with 'python START.py' and place 'sampleInfo.txt' and 'channels.csv' (if not using a global 'channels.csv' file in the SLADS/DLADS root directory) into the implementation input directory. The 'sampleInfo.txt' and 'channels.csv' files should follow the format outlined in the CONFIGURATION section of the README documentation. 
 
