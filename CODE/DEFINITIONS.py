@@ -304,11 +304,12 @@ class SampleData:
         #If MSI data, regardless of if all channel data is to be loaded or not
         if self.dataMSI:
             
-            #Load targeted m/z values, preferring those in the sample folders if available, and set corresponding ranges 
+            #Load targeted m/z values in sorted order, preferring those in the sample folders if available, and set corresponding ranges 
             try: self.chanValues = np.loadtxt(self.sampleFolder+os.path.sep+'channels.csv', delimiter=',')
             except: 
                 if overrideChannelsFile == None: self.chanValues = np.loadtxt('channels.csv', delimiter=',')
                 else: self.chanValues = np.loadtxt(overrideChannelsFile, delimiter=',')
+            self.chanValues.sort()
             self.numChannels = len(self.chanValues)
             self.mzRanges = np.round(np.column_stack((self.chanValues*self.ppmNeg, self.chanValues*self.ppmPos)), self.mzRound)
             
@@ -503,6 +504,7 @@ class SampleData:
                     errorFlag = False
                     try: data = mzFile(scanFileName)
                     except: errorFlag = True
+                    data = mzFile(scanFileName)
                     
                     #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number minus 1
                     if not errorFlag:
@@ -551,8 +553,8 @@ class SampleData:
                             if data.format == 'Bruker':
                                 mzs, ints = data.scan(pos, True)
                                 sumImageLine.append(np.sum(ints))
-                            else: 
-                                mzs, ints = np.array(data.scan(pos, 'profile', True))
+                            else:
+                                mzs, ints = data.scan(pos, False, True)
                             filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
                             if self.readAllMSI: mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices))
                             for mzRangeNum in range(0, len(self.mzRanges)):

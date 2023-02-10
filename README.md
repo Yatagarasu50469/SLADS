@@ -348,7 +348,7 @@ For MALDI samples, aligned optical images may be incorporated into the model, ho
     - Sequential filenames (1 indicates sequential, 0 for physical row location)
         Indicates whether the filename line numbers going to be labeled sequentially rather than by physical row number
 
-Each DESI MSI data file (ex. extensions: .d, or .raw), must be named with the standard convention below, increasing line-0001 as appropriate. If using Agilent equipment with linewise acquisition modes for an implementation run, then the line numbers are in sequence, rather than according to physical row number. In this case, enable the unorderedNames flag in the configuration file. 
+Each DESI MSI data file (ex. extensions: .d, or .raw), must be named with the standard convention below, increasing line-0001 as appropriate. If using Agilent equipment with linewise acquisition modes for an implementation run, then the line numbers are in sequence, rather than according to physical row number.
 
     sampleName-line-0001.extension
 
@@ -486,7 +486,7 @@ While it does not currently function for some MSI formats, (verified operational
     $ echo "deb https://download.mono-project.com/repo/ubuntu stable-bionic main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
     $ sudo apt-get update
     $ sudo apt-get install -y mono-devel
-    $ pip3 install git+https://github.com/pythonnet/pythonnet.git@master
+    $ pip3 install git+https://github.com/pythonnet/pythonnet.git@2ad4e7006a3646be8457f74940541812e79a926e
     $ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
     $ python -c "from multiplierz.mzAPI.management import registerInterfaces; registerInterfaces()"
 

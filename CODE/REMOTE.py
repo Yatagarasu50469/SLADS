@@ -261,7 +261,7 @@ def msi_parhelper(allImagesActor, readAllMSI, scanFileNames, indexData, mzOrigin
                         mzs, ints = data.scan(pos, True)
                         sumImageLine.append(np.sum(ints))
                     else: 
-                        mzs, ints = np.array(data.scan(pos, 'profile', True))
+                        mzs, ints = data.scan(pos, False, True)
                     filtIndexLow, filtIndexHigh = bisect_left(mzs, mzLowerBound), bisect_right(mzs, mzUpperBound)
                     if readAllMSI: mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
                     for mzRangeNum in range(0, len(mzRanges)):
