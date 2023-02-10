@@ -444,7 +444,19 @@ In the case that multiple configuration files are provided in the form of: CONFI
 
 **Note:** In order to use a trained model in a physical implementation, the files resultant from the training procedure must be located within './RESULTS/TRAIN/'.
 
-Prior to engaging the physical equipment run the program with the **impModel** variable enabled in the configuration file. All other testing and training flags within **Parameters: L0,** should be disabled. The program will then wait for a file: **LOCK** to be placed within the ./INPUT/IMP/ folder; which when it appears will trigger the program to read in any data saved into the same folder and produce a set of points (row number, and column positions in um) to physically scan, saved in a file: **UNLOCK**. The **LOCK** will then be automatically deleted. This signals the equipment that new scan positions have been output and that the program is then waiting for **LOCK** to re-appear. As with the training and testing datasets, it is expected that the data will follow  the format mentioned in the **TRAINING/TESTING PROCEDURE** section. When the termination criteria has been met it will produce a different file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. Note that a sampleInfo.txt must be placed in the implementation directory after the program has been initialized (python START.py), but prior to placement of the first LOCK file. The sampleInfo.txt should follow the format outlined in the CONFIGURATION section. 
+1\. Prior to engaging the physical equipment, run the program with the **impModel** variable enabled in the configuration file. A custom implementation input directory, to use instead of the default: './INPUT/IMP/', may be specified with the **impInputDir** variable during configuration. All other testing and training flags within **Parameters: L0** should be disabled. 
+
+2\. Initialize the program with 'python START.py' and place 'sampleInfo.txt' and 'channels.csv' (if not using a global 'channels.csv' file in the SLADS/DLADS root directory) into the implementation input directory. The 'sampleInfo.txt' and 'channels.csv' files should follow the format outlined in the CONFIGURATION section of the README documentation. 
+
+3\. Place a blank file named **LOCK** into the implementation input directory to signal the program that the 'sampleInfo.txt' and 'channels.csv' files have been placed. 
+
+2\. Creation of the **LOCK** file triggers the program to read in any data saved in the implementation input directory and produce a set of points (row number, and column positions in um) to physically scan. This data is saved in a file: **UNLOCK**. 
+
+3\. **LOCK** will be automatically deleted to signal the equipment that **UNLOCK** now contains new measurement positions.
+
+4\. The program waits for **LOCK** to re-appear, which should be created after the requested data has been scanned into the implementation input directory. The data must follow the formatting specified in the TRAINING/TESTING PROCEDURE section of the README documentation. 
+
+5\. When the termination criteria has been met, the program produces a file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. 
 
 # FAQ
 ###  **I read through the README thoroughly, but I'm still getting an error, am confused about how a feature should work, or would like a feature/option added**
