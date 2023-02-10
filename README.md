@@ -58,7 +58,7 @@
                     0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
                     0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
                     0.9.4   Fix group-based and c value selection, distributed multi-GPU simulations, updated Otsu segmented linewise
-                    0.9.5   MALDI optical input, model input config, option to disable whole spectra, metrics, and final .imzML output
+                    0.9.5   MALDI optical, input config, .tdf/.tsf compatibility, disable whole spectra metrics option, .imzML output
                     0.9.6   GLANDS
                     x.x.x+  Iterative feature selection mechanism for selection of target channels
                     x.x.x+  Experimental MALDI integration
@@ -317,11 +317,13 @@ All critical parameters for SLADS may be altered in a configuration file (Ex. ./
 
 Multiple configuration files in the form of CONFIG_*descriptor*.py, can be generated for which SLADS will be run sequentially. RESULTS_*descriptor* folders will correspond with the numbering of the CONFIG files, with the RESULTS folder without a description, containing results from the last run performed. 
 
-For all samples, a sampleInfo.txt file must be included in each of the sample directories (specifically within the subdirectories in TRAIN, TEST, and IMP, as the tasks to be performed may dictate). The actual content is dependent on the file type as listed below, where each piece of information should be on its own line without additional description, as shown in the EXAMPLE sample directory. 
+For all samples, a 'sampleInfo.txt' file must be included in each of the sample directories (specifically within the subdirectories in TRAIN, TEST, and IMP, as the tasks to be performed may dictate). The actual content is dependent on the file type as listed below, where each piece of information should be on its own line without additional description, as shown in the EXAMPLE sample directory. 
 
-For all samples, a mask.csv file may optionally be included to limit measurements to with a defined area of the sample field of view; the dimensionality of the included data must match with the sample. Zeros indicate a location that should never be scanned, where ones indicate scannable locations. 
+For all samples, a 'mask.csv' file may optionally be included to limit measurements to with a defined area of the sample field of view; the dimensionality of the included data must match with the sample. Zeros indicate a location that should never be scanned, where ones indicate scannable locations. 
 
-For MSI data, another file: channels.csv, should also be placed in the base directory, which contains line separated values of m/z locations to be targeted/visualized. If there are different m/z that are specific to a sample, then a channels.csv should be placed in the sample directory. Local/sample channels.csv files are used even when a global channels.csv is defined. At this time, each m/z should be handpicked to highlight underlying structures of interest. 
+For MSI data, another file: 'channels.csv', should also be placed in the base directory, which contains line separated values of m/z locations to be targeted/visualized. If there are different m/z that are specific to a sample, then a 'channels.csv' should be placed in the sample directory. Local/sample 'channels.csv' files are used even when a global 'channels.csv' is defined. At this time, each m/z should be handpicked to highlight underlying structures of interest. 
+
+For MALDI samples, aligned optical images may be incorporated into the model, however all samples must have an image of the same resolution included and training must have been conducted with the same optical flags enabled as intended to be used during simulation/implementation. The optical image should be placed in each sample's directory as 'optical.png'.
 
 ###  **DESI MSI**
     - Sample Type
@@ -347,7 +349,6 @@ For MSI data, another file: channels.csv, should also be placed in the base dire
         Indicates whether the filename line numbers going to be labeled sequentially rather than by physical row number
 
 Each DESI MSI data file (ex. extensions: .d, or .raw), must be named with the standard convention below, increasing line-0001 as appropriate. If using Agilent equipment with linewise acquisition modes for an implementation run, then the line numbers are in sequence, rather than according to physical row number. In this case, enable the unorderedNames flag in the configuration file. 
-
 
     sampleName-line-0001.extension
 
@@ -559,6 +560,13 @@ Absolutely! Currently support is offered for regular images with single and mult
 ###  **Why the limitation to TensorFlow version 2.8**
 
 There are a couple of limiting factors. Above v2.8, TensorFlow incorporates a newer version of Keras that attempts and fails to vectorize the data augmentation layers, falling back on inefficient while loops, which harms training performance. Further, v2.11 no longer offers native CUDA/GPU acceleration, instead requiring the use of Microsoft's directML plugin (replace tensorflow-gpu in pip package installations with tensorflow-directml-plugin and install Windows Subsystem Linux (WSL). This should allow for training non-NVIDIA GPUs (untested), but cannot presently handle multi-GPU training with a distributed strategy. Manually disabling the strategy (tested, but no option included in configuration) does allow the plugin to work, though there is still a noticable performance penalty. If a more modern version of TensorFLow is required for your workflow, please open an issue in the GitHub repository for creation of a directML option, or if there is not a need for Agilent .d file compatability, follow the Linux install instructions (under another FAQ entry) after installing Ubuntu on WSL. 
+
+###  **v0.9.4 and below cannot read MSI data**
+
+The install branch for mulitiplierz was modified as of v0.9.5 and is not backwards compatible. You will need to uninstall the existing (default) multiplierz installation and re-download it from an older commit of the forked repository. 
+
+    $ pip3 uninstall multiplierz
+    $ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@4a458283441f609e2f4118ca462073a97f401bdc
 
 # PUBLICATIONS
 

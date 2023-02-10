@@ -7,7 +7,7 @@
 #╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝  █  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝  █   ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝
 #                                          █                                            █
 #
-#MODIFIED:	        7 February 2023
+#MODIFIED:	        9 February 2023
 #
 #VERSION:	        0.9.5
 #
@@ -61,7 +61,7 @@
 #                   0.9.2   .imzML, Bruker .d, image support, RD speedup, fix RD times, single sample training, FOV mask support
 #                   0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
 #                   0.9.4   Fix group-based and c value selection, distributed multi-GPU simulations, updated Otsu segmented linewise
-#                   0.9.5   MALDI optical input, model input config, option to disable whole spectra, metrics, and final .imzML output
+#                   0.9.5   MALDI optical, input config, .tdf/.tsf compatibility, disable whole spectra metrics option, .imzML output
 #                   0.9.6   GLANDS
 #                   x.x.x+  Iterative feature selection mechanism for selection of target channels
 #                   x.x.x+  Experimental MALDI integration

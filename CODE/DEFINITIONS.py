@@ -549,13 +549,10 @@ class SampleData:
                         #Read in and process spectrum data for each location
                         for pos in positions:
                             if data.format == 'Bruker':
-                                frameData = np.asarray(data.frame(pos))
-                                indexes = np.argsort(frameData[:,0])
-                                mzs, ints = frameData[indexes,0], frameData[indexes,2]
+                                mzs, ints = data.scan(pos, True)
                                 sumImageLine.append(np.sum(ints))
                             else: 
-                                scanData = np.array(data.scan(pos, 'profile'))
-                                mzs, ints = scanData[:,0], scanData[:,1]
+                                mzs, ints = np.array(data.scan(pos, 'profile', True))
                             filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
                             if self.readAllMSI: mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices))
                             for mzRangeNum in range(0, len(self.mzRanges)):

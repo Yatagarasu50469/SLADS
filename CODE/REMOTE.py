@@ -258,13 +258,10 @@ def msi_parhelper(allImagesActor, readAllMSI, scanFileNames, indexData, mzOrigin
                 #Read in and process spectrum data for each position, storing for later analysis
                 for pos in positions:
                     if data.format == 'Bruker':
-                        frameData = np.asarray(data.frame(pos))
-                        indexes = np.argsort(frameData[:,0])
-                        mzs, ints = frameData[indexes,0], frameData[indexes,2]
+                        mzs, ints = data.scan(pos, True)
                         sumImageLine.append(np.sum(ints))
                     else: 
-                        scanData = np.array(data.scan(pos, 'profile'))
-                        mzs, ints = scanData[:,0], scanData[:,1]
+                        mzs, ints = np.array(data.scan(pos, 'profile', True))
                     filtIndexLow, filtIndexHigh = bisect_left(mzs, mzLowerBound), bisect_right(mzs, mzUpperBound)
                     if readAllMSI: mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
                     for mzRangeNum in range(0, len(mzRanges)):
