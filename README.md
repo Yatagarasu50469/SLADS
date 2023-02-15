@@ -340,11 +340,11 @@ For MALDI samples, aligned optical images may be incorporated into the model, ho
     - Acquisition Rate (spectra/s)
         Output pixel positions and spatial resolution are based on this parameter in combination with the scan rate
     - m/z tolerance (ppm)
-        Only specify/include if m/z specification is set to 'value', or if using 'standard' normalization
+        Informs the m/z range used for each specified central m/z value (m/z range computed as: specified_m/z times (1-m/z tolerance) to specified_m/z times (1+m/z tolerance)
     - m/z lower bound
-        Lower m/z value, values in the spectra below this position will be discarded
+        Lower bound of the instrument acquired m/z spectra; not just the range of what m/z are to be targeted
     - m/z upper bound
-        Upper m/z value, values in the spectra above this position will be discarded
+        Upper bound of the instrument acquired m/z spectra; not just the range of what m/z are to be targeted
     - Sequential filenames (1 indicates sequential, 0 for physical row location)
         Indicates whether the filename line numbers going to be labeled sequentially rather than by physical row number
 
@@ -362,9 +362,9 @@ Each DESI MSI data file (ex. extensions: .d, or .raw), must be named with the st
     - m/z tolerance (ppm)
         Informs the m/z range used for each specified central m/z value (m/z range computed as: specified_m/z times (1-m/z tolerance) to specified_m/z times (1+m/z tolerance)
     - m/z lower bound
-        Lower m/z value, values in the spectra below this position will be discarded
+        Lower bound of the instrument acquired m/z spectra; not just the range of what m/z are to be targeted
     - m/z upper bound
-        Upper m/z value, values in the spectra above this position will be discarded
+        Upper bound of the instrument acquired m/z spectra; not just the range of what m/z are to be targeted
 
 Each MALDI MSI data file (ex. .ibd and .imzML), must be named with the standard convention: 
 

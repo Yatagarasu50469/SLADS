@@ -66,7 +66,7 @@ class SampleData:
             self.stopPerc = stopPerc
         
         #Store location of MSI data and sample name
-        if self.name == 'NoSampleName_0': self.name = os.path.basename(sampleFolder)
+        if self.name == 'NoSampleName_0': self.name = os.path.basename(os.path.dirname(sampleFolder))
         
         #Set global variables to indicate that OOM error states have not yet occurred; limited handle for ERD inferencing limitations
         self.OOM_multipleChannels, self.OOM_singleChannel = False, False
@@ -504,7 +504,6 @@ class SampleData:
                     errorFlag = False
                     try: data = mzFile(scanFileName)
                     except: errorFlag = True
-                    data = mzFile(scanFileName)
                     
                     #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number minus 1
                     if not errorFlag:
@@ -652,7 +651,7 @@ class Sample:
         
             #If not simulation or post-processing, then read measurements into sampleData from equipment
             if not sampleData.simulationFlag and not sampleData.postFlag:
-                print('Writing UNLOCK')
+                print('\nWriting UNLOCK')
                 with open(dir_ImpDataFinal + 'UNLOCK', 'w') as filehandle: _ = [filehandle.writelines(str(tuple([pos[0]+1, (pos[1]*sampleData.scanRate)/sampleData.acqRate]))+'\n') for pos in newIdxs.tolist()]
                 if sampleData.unorderedNames and impModel and scanMethod == 'linewise': sampleData.physicalLineNums[len(sampleData.physicalLineNums.keys())+1] = int(newIdxs[0][0])
                 sampleData.mask = self.mask
@@ -1292,7 +1291,7 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, lineVisitAll, 
     #Check stopping criteria, just in case of a bad input
     if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): sys.exit('Error - All points were scanned or the stopping criteria have been met after the initial acquisition for sample: ' + sample.name)
     elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: sys.exit('Error - All lines were scanned after the inital acquisition for sample: ' + sample.name)
-    if not sampleData.datagenFlag and np.sum(sample.processedERD) == 0: sys.exit('Error - Initial ERD indicates there are no places to scan for sample: ' + sample.name)
+    if not sampleData.datagenFlag and np.sum(sample.processedERD) == 0: sys.exit('Error - Initial ERD indicates there are no places to scan for sample: ' + sampleData.name + ' This probably means something went wrong during the sample read process, please check that the file formats are compatible.')
     
     #Perform the first update for the result
     result.update(sample, completedRunFlag)
