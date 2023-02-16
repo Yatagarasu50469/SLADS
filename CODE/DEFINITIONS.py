@@ -66,7 +66,7 @@ class SampleData:
             self.stopPerc = stopPerc
         
         #Store location of MSI data and sample name
-        if self.name == 'NoSampleName_0': self.name = os.path.basename(os.path.dirname(sampleFolder))
+        if self.name == 'NoSampleName_0': self.name = os.path.basename(sampleFolder)
         
         #Set global variables to indicate that OOM error states have not yet occurred; limited handle for ERD inferencing limitations
         self.OOM_multipleChannels, self.OOM_singleChannel = False, False
