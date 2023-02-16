@@ -95,7 +95,7 @@ dynWindowSigMult = 3
 
 #==================================================================
 #PARAMETERS: L1-1
-#IMPLEMENTATION OPTIONS
+#IMPLEMENTATION/POST OPTIONS
 #==================================================================
 
 #If an implementation run, what name should be used for data obtained
@@ -104,7 +104,7 @@ impSampleName = 'SAMPLE'
 #If an implementation run, where will the MSI files be located (location will be emptied on run); None equivalent to './RESULTS/IMP/'
 impInputDir = None
 
-#If the measurement times listed in the acquried MSI files do not start with 0 being at the left-side of the FOV
+#If the measurement times listed in the acquired MSI files do not start with 0 being at the left-side of the FOV
 impOffset = True
 
 #Should output visualizations be generated during acquisition? Highly not recommended (expensive) nor regularly validated (default: False)
