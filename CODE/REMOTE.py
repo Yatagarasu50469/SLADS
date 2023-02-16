@@ -126,13 +126,13 @@ class Reader_MSI_Actor:
         elif self.sampleType == 'DESI':
             self.sumImage[lineNumTotal, :] = sumDataTotal
             self.chanImages[lineNumTotal, :, :] = chanDataTotal
+            for indexNum in range(0, len(indexData)): self.readScanFiles.append(newReadScanFiles[indexNum])
             for indexNum in range(0, len(mzDataTotal)):
                 if allDataInterpFailTotal[indexNum]: 
                     self.mzDataComplete.append(mzDataTotal[indexNum])
                     self.origTimesComplete.append(copy.deepcopy(origTimesTotal[indexNum]))
                     self.lineNumComplete.append(lineNumTotal[indexNum])
                 elif self.readAllMSI: self.allImages[lineNumTotal[indexNum], :, :] = mzDataTotal[indexNum]
-                self.readScanFiles.append(newReadScanFiles[indexNum])
     
     #Write data to a .hdf5 file at the prespecified location on disk and return the max value for each m/z; for DESI save square varations as well for later reconstructions
     def writeToDisk(self, squareDim):
@@ -146,6 +146,10 @@ class Reader_MSI_Actor:
             squareAllImagesFile.close()
         return allImagesMax
         
+    #Return list of scan files that have already been read
+    def getReadScanFiles(self):
+        return self.readScanFiles
+    
     #Place all images data in shared memory with a persistent reference to survive this actor
     def shareAllImages(self): 
         return ray.put(self.allImages, _owner=None)
@@ -157,10 +161,18 @@ class Reader_MSI_Actor:
     #Return channel images data; Warning: Performing any operations beyond just the return will induce significant copy overhead!
     def getChanImages(self): 
         return self.chanImages
+        
+    #Return channel images data for specified locations
+    def getChanImagesNewIdxs(self, row, cols):
+        return self.chanImages[row, cols, :]
     
     #Return sum image data; Warning: Performing any operations beyond just the return will induce significant copy overhead!
     def getSumImage(self): 
         return self.sumImage
+        
+    #Return sum image data for specified locations
+    def getSumImageNewIdxs(self, row, cols):
+        return self.sumImage[row, cols]
     
     #Return a list of the read scan files for DESI MSI
     def getReadScanFiles(self):

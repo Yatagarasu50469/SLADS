@@ -28,7 +28,7 @@ def performImplementation(optimalC, modelName):
     equipWait()
     
     #Create a sample object and read the first sets of information
-    sampleData = SampleData(dir_ImpDataFinal, initialPercToScan, stopPerc, scanMethod, lineRevist, False, False, False, False, liveOutputFlag, True, False, impSampleName)
+    sampleData = SampleData(dir_ImpDataFinal, initialPercToScan, stopPerc, scanMethod, lineRevist, False, False, False, False, liveOutputFlag, True, False, False, impSampleName)
 
     #Run sampling
     result = runSampling(sampleData, optimalC, model, percToScan, percToViz, lineVisitAll, dir_ImpResults, False)
