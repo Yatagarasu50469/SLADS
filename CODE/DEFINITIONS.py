@@ -12,11 +12,11 @@ class SampleData:
         self.stopPerc = stopPerc
         self.scanMethod = scanMethod
         self.lineRevist = lineRevist
-        self.postFlag = postFlag
         self.simulationFlag = simulationFlag
         self.trainFlag = trainFlag
         self.liveOutputFlag = liveOutputFlag
         self.impFlag = impFlag
+        self.postFlag = postFlag
         self.oracleFlag = oracleFlag
         self.name = name
         
@@ -432,7 +432,7 @@ class SampleData:
             #Add positions to initial list
             self.initialSets.append(newIdxs)
     
-    def readScanData(self):
+    def readScanData(self, newIdxs=[]):
         
         #Get the MSI file extension automatically if it isn't already known
         if self.lineExt == None:
@@ -475,7 +475,7 @@ class SampleData:
             
             #If parallelization is disabled then read in data sequentially, otherwise pass writable coordinates to parallel actor
             if not parallelization:
-                for i, (x, y, z) in tqdm(enumerate(coordinates), total = len(coordinates), desc='Reading', leave=False, ascii=asciiFlag):
+                for i, (x, y, z) in tqdm(enumerate(coordinates), total = len(coordinates), desc='Reading', leave=False, disable=self.impFlag, ascii=asciiFlag):
                     mzs, ints = data.getspectrum(i)
                     self.sumImage[y, x] = np.sum(ints)
                     filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
@@ -496,9 +496,9 @@ class SampleData:
             
             #If parallelization is disabled then read in data sequentially
             if not parallelization:
-            
+                
                 #Extract line number from the filenames, removing leading zeros, subtract 1 for zero indexing, and obtain correct physical row indexes from LUT if applicable
-                for scanFileName in tqdm(scanFileNames, total = len(scanFileNames), desc='Reading', leave=False, ascii=asciiFlag):
+                for scanFileName in tqdm(scanFileNames, total = len(scanFileNames), desc='Reading', leave=False, disable=self.impFlag, ascii=asciiFlag):
                     
                     #Load the line data and flag errors during the process (primarily checking for files without data)
                     errorFlag = False
@@ -521,7 +521,7 @@ class SampleData:
                     
                         #Add file name to those that will have been already scanned (when this process finishes)
                         self.readScanFiles.append(scanFileName)
-                            
+                        
                         #Extract original measurement times and setup/read TIC data as applicable
                         if data.format == 'Bruker': 
                             sumImageLine = []
@@ -569,16 +569,24 @@ class SampleData:
                         data.close()
             
             #Otherwise read data in parallel and perform remaining interpolations of any remaining m/z data to regular grid in serial (parallel operation is too memory intensive)
-            else:
+            else
                 _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.mzFinal, self.mzFinalGrid_id, self.chanValues, self.chanFinalGrid_id, self.impFlag, self.postFlag, impOffset, scanMethod, lineMethod, self.physicalLineNums, self.ignoreMissingLines, self.missingLines, self.unorderedNames) for indexes in np.array_split(np.arange(0, len(scanFileNames)), numberCPUS)])
                 if self.readAllMSI: _ = ray.get(self.reader_MSI_Actor.interpolateDESI.remote(self.mzFinal, self.mzFinalGrid))
                 for scanFileName in ray.get(self.reader_MSI_Actor.getReadScanFiles.remote()): self.readScanFiles.append(scanFileName)
 
         #If parallelization is enabled, and this is a MSI sample, then read MSI data in parallel, retrieve from shared memory, and process data into accessible shape
         if parallelization and self.dataMSI:
-            self.chanImages = np.moveaxis(ray.get(self.reader_MSI_Actor.getChanImages.remote()), -1, 0)
-            #if self.readAllMSI: self.allImages = np.moveaxis(ray.get(self.reader_MSI_Actor.getAllImages.remote()), -1, 0)
-            self.sumImage = ray.get(self.reader_MSI_Actor.getSumImage.remote())
+            
+            #Update local identification of which files have already been imported
+            self.readScanFiles = ray.get(self.reader_MSI_Actor.getReadScanFiles.remote())
+        
+            #If there are were not new specific locations that were to be scanned, retrieve everything, otherwise only pull data for new idxs
+            if len(newIdxs) == 0: 
+                self.chanImages = np.moveaxis(ray.get(self.reader_MSI_Actor.getChanImages.remote()), -1, 0)
+                self.sumImage = ray.get(self.reader_MSI_Actor.getSumImage.remote())
+            else: 
+                self.chanImages[:, newIdxs[:,0], newIdxs[:,1]] = ray.get(self.reader_MSI_Actor.getChanImagesNewIdxs.remote(newIdxs[:,0], newIdxs[:,1])).T
+                self.sumImage[newIdxs[:,0], newIdxs[:,1]] = ray.get(self.reader_MSI_Actor.getSumImageNewIdxs.remote(newIdxs[:,0], newIdxs[:,1]))
             
         #If DESI MSI, then need to resize the images to obtain square dimensionality, otherwise the square dimensions are equal to the original
         if self.sampleType == 'DESI': self.squareChanImages = np.moveaxis(resize(np.moveaxis(self.chanImages, 0, -1), tuple(self.squareDim), order=0), -1, 0)
@@ -651,12 +659,14 @@ class Sample:
         
             #If not simulation or post-processing, then read measurements into sampleData from equipment
             if not sampleData.simulationFlag and not sampleData.postFlag:
-                print('\nWriting UNLOCK')
+                if sampleData.scanMethod == 'linewise' and self.iteration<=len(startLinePositions): print('Writing UNLOCK')
+                elif self.iteration==1: print('Writing UNLOCK')
+                else: print('\nWriting UNLOCK')
                 with open(dir_ImpDataFinal + 'UNLOCK', 'w') as filehandle: _ = [filehandle.writelines(str(tuple([pos[0]+1, (pos[1]*sampleData.scanRate)/sampleData.acqRate]))+'\n') for pos in newIdxs.tolist()]
                 if sampleData.unorderedNames and impModel and scanMethod == 'linewise': sampleData.physicalLineNums[len(sampleData.physicalLineNums.keys())+1] = int(newIdxs[0][0])
                 sampleData.mask = self.mask
                 equipWait()
-                sampleData.readScanData()
+                sampleData.readScanData(newIdxs)
             self.chanImages[:, newIdxs[:,0], newIdxs[:,1]] = sampleData.chanImages[:, newIdxs[:,0], newIdxs[:,1]]
             self.sumImage[newIdxs[:,0], newIdxs[:,1]] = sampleData.sumImage[newIdxs[:,0], newIdxs[:,1]]
         
@@ -887,7 +897,7 @@ class Result:
             sample.allImagesSSIMList = sample.chanImagesSSIMList
             
         #Prior to and for model training there is RD, but no ERD
-        if not self.sampleData.trainFlag and not lastReconOnly:
+        if self.sampleData.simulationFlag and not self.sampleData.trainFlag and not lastReconOnly:
             
             #Compute RD; if every location has been scanned all positions are zero
             if len(tempScanData.squareUnMeasuredIdxs) == 0: 
@@ -911,8 +921,8 @@ class Result:
             sample.ERDPSNR = compare_psnr(sample.squareRD, sample.squareERD, data_range=maxRangeValue)
             sample.ERDSSIM = compare_ssim(sample.squareRD, sample.squareERD, data_range=maxRangeValue)
         
-        #Resize RD(s) for final visualizations; has to be done here for live output case, but in complete() method otherwise
-        if self.sampleData.liveOutputFlag and not lastReconOnly: self.resizeRD(sample)
+            #Resize RD(s) for final visualizations; has to be done here for live output case, but in complete() method otherwise
+            if self.sampleData.liveOutputFlag: self.resizeRD(sample)
 
     #Resize RD(s) for final visualization if DESI, otherwise set variable name 
     def resizeRD(self, sample):
@@ -1002,8 +1012,8 @@ class Result:
                 self.allAvgPSNRList = [np.nanmean(sample.allImagesPSNRList) for sample in self.samples]
                 self.allAvgSSIMList = [np.nanmean(sample.allImagesSSIMList) for sample in self.samples]
 
-        #If ERD was computed (i.e., when not a training run) summarize ERD PSNR/SSIM scores
-        if not self.sampleData.trainFlag:
+        #If ERD and RD were computed (i.e., when not a training run) summarize ERD PSNR/SSIM scores
+        if self.sampleData.simulationFlag and not self.sampleData.trainFlag: 
             self.ERDPSNRList = [sample.ERDPSNR for sample in self.samples]
             self.ERDSSIMList = [sample.ERDSSIM for sample in self.samples]
         
