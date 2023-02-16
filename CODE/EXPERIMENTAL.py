@@ -39,6 +39,5 @@ def performImplementation(optimalC, modelName):
     if os.path.isfile(dir_ImpDataFinal + 'LOCK'): os.remove(dir_ImpDataFinal + 'LOCK')
 
     #Call for completion/printout
-    print('Generating Visualizations')
     result.complete()
 

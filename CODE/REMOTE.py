@@ -69,12 +69,9 @@ class Recon_Actor:
     def computeMetrics(self):
         self.imagesPSNRList, self.imagesSSIMList = [], []
         for index in range(0, len(self.indexes)):
-            try:
-                image = self.allImages[self.indexes[index]]
-                self.imagesPSNRList.append(compare_psnr(image, self.reconImages[index], data_range=self.allImagesMax[self.indexes[index]]))
-                self.imagesSSIMList.append(compare_ssim(image, self.reconImages[index], data_range=self.allImagesMax[self.indexes[index]]))
-            except:
-                Tracer()
+            image = self.allImages[self.indexes[index]]
+            self.imagesPSNRList.append(compare_psnr(image, self.reconImages[index], data_range=self.allImagesMax[self.indexes[index]]))
+            self.imagesSSIMList.append(compare_ssim(image, self.reconImages[index], data_range=self.allImagesMax[self.indexes[index]]))
         
     def getPSNR(self):
         return self.imagesPSNRList

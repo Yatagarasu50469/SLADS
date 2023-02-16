@@ -195,7 +195,7 @@ class SampleData:
             self.finalDim = [int(self.sampleHeight), int(self.sampleWidth)]
             self.squareDim = self.finalDim
         
-        #If this is an simulation sample, then get filetype extension and check for missing lines in DESI if applicable
+        #If this is an ordered simulation sample, then get filetype extension and check for missing lines in DESI if applicable
         if self.simulationFlag:
             extensions = list(map(lambda x:x, np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
             if self.dataMSI:
@@ -211,7 +211,7 @@ class SampleData:
                 elif 'tiff' in extensions: self.lineExt = '.tiff'
                 else: sys.exit('Error! - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
             scanFileNames = natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'+self.lineExt), reverse=False)
-            if self.sampleType == 'DESI' and self.ignoreMissingLines:
+            if self.sampleType == 'DESI' and self.ignoreMissingLines and not self.unorderedNames:
                 self.missingLines = np.asarray(list(set(np.arange(1, self.finalDim[0]).tolist()) - set([int(scanFileName.split('line-')[1].split('.')[0].lstrip('0')) for scanFileName in scanFileNames])))-1
                 self.finalDim[0] -= len(self.missingLines)
         
@@ -515,8 +515,8 @@ class SampleData:
                     
                     #If error still has not occurred 
                     if not errorFlag:
-                    
-                        #If ignoring missing lines, then determine the offset for correct indexing
+                        
+                        #If ignoring missing lines and there are stored missing lines (simulation with ordered filenames only), then determine the offset for correct indexing
                         if self.ignoreMissingLines and len(self.missingLines) > 0: lineNum -= int(np.sum(lineNum > self.missingLines))
                     
                         #Add file name to those that will have been already scanned (when this process finishes)
@@ -577,9 +577,9 @@ class SampleData:
         #If parallelization is enabled, and this is a MSI sample, then read MSI data in parallel, retrieve from shared memory, and process data into accessible shape
         if parallelization and self.dataMSI:
             
-            #Update local identification of which files have already been imported
-            self.readScanFiles = ray.get(self.reader_MSI_Actor.getReadScanFiles.remote())
-        
+            #Update local identification of which files have already been imported for DESI samples
+            if self.sampleType == 'DESI': self.readScanFiles = ray.get(self.reader_MSI_Actor.getReadScanFiles.remote())
+            
             #If there are were not new specific locations that were to be scanned, retrieve everything, otherwise only pull data for new idxs
             if len(newIdxs) == 0: 
                 self.chanImages = np.moveaxis(ray.get(self.reader_MSI_Actor.getChanImages.remote()), -1, 0)
@@ -667,8 +667,12 @@ class Sample:
                 sampleData.mask = self.mask
                 equipWait()
                 sampleData.readScanData(newIdxs)
-            self.chanImages[:, newIdxs[:,0], newIdxs[:,1]] = sampleData.chanImages[:, newIdxs[:,0], newIdxs[:,1]]
-            self.sumImage[newIdxs[:,0], newIdxs[:,1]] = sampleData.sumImage[newIdxs[:,0], newIdxs[:,1]]
+            if not sampleData.postFlag:
+                self.chanImages[:, newIdxs[:,0], newIdxs[:,1]] = sampleData.chanImages[:, newIdxs[:,0], newIdxs[:,1]]
+                self.sumImage[newIdxs[:,0], newIdxs[:,1]] = sampleData.sumImage[newIdxs[:,0], newIdxs[:,1]]
+            else:
+                self.chanImages = copy.deepcopy(sampleData.chanImages)*self.mask
+                self.sumImage = copy.deepcopy(sampleData.sumImage)*self.mask
         
         #Otherwise, (if not an oracle or c value optimization run) set the reconstruction data as having been 'measured'
         else:
@@ -835,7 +839,7 @@ class Result:
         #If outputs should be produced at every update step, then do so, determining related metrics as needed
         if self.sampleData.liveOutputFlag: 
             if self.sampleData.simulationFlag: self.extractSimulationData(sample, self.sampleData)
-            visualize_serial(sample, self.sampleData, self.dir_progression, self.dir_chanProgressions)
+            visualizeStep(sample, self.sampleData, self.dir_progression, self.dir_chanProgressions)
         
         #Save a copy of the measurement step for later evaluation
         self.samples.append(copy.deepcopy(sample))
@@ -1045,7 +1049,7 @@ class Result:
                     #Initialize a global progress bar and start parallel sampling operations
                     pbar = tqdm(total=maxProgress, desc = 'Visualizing', leave=False, ascii=asciiFlag)                    
                     computePool = Pool(numberCPUS)
-                    results = computePool.starmap_async(visualize_serial, futures)
+                    results = computePool.starmap_async(visualizeStep, futures)
                     computePool.close()
                     
                     #While some results have yet to be returned, regularly update the global progress bar, then obtain results and purge/reset ray
@@ -1063,7 +1067,7 @@ class Result:
                     computePool.join()
                     resetRay(numberCPUS)
                 else: 
-                    _ = [visualize_serial(sample, self.sampleData, self.dir_progression, self.dir_chanProgressions) for sample in tqdm(self.samples, desc='Visualizing', leave=False, ascii=asciiFlag)]
+                    _ = [visualizeStep(sample, self.sampleData, self.dir_progression, self.dir_chanProgressions) for sample in tqdm(self.samples, desc='Visualizing', leave=False, ascii=asciiFlag)]
 
             #Combine total progression and individual channel images into animations
             dataFileNames = natsort.natsorted(glob.glob(self.dir_progression + 'progression_*.png'))
@@ -1081,7 +1085,7 @@ class Result:
                 animation = None
         
 #Visualize single sample progression step
-def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, parallelization=False, samplingProgress_Actor=None):
+def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, parallelization=False, samplingProgress_Actor=None):
 
     #If running visualization in parallel, reset backend to avoid main thread/loop issues
     if parallelization: matplotlib.use('Agg')
@@ -1089,21 +1093,39 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
     #Turn percent measured into a string
     percMeasured = "{:.2f}".format(sample.percMeasured)
     
-    #Turn metrics into strings
-    if sampleData.simulationFlag and not sampleData.datagenFlag: 
-        sumImagePSNR = "{:.2f}".format(sample.sumImagePSNR)
-        sumImageSSIM = "{:.2f}".format(sample.sumImageSSIM)
-        chanImageAvgPSNR = "{:.2f}".format(np.nanmean(sample.chanImagesPSNRList))
-        chanImageAvgSSIM = "{:.2f}".format(np.nanmean(sample.chanImagesSSIMList))
-        if sampleData.allChanEvalFlag and sampleData.dataMSI: 
+    #Turn ground-truth metrics into strings and set flag to indicate availability
+    if sampleData.simulationFlag and not sampleData.postFlag: 
+        metricsGT = True
+        if not sampleData.datagenFlag:
+            sumImagePSNR = "{:.2f}".format(sample.sumImagePSNR)
+            sumImageSSIM = "{:.2f}".format(sample.sumImageSSIM)
+            chanImageAvgPSNR = "{:.2f}".format(np.nanmean(sample.chanImagesPSNRList))
+            chanImageAvgSSIM = "{:.2f}".format(np.nanmean(sample.chanImagesSSIMList))
+        else:
+            sumImagePSNR = "N/A"
+            sumImageSSIM = "N/A"
+            chanImageAvgPSNR = "N/A"
+            chanImageAvgSSIM = "N/A"
+        if sampleData.allChanEvalFlag and not sampleData.datagenFlag and sampleData.dataMSI: 
             allImageAvgPSNR = "{:.2f}".format(np.nanmean(sample.allImagesPSNRList))
             allImageAvgSSIM = "{:.2f}".format(np.nanmean(sample.allImagesSSIMList))
         else: 
             allImageAvgPSNR = "N/A"
             allImageAvgSSIM = "N/A"
-    if sampleData.simulationFlag and not sampleData.trainFlag: 
+    else: 
+        metricsGT = False
+        
+    #Turn RD metrics into strings and set flag to indicate availability
+    if sampleData.simulationFlag and not sampleData.trainFlag and not sampleData.postFlag: 
+        metricsRD = True
         erdPSNR = "{:.2f}".format(sample.ERDPSNR)
         erdSSIM = "{:.2f}".format(sample.ERDSSIM)
+    else: 
+        metricsRD = False
+   
+    #Set flag to indicate availability of RD visualizations
+    if sampleData.simulationFlag and not sampleData.postFlag: visualRD = True
+    else: visualRD = False
         
     #For each of the channels, generate visuals
     for chanNum in range(0, sampleData.numChannels):
@@ -1113,12 +1135,16 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
         
         #Turn metrics into strings
         chanLabel = str(sampleData.chanValues[chanNum])
-        if sampleData.simulationFlag and not sampleData.datagenFlag:
-            chanImagesPSNR = "{:.2f}".format(sample.chanImagesPSNRList[chanNum])
-            chanImagesSSIM = "{:.2f}".format(sample.chanImagesSSIMList[chanNum])
+        if metricsGT:
+            if not sampleData.datagenFlag:
+                chanImagesPSNR = "{:.2f}".format(sample.chanImagesPSNRList[chanNum])
+                chanImagesSSIM = "{:.2f}".format(sample.chanImagesSSIMList[chanNum])
+            else: 
+                chanImagesPSNR = "N/A"
+                chanImagesSSIM = "N/A"
         
         #If a simulation, then need room on visualizations for showing ERD, ground-truth, and ground-truth difference
-        if sampleData.simulationFlag: f = plt.figure(figsize=(20,10))
+        if metricsGT: f = plt.figure(figsize=(20,10))
         else: f = plt.figure(figsize=(20,5.3865))
         
         #TODO: If a simulation, then need room on visualizations for showing ERD, ground-truth, and ground-truth difference; if no metrics, then don't need extra title room?
@@ -1128,44 +1154,45 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
         
         #Generate and apply a plot title, with metrics if applicable
         plotTitle = r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Channel:\ }$" + chanLabel + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured
-        if sampleData.simulationFlag and not sampleData.datagenFlag:
+        if metricsGT:
             plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel:\ }$" + chanImagesPSNR
             plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel:\ }$" + chanImagesSSIM
         plt.suptitle(plotTitle)
         
-        if sampleData.simulationFlag: 
+        if metricsGT: 
             ax = plt.subplot2grid(shape=(2,3), loc=(0,0))
             im = ax.imshow(sampleData.chanImages[chanNum], cmap='hot', aspect='auto', vmin=chanMinValue, vmax=chanMaxValue)
             ax.set_title('Ground-Truth')
             cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
         
-        if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (0,1))
+        if metricsGT: ax = plt.subplot2grid((2,3), (0,1))
         else: ax = plt.subplot2grid((1,3), (0,0))
         im = ax.imshow(sample.chanReconImages[chanNum], cmap='hot', aspect='auto', vmin=chanMinValue, vmax=chanMaxValue)
         ax.set_title('Reconstruction')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
         
-        if sampleData.simulationFlag: 
+        if metricsGT: 
             ax = plt.subplot2grid((2,3), (0,2))
             im = ax.imshow(abs(sampleData.chanImages[chanNum]-sample.chanReconImages[chanNum]), cmap='hot', aspect='auto', vmin=chanMinValue, vmax=chanMaxValue)
             ax.set_title('Absolute Difference')
             cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
         
-        if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (1,0))
+        if metricsGT: ax = plt.subplot2grid((2,3), (1,0))
         else: ax = plt.subplot2grid((1,3), (0,1))
         im = ax.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1, interpolation='none')
         ax.set_title('Measurement Mask')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
         
         if not sampleData.trainFlag:
-            if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (1,1))
+            if metricsGT: ax = plt.subplot2grid((2,3), (1,1))
             else: ax = plt.subplot2grid((1,3), (0,2))
             im = ax.imshow(sample.ERDs[chanNum], cmap='viridis', vmin=0, aspect='auto')
             ax.set_title('ERD')
             cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
-        if sampleData.simulationFlag: 
-            ax = plt.subplot2grid((2,3), (1,2))
+        if visualRD: 
+            if metricsGT: ax = plt.subplot2grid((2,3), (1,2))
+            else: ax = plt.subplot2grid((1,3), (0,2))
             im = ax.imshow(sample.RDs[chanNum], cmap='viridis', vmin=0, aspect='auto')
             ax.set_title('RD')
             cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
@@ -1182,10 +1209,11 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
             saveLocation = dir_chanProgressions[chanNum] + 'erd_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
             borderlessPlot(sample.ERDs[chanNum], saveLocation, cmap='viridis', vmin=0)
         
-        if sampleData.simulationFlag:
+        if visualRD:
             saveLocation = dir_chanProgressions[chanNum] + 'rd_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
             borderlessPlot(sample.RDs[chanNum], saveLocation, cmap='viridis', vmin=0)
-            
+        
+        if metricsGT:
             saveLocation = dir_chanProgressions[chanNum] + 'groundTruth_channel_' + chanLabel + '.png'
             borderlessPlot(sampleData.chanImages[chanNum], saveLocation, cmap='hot', vmin=chanMinValue, vmax=chanMaxValue)
 
@@ -1199,52 +1227,53 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
     sumImageMinValue, sumImageMaxValue = np.min(sampleData.sumImage), np.max(sampleData.sumImage)
     
     #If a simulation, then need room on visualizations for showing ERD, ground-truth, and ground-truth difference
-    if sampleData.simulationFlag: f = plt.figure(figsize=(20,10))
+    if metricsGT: f = plt.figure(figsize=(20,10))
     else: f = plt.figure(figsize=(20,5.3865))
 
     #Generate and apply a plot title, with metrics if applicable
     plotTitle = r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured
-    if sampleData.simulationFlag and not sampleData.trainFlag and not sampleData.datagenFlag:
+    if metricsGT and metricsRD:
         plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Sum\ Image: }$" + sumImagePSNR + r"$\bf{\ \ Avg ERD:\ }$" + erdPSNR 
         plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM + r"$\bf{\ \ Avg ERD:\ }$" + erdSSIM
-    elif sampleData.simulationFlag and sampleData.trainFlag and not sampleData.datagenFlag:
+    elif metricsGT:
         plotTitle += '\n' + r"$\bf{PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Sum\ Image: }$" + sumImagePSNR
         plotTitle += '\n' + r"$\bf{SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM
     plt.suptitle(plotTitle)
     
-    if sampleData.simulationFlag: 
+    if metricsGT: 
         ax = plt.subplot2grid(shape=(2,3), loc=(0,0))
         im = ax.imshow(sampleData.sumImage, cmap='hot', aspect='auto', vmin=sumImageMinValue, vmax=sumImageMaxValue)
         ax.set_title('Sum Image Ground-Truth')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
     
-    if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (0,1))
+    if metricsGT: ax = plt.subplot2grid((2,3), (0,1))
     else: ax = plt.subplot2grid((1,3), (0,0))
     im = ax.imshow(sample.sumReconImage, cmap='hot', aspect='auto', vmin=sumImageMinValue, vmax=sumImageMaxValue)
     ax.set_title('Sum Image Reconstruction')
     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
-    if sampleData.simulationFlag: 
+    if metricsGT: 
         ax = plt.subplot2grid((2,3), (0,2))
         im = ax.imshow(abs(sampleData.sumImage-sample.sumReconImage), cmap='hot', aspect='auto', vmin=sumImageMinValue, vmax=sumImageMaxValue)
         ax.set_title('Absolute Difference')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
     
-    if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (1,0))
+    if metricsGT: ax = plt.subplot2grid((2,3), (1,0))
     else: ax = plt.subplot2grid((1,3), (0,1))
     im = ax.imshow(sample.mask, cmap='gray', aspect='auto', vmin=0, vmax=1, interpolation='none')
     ax.set_title('Measurement Mask')
     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
     
     if not sampleData.trainFlag:
-        if sampleData.simulationFlag: ax = plt.subplot2grid((2,3), (1,1))
+        if metricsGT: ax = plt.subplot2grid((2,3), (1,1))
         else: ax = plt.subplot2grid((1,3), (0,2))
         im = ax.imshow(sample.processedERD, cmap='viridis', vmin=0, aspect='auto')
         ax.set_title('Processed ERD')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
-    if sampleData.simulationFlag: 
-        ax = plt.subplot2grid((2,3), (1,2))
+    if visualRD: 
+        if metricsGT: ax = plt.subplot2grid((2,3), (1,2))
+        else: ax = plt.subplot2grid((1,3), (0,2))
         im = ax.imshow(sample.RD, cmap='viridis', vmin=0, aspect='auto')
         ax.set_title('RD')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
@@ -1272,7 +1301,7 @@ def visualize_serial(sample, sampleData, dir_progression, dir_chanProgressions, 
     saveLocation = dir_progression + 'measured_sumImage_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
     borderlessPlot(sample.sumImage, saveLocation, cmap='hot', vmin=sumImageMinValue, vmax=sumImageMaxValue)
     
-    if sampleData.simulationFlag:
+    if visualRD:
         saveLocation = dir_progression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
         borderlessPlot(sample.RD, saveLocation, cmap='viridis')
     
