@@ -840,10 +840,17 @@ class Result:
         #Save a copy of the measurement step for later evaluation
         self.samples.append(copy.deepcopy(sample))
         
-        #When completed, copy the final scan time, name-to-row conversion, and measurement mask
+        #When scan has completed
         if completedRunFlag: 
+        
+            #Store the final scan time
             self.finalTime = time.time()-self.startTime
+            
+            #If an implementation run, save the physicalLineNums.csv and measuredMask.csv to the same folder as the scanned MSI files and the results folder; otherwise just save to results
             if self.dir_Results != None: 
+                if not self.sampleData.simulationFlag and not self.sampleData.postFlag:
+                    if self.sampleData.unorderedNames: np.savetxt(dir_ImpDataFinal+'physicalLineNums.csv', np.asarray(list(self.sampleData.physicalLineNums.items())), delimiter=',', fmt='%d')
+                    np.savetxt(dir_ImpDataFinal+'measuredMask.csv', self.lastMask, delimiter=',', fmt='%d')
                 if self.sampleData.unorderedNames: np.savetxt(self.dir_sampleResults+'physicalLineNums.csv', np.asarray(list(self.sampleData.physicalLineNums.items())), delimiter=',', fmt='%d')
                 np.savetxt(self.dir_sampleResults+'measuredMask.csv', self.lastMask, delimiter=',', fmt='%d')
     
