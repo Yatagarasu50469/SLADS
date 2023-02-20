@@ -141,13 +141,14 @@ lineMethod = 'segLine'
 #How should individual points on a chosen line be selected: 'single' or 'group' (default: 'group')
 linePointSelection = 'group'
 
-#If using a segLine, how should the start and end points be determined (minPerc, left/right most of the top stopPerc ERD values) (otsu, left/right most of the foreground ERD found with Otsu)
+#If using a segLine, how should the start and end points be determined (minPerc, left/right most of the top stopPerc ERD values) (default: 'otsu', left/right most of the foreground ERD found with Otsu)
 segLineMethod = 'otsu'
 
-#Should lines be allowed to be revisited
+#Should lines be allowed to be revisited (default: False)
+#Note: This function only works for fully-acquired simulations and should be disabled for all other operations; will almost certainly corrupt data if used incorrectly
 lineRevist = False
 
-#Should all lines be scanned at least once
+#Should all lines be scanned/visited at least once
 lineVisitAll = True
 
 #Specify what line positions (percent height) should be used for initial acquistion

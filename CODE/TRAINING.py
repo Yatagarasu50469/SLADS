@@ -116,17 +116,12 @@ class EpochEnd(Callback):
                         self.model.stop_training = True
                         self.nanValue = True
                     
-                    ax = plt.subplot2grid((3,3), (vizSampleNum+1,0))
-                    im = ax.imshow(vizSample.squareSumReconImage, aspect='auto', cmap='hot', vmin=0, vmax=np.max(vizSample.squareSumReconImage))
-                    ax.set_title('Sum Image Reconstruction', fontsize=15, fontweight='bold')
-                    cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
-                    
-                    ax = plt.subplot2grid((3,3), (vizSampleNum+1,1))
+                    ax = plt.subplot2grid((3,2), (vizSampleNum+1,0))
                     im = ax.imshow(squareRD, aspect='auto', vmin=0)
                     ax.set_title('RD', fontsize=15, fontweight='bold')
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                     
-                    ax = plt.subplot2grid((3,3), (vizSampleNum+1,2))
+                    ax = plt.subplot2grid((3,2), (vizSampleNum+1,1))
                     im = ax.imshow(squareERD, aspect='auto', vmin=0)
                     ax.set_title('ERD - PSNR: ' + str(round(ERD_PSNR,4)) + ' SSIM: ' + str(round(ERD_SSIM,4)), fontsize=15, fontweight='bold')
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)

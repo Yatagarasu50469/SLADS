@@ -305,12 +305,14 @@ class SampleData:
         if self.dataMSI:
             
             #Load targeted m/z values in sorted order, preferring those in the sample folders if available, and set corresponding ranges 
+            #If there is only a single specificed channel, then need to convert format to array with list
             try: self.chanValues = np.loadtxt(self.sampleFolder+os.path.sep+'channels.csv', delimiter=',')
             except: 
                 if overrideChannelsFile == None: self.chanValues = np.loadtxt('channels.csv', delimiter=',')
                 else: self.chanValues = np.loadtxt(overrideChannelsFile, delimiter=',')
-            self.chanValues.sort()
+            if self.chanValues.shape == (): self.chanValues = np.array([self.chanValues])
             self.numChannels = len(self.chanValues)
+            self.chanValues.sort()
             self.mzRanges = np.round(np.column_stack((self.chanValues*self.ppmNeg, self.chanValues*self.ppmPos)), self.mzRound)
             
             #For DESI MSI samples, create regular grids for interpolating all/targeted m/z data
@@ -733,10 +735,14 @@ class Sample:
                 if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
                     minValues, maxValues = np.min(sampleData.squareChanImages, axis=(1,2)), np.max(sampleData.squareChanImages, axis=(1,2))
                     minMaxDiffs = (maxValues-minValues)
-                    self.RDPPs = np.moveaxis(abs(((np.moveaxis(sampleData.squareChanImages, 0, -1)-minValues)/minMaxDiffs)-((np.moveaxis(self.squareChanReconImages, 0, -1)-minValues)/minMaxDiffs)), -1, 0)
+                    tempA = np.nan_to_num((np.moveaxis(sampleData.squareChanImages, 0, -1)-minValues)/minMaxDiffs, nan=0, posinf=0, neginf=0)
+                    tempB = np.nan_to_num((np.moveaxis(self.squareChanReconImages, 0, -1)-minValues)/minMaxDiffs, nan=0, posinf=0, neginf=0)
+                    self.RDPPs = np.moveaxis(abs(tempA-tempB), -1, 0) 
                 elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
                     meanValues, stdValues =  np.mean(sampleData.squareChanImages, axis=(1,2)), np.std(sampleData.squareChanImages, axis=(1,2))
-                    self.RDPPs = np.moveaxis(abs(((np.moveaxis(sampleData.squareChanImages, 0, -1)-meanValues)/stdValues)-((np.moveaxis(self.squareChanReconImages, 0, -1)-meanValues)/stdValues)), -1, 0)
+                    tempA = np.nan_to_num((np.moveaxis(sampleData.squareChanImages, 0, -1)-meanValues)/stdValues, nan=0, posinf=0, neginf=0)
+                    tempB = np.nan_to_num((np.moveaxis(self.squareChanReconImages, 0, -1)-meanValues)/stdValues, nan=0, posinf=0, neginf=0)
+                    self.RDPPs = np.moveaxis(abs(tempA-tempB), -1, 0)
                 else: self.RDPPs = abs(sampleData.squareChanImages-self.squareChanReconImages)
         
             #Compute/Update the RD and use it in place of an ERD
@@ -758,23 +764,40 @@ class Sample:
             
         #Process ERD for next measurement(s) selection, resizing for DESI
         if sampleData.sampleType == 'DESI':
-            self.ERD = resize(self.squareERD, tuple(sampleData.finalDim), order=0)*(1-self.mask)
-            self.ERDs = np.moveaxis(resize(np.moveaxis(self.squareERDs , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)*(1-self.mask)
+            self.ERD = resize(self.squareERD, tuple(sampleData.finalDim), order=0)
+            self.ERDs = np.moveaxis(resize(np.moveaxis(self.squareERDs , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)
         else:
             self.ERD = self.squareERD
             self.ERDs = self.squareERDs
-        self.processedERD = copy.deepcopy(self.ERD)
         
-        #Bias E/RD by an optical image if applicable
+        #Duplicate the per-channel E/RDs for processing
+        self.processedERDs = copy.deepcopy(self.ERDs)
+        
+        #Mask the E/RDs to just unmeasured locations
+        self.processedERDs *= (1-self.mask)
+        
+        #Mask the E/RDs to the FOV foreground mask if applicable
+        if sampleData.useMaskFOV: self.processedERDs *= sampleData.maskFOV
+        
+        #Mask out visited lines if linewise and line revisiting is disabled
+        if sampleData.scanMethod == 'linewise' and not sampleData.lineRevist: self.processedERDs[:, np.where(np.sum(self.mask, axis=1)>0)[0], :] = 0
+        
+        #Bias E/RDs by an optical image if applicable
         if sampleData.dataMSI and (applyOptical == 'directBias' or applyOptical == 'secDerivBias'): 
-            if applyOptical == 'secDerivBias': self.processedERD *= sampleData.opticalImageSecDeriv
-            else: self.processedERD *= sampleData.opticalImage
+            if applyOptical == 'secDerivBias': self.processedERDs *= sampleData.opticalImageSecDeriv
+            else: self.processedERDs *= sampleData.opticalImage
         
-        #Mask the ERD used for selection by the FOV mask if applicable, set measured location values to 0, ensure >= 0 values remain, rescale for potential Otsu, and prevent line revisitation as configured
-        if sampleData.useMaskFOV: self.processedERD *= sampleData.maskFOV
-        self.processedERD[self.processedERD<0] = 0
-        if np.max(self.processedERD) != 0: self.processedERD = ((self.processedERD-np.min(self.processedERD))/(np.max(self.processedERD)-np.min(self.processedERD)))*100
-        if sampleData.scanMethod == 'linewise' and not sampleData.lineRevist: self.processedERD[np.where(np.sum(self.mask, axis=1)>0)] = 0
+        #Remove any negative values
+        self.processedERDs[self.processedERDs<0] = 0
+        
+        #Rescale for potential Otsu thresholding with protection for potential zero arrays
+        minValues = np.min(self.processedERDs, axis=(1,2))
+        diffValues = np.max(self.processedERDs, axis=(1,2))-minValues
+        self.processedERDs = np.moveaxis((np.moveaxis(self.processedERDs, 0, -1)-minValues)/diffValues, -1, 0)
+        self.processedERDs = np.nan_to_num(self.processedERDs, nan=0, posinf=0, neginf=0)
+        
+        #Average across all channels
+        self.processedERD = np.mean(self.processedERDs, axis=0)
 
 #Sample scanning progress and final results processing
 class Result:
@@ -919,10 +942,14 @@ class Result:
                 if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
                     minValues, maxValues = np.min(self.sampleData.squareChanImages, axis=(1,2)), np.max(self.sampleData.squareChanImages, axis=(1,2))
                     minMaxDiffs = (maxValues-minValues)
-                    sample.RDPPs = np.moveaxis(abs(((np.moveaxis(self.sampleData.squareChanImages, 0, -1)-minValues)/minMaxDiffs)-((np.moveaxis(sample.squareChanReconImages, 0, -1)-minValues)/minMaxDiffs)), -1, 0)
+                    tempA = np.nan_to_num((np.moveaxis(self.sampleData.squareChanImages, 0, -1)-minValues)/minMaxDiffs, nan=0, posinf=0, neginf=0)
+                    tempB = np.nan_to_num((np.moveaxis(sample.squareChanReconImages, 0, -1)-minValues)/minMaxDiffs, nan=0, posinf=0, neginf=0)
+                    sample.RDPPs = np.moveaxis(abs(tempA-tempB), -1, 0)
                 elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
                     meanValues, stdValues =  np.mean(self.sampleData.squareChanImages, axis=(1,2)), np.std(self.sampleData.squareChanImages, axis=(1,2))
-                    sample.RDPPs = np.moveaxis(abs(((np.moveaxis(self.sampleData.squareChanImages, 0, -1)-meanValues)/stdValues)-((np.moveaxis(sample.squareChanReconImages, 0, -1)-meanValues)/stdValues)), -1, 0)
+                    tempA = np.nan_to_num((np.moveaxis(self.sampleData.squareChanImages, 0, -1)-meanValues)/stdValues, nan=0, posinf=0, neginf=0)
+                    tempB = np.nan_to_num((np.moveaxis(sample.squareChanReconImages, 0, -1)-meanValues)/stdValues, nan=0, posinf=0, neginf=0)
+                    sample.RDPPs = np.moveaxis(abs(tempA-tempB), -1, 0)
                 else: sample.RDPPs = abs(self.sampleData.squareChanImages-sample.squareChanReconImages)
                 
                 computeRD(sample, self.sampleData, tempScanData, self.cValue, [])
@@ -1147,11 +1174,6 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
         if metricsGT: f = plt.figure(figsize=(20,10))
         else: f = plt.figure(figsize=(20,5.3865))
         
-        #TODO: If a simulation, then need room on visualizations for showing ERD, ground-truth, and ground-truth difference; if no metrics, then don't need extra title room?
-        #if sampleData.simulationFlag and not sampleData.datagenFlag: f = plt.figure(figsize=(20,9))
-        #elif sampleData.simulationFlag: f = plt.figure(figsize=(20,10))
-        #else: f = plt.figure(figsize=(20,5.3865))
-        
         #Generate and apply a plot title, with metrics if applicable
         plotTitle = r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Channel:\ }$" + chanLabel + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured
         if metricsGT:
@@ -1186,14 +1208,14 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
         if not sampleData.trainFlag:
             if metricsGT: ax = plt.subplot2grid((2,3), (1,1))
             else: ax = plt.subplot2grid((1,3), (0,2))
-            im = ax.imshow(sample.ERDs[chanNum], cmap='viridis', vmin=0, aspect='auto')
-            ax.set_title('ERD')
+            im = ax.imshow(sample.processedERDs[chanNum], cmap='viridis', aspect='auto', vmin=0)
+            ax.set_title('Processed ERD')
             cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
         if visualRD: 
             if metricsGT: ax = plt.subplot2grid((2,3), (1,2))
             else: ax = plt.subplot2grid((1,3), (0,2))
-            im = ax.imshow(sample.RDs[chanNum], cmap='viridis', vmin=0, aspect='auto')
+            im = ax.imshow(sample.RDs[chanNum], cmap='viridis', aspect='auto', vmin=0)
             ax.set_title('RD')
             cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
         
@@ -1206,22 +1228,25 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
 
         #Do borderless saves for each channel image here; mask will be the same as produced in the progression output
         if not sampleData.trainFlag:
-            saveLocation = dir_chanProgressions[chanNum] + 'erd_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-            borderlessPlot(sample.ERDs[chanNum], saveLocation, cmap='viridis', vmin=0)
+            saveLocation = dir_chanProgressions[chanNum] + 'erd_original_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
+            borderlessPlot(sample.ERDs[chanNum], saveLocation, aspect='auto', cmap='viridis', vmin=0)
+            
+            saveLocation = dir_chanProgressions[chanNum] + 'erd_processed_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
+            borderlessPlot(sample.processedERDs[chanNum], saveLocation, aspect='auto', cmap='viridis', vmin=0)
         
         if visualRD:
             saveLocation = dir_chanProgressions[chanNum] + 'rd_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-            borderlessPlot(sample.RDs[chanNum], saveLocation, cmap='viridis', vmin=0)
+            borderlessPlot(sample.RDs[chanNum], saveLocation, aspect='auto', cmap='viridis', vmin=0)
         
         if metricsGT:
             saveLocation = dir_chanProgressions[chanNum] + 'groundTruth_channel_' + chanLabel + '.png'
-            borderlessPlot(sampleData.chanImages[chanNum], saveLocation, cmap='hot', vmin=chanMinValue, vmax=chanMaxValue)
+            borderlessPlot(sampleData.chanImages[chanNum], saveLocation, cmap='hot', aspect='auto', vmin=chanMinValue, vmax=chanMaxValue)
 
         saveLocation = dir_chanProgressions[chanNum] + 'reconstruction_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        borderlessPlot(sample.chanReconImages[chanNum], saveLocation, cmap='hot', vmin=chanMinValue, vmax=chanMaxValue)
+        borderlessPlot(sample.chanReconImages[chanNum], saveLocation, cmap='hot', aspect='auto', vmin=chanMinValue, vmax=chanMaxValue)
         
         saveLocation = dir_chanProgressions[chanNum] + 'measured_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        borderlessPlot(sample.chanImages[chanNum], saveLocation, cmap='hot', vmin=chanMinValue, vmax=chanMaxValue)
+        borderlessPlot(sample.chanImages[chanNum], saveLocation, cmap='hot', aspect='auto', vmin=chanMinValue, vmax=chanMaxValue)
         
     #For the overall progression, get min/max of the ground-truth sum image for visualization
     sumImageMinValue, sumImageMaxValue = np.min(sampleData.sumImage), np.max(sampleData.sumImage)
@@ -1267,14 +1292,14 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
     if not sampleData.trainFlag:
         if metricsGT: ax = plt.subplot2grid((2,3), (1,1))
         else: ax = plt.subplot2grid((1,3), (0,2))
-        im = ax.imshow(sample.processedERD, cmap='viridis', vmin=0, aspect='auto')
+        im = ax.imshow(sample.processedERD, cmap='viridis', aspect='auto', vmin=0)
         ax.set_title('Processed ERD')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
 
     if visualRD: 
         if metricsGT: ax = plt.subplot2grid((2,3), (1,2))
         else: ax = plt.subplot2grid((1,3), (0,2))
-        im = ax.imshow(sample.RD, cmap='viridis', vmin=0, aspect='auto')
+        im = ax.imshow(sample.RD, cmap='viridis', aspect='auto', vmin=0)
         ax.set_title('RD')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
     
@@ -1287,23 +1312,23 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
 
     #Borderless saves
     saveLocation = dir_progression + 'reconstruction_sumImage' + '_iter_' + str(sample.iteration) +  '_perc_' + str(sample.percMeasured) + '.png'
-    borderlessPlot(sample.sumReconImage, saveLocation, cmap='hot', vmin=sumImageMinValue, vmax=sumImageMaxValue)
+    borderlessPlot(sample.sumReconImage, saveLocation, cmap='hot', aspect='auto', vmin=sumImageMinValue, vmax=sumImageMaxValue)
     
     saveLocation = dir_progression + 'mask_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-    borderlessPlot(sample.mask, saveLocation, cmap='gray', vmin=0, vmax=1, interpolation='none')
+    borderlessPlot(sample.mask, saveLocation, cmap='gray', aspect='auto', vmin=0, vmax=1)
     
     if not sampleData.trainFlag:
-        saveLocation = dir_progression + 'ERD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
+        saveLocation = dir_progression + 'ERD_original_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
         borderlessPlot(sample.ERD, saveLocation, cmap='viridis')
-        saveLocation = dir_progression + 'ERD_Processed_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        borderlessPlot(sample.processedERD, saveLocation, cmap='viridis')
+        saveLocation = dir_progression + 'ERD_processed_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
+        borderlessPlot(sample.processedERD, saveLocation, cmap='viridis', aspect='auto')
     
     saveLocation = dir_progression + 'measured_sumImage_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-    borderlessPlot(sample.sumImage, saveLocation, cmap='hot', vmin=sumImageMinValue, vmax=sumImageMaxValue)
+    borderlessPlot(sample.sumImage, saveLocation, cmap='hot', aspect='auto', vmin=sumImageMinValue, vmax=sumImageMaxValue)
     
     if visualRD:
         saveLocation = dir_progression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        borderlessPlot(sample.RD, saveLocation, cmap='viridis')
+        borderlessPlot(sample.RD, saveLocation, aspect='auto', cmap='viridis')
     
     if parallelization: _ = ray.get(samplingProgress_Actor.update.remote(1))
 
@@ -1509,8 +1534,10 @@ def prepareInput(sample, sampleData, numChannel=None):
         if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
             minValue = np.min(inputReconImage)
             inputReconImage = (inputReconImage-minValue)/(np.max(inputReconImage)-minValue)
+            inputReconImage = np.nan_to_num(inputReconImage, nan=0, posinf=0, neginf=0)
         elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
             inputReconImage = (inputReconImage-np.mean(inputReconImage))/np.std(inputReconImage)
+            inputReconImage = np.nan_to_num(inputReconImage, nan=0, posinf=0, neginf=0)
         
         #Add channels to the input stack
         if 'opticalData' in inputChannels: inputStack.append(sampleData.squareOpticalImage)
@@ -1526,8 +1553,10 @@ def prepareInput(sample, sampleData, numChannel=None):
         if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
             minValues = np.min(inputReconImages, axis=(0,1))
             inputReconImages = (inputReconImages-minValues)/(np.max(inputReconImages, axis=(0,1))-minValues)
+            inputReconImages = np.nan_to_num(inputReconImages, nan=0, posinf=0, neginf=0)
         elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
             inputReconImages = (inputReconImages-np.mean(inputReconImages))/np.std(inputReconImages)
+            inputReconImages = np.nan_to_num(inputReconImages, nan=0, posinf=0, neginf=0)
         inputReconImages = np.moveaxis(inputReconImages, -1, 0)
         
         #Add channels to the input stack
@@ -1539,6 +1568,7 @@ def prepareInput(sample, sampleData, numChannel=None):
         
 #Determine the Estimated Reduction in Distortion
 def computeERD(sample, sampleData, tempScanData, model):
+
     #Compute the ERD with the prescribed model; if configured to, only use a single channel
     if not chanSingle:
         if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
@@ -1570,9 +1600,8 @@ def computeERD(sample, sampleData, tempScanData, model):
             sample.squareERDs[0] = ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample, sampleData, 0))))[0,:,:].copy()
             for chanNum in range(1, len(sample.squareERDs)): sample.squareERDs[chanNum] = sample.squareERDs[0]
     
-    #Remove any negative values, measured locations, nan, or inf values
+    #Set any negative/nan/inf values to 0 and average across all channels
     sample.squareERDs[sample.squareERDs<0] = 0
-    sample.squareERDs = sample.squareERDs*(1-sample.squareMask)
     sample.squareERDs = np.nan_to_num(sample.squareERDs, nan=0, posinf=0, neginf=0)
     sample.squareERD = np.mean(sample.squareERDs, axis=0)
 
@@ -1790,11 +1819,11 @@ def computeDifference(array1, array2):
 #Truncate a value to a given precision 
 def truncate(value, decimalPlaces=0): return np.trunc(value*10**decimalPlaces)/(10**decimalPlaces)
 
-def borderlessPlot(image, saveLocation, cmap='viridis', vmin=None, vmax=None, interpolation=None):
+def borderlessPlot(image, saveLocation, cmap='viridis', aspect='auto', vmin=None, vmax=None, interpolation='none'):
     fig=plt.figure()
     ax=fig.add_subplot(1,1,1)
     plt.axis('off')
-    plt.imshow(image, cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax, interpolation=interpolation)
+    plt.imshow(image, cmap=cmap, aspect=aspect, vmin=vmin, vmax=vmax, interpolation=interpolation)
     extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
     plt.savefig(saveLocation, bbox_inches=extent)
     plt.close(fig)

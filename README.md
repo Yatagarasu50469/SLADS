@@ -8,7 +8,7 @@
 # GENERAL INFORMATION
 
     NAME:           SLADS/DLADS/GLANDS
-    VERSION:        0.9.5
+    VERSION:        0.9.6
     LICENSE:        GNU General Public License v3.0
     DESCRIPTION:    Dynamic sampling algorithms with updated/developing implementations of:
                        -SLADS-LS    Supervised Learning Approach for Dynamic Sampling, using Least-Squares (LS) regression
@@ -59,10 +59,13 @@
                     0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
                     0.9.4   Fix group-based and c value selection, distributed multi-GPU simulations, updated Otsu segmented linewise
                     0.9.5   MALDI optical, input config, .tdf/.tsf compatibility, disable whole spectra metrics option, .imzML output
-                    0.9.6   GLANDS
+                    0.9.6   Adjust ERD processing, visualizations
+                    x.x.x+  Implementation line revisiting
+                    x.x.x+  Add norm. options
+                    x.x.x+  GLANDS
                     x.x.x+  Iterative feature selection mechanism for selection of target channels
                     x.x.x+  Experimental MALDI integration
-                    ~1.0.0  Release installation method for python package manager
+                    x.x.x+  Release installation method for python package manager
 
 # PROGRAM FILE STRUCTURE
 **Note:** If testing/training is not to be performed, then contents of 'TEST', 'TRAIN', may be disregarded, but a trained model must be present in: ./RESULTS/TRAIN/.
