@@ -117,12 +117,12 @@ class EpochEnd(Callback):
                         self.nanValue = True
                     
                     ax = plt.subplot2grid((3,2), (vizSampleNum+1,0))
-                    im = ax.imshow(squareRD, aspect='auto', vmin=0)
+                    im = ax.imshow(squareRD, aspect='auto', vmin=0, interpolation='none')
                     ax.set_title('RD', fontsize=15, fontweight='bold')
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                     
                     ax = plt.subplot2grid((3,2), (vizSampleNum+1,1))
-                    im = ax.imshow(squareERD, aspect='auto', vmin=0)
+                    im = ax.imshow(squareERD, aspect='auto', vmin=0, interpolation='none')
                     ax.set_title('ERD - PSNR: ' + str(round(ERD_PSNR,4)) + ' SSIM: ' + str(round(ERD_SSIM,4)), fontsize=15, fontweight='bold')
                     cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                     

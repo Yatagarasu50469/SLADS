@@ -56,11 +56,15 @@ class Recon_Actor:
         elif self.sampleType == 'DESI': self.reconImages = self.squareAllImages[self.indexes]*mask
     
     #Compute reconstructions, resizing back to original dimensionality if DESI sample
-    def computeRecon(self, tempScanData): 
+    def computeRecon(self, tempScanData, mask): 
         if len(self.reconImages.shape) == 3: self.reconImages[:, tempScanData.squareUnMeasuredIdxs[:,0], tempScanData.squareUnMeasuredIdxs[:,1]] = [np.sum(self.reconImages[index, tempScanData.squareMeasuredIdxs[:,0], tempScanData.squareMeasuredIdxs[:,1]][tempScanData.neighborIndices]*tempScanData.neighborWeights, axis=-1) for index in range(0, len(self.indexes))]
         else: self.reconImages[tempScanData.squareUnMeasuredIdxs[:,0], tempScanData.squareUnMeasuredIdxs[:,1]] = np.sum(self.reconImages[tempScanData.squareMeasuredIdxs[:,0], tempScanData.squareMeasuredIdxs[:,1]][tempScanData.neighborIndices]*tempScanData.neighborWeights, axis=-1)
         if self.sampleType == 'DESI': self.reconImages = np.moveaxis(resize(np.moveaxis(self.reconImages, 0, -1), tuple(self.finalDim), order=0), -1, 0)
     
+        #Copy back the original measured values to the reconstructions (might only be needed for DESI)
+        measuredIdxs = np.transpose(np.where(mask==1))
+        self.reconImages[:, measuredIdxs[:,0], measuredIdxs[:,1]] = self.allImages[self.indexes, measuredIdxs[:,0], measuredIdxs[:,1]]
+        
     #Return allImages already loaded; Warning: Performing any operations beyond just the return will induce significant copy overhead!
     def getAllImages(self):
         return self.allImages
