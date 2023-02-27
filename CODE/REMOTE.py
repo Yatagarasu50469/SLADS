@@ -7,6 +7,7 @@
 class Model_Actor:
     def __init__(self, erdModel, modelPath, gpuNum=-1):
         warnings.filterwarnings("ignore")
+        logging.root.setLevel(logging.ERROR)
         self.erdModel = erdModel
         if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': self.model = np.load(modelPath+'.npy', allow_pickle=True).item()
         elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': 
@@ -24,6 +25,7 @@ class Model_Actor:
 class SamplingProgress_Actor:
     def __init__(self): 
         warnings.filterwarnings("ignore")
+        logging.root.setLevel(logging.ERROR)
         self.current = 0.0
     def update(self, amount): self.current += amount
     def getCurrent(self): return self.current
@@ -35,6 +37,7 @@ class Recon_Actor:
     #Set internal parameters for handling image reconst ruction process
     def __init__(self, indexes, sampleType, squareDim, finalDim, allImagesMax):
         warnings.filterwarnings("ignore")
+        logging.root.setLevel(logging.ERROR)
         self.indexes = indexes
         self.sampleType = sampleType
         self.squareDim = squareDim
@@ -100,8 +103,9 @@ class Reader_MSI_Actor:
     
     #Create buffers for holding all MSI images, the specified channel images, and the sum of all values
     def __init__(self, sampleType, readAllMSI, mzNum, chanNum, yDim, xDim, allImagesPath, squareAllImagesPath):
-        self.readAllMSI = readAllMSI
         warnings.filterwarnings("ignore")
+        logging.root.setLevel(logging.ERROR)
+        self.readAllMSI = readAllMSI
         self.sampleType = sampleType
         self.yDim = yDim
         self.xDim = xDim
@@ -188,7 +192,6 @@ class Reader_MSI_Actor:
 def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, indexData, mzOriginalIndices, mzRanges, sampleType, mzLowerBound, mzUpperBound, mzLowerIndex, mzPrecision, mzRound, mzInitialCount, mask, newTimes, finalDim, sampleWidth, scanRate, mzFinal=None, mzFinalGrid=None, chanValues=None, chanFinalGrid=None, impFlag=False, postFlag=False, impOffset=None, scanMethod=None, lineMethod=None, physicalLineNums=None, ignoreMissingLines=None, missingLines=None, unorderedNames=None):
     warnings.filterwarnings("ignore")
     logging.root.setLevel(logging.ERROR)
-    import alphatims.bruker
     alphatims.utils.set_progress_callback(None)
     
     mzDataTotal, chanDataTotal, sumDataTotal = [], [], []

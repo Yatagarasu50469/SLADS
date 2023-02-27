@@ -292,8 +292,9 @@ The actual location of the specified file may vary depending on potential past V
 Open a new command prompt (critically, not as an administrator!) and enter the following commands (If GPU acceleration is not to be used change tensorflow-gpu==2.8.4 below to tensorflow==2.8.4):
 
     $ python -m pip install --upgrade pip
-    $ pip3 install datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve]==2.1.0 scipy sobol sobol-seq natsort multiprocess scikit-image scikit-learn tensorflow-gpu==2.8.4 tensorflow-addons==0.18.0 tqdm opencv-python pydot graphviz aiorwlock pyimzml colorama alphatims pywin32 
+    $ pip3 install datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve]==2.1.0 scipy sobol sobol-seq natsort multiprocess scikit-image scikit-learn tensorflow-gpu==2.8.4 tensorflow-addons==0.18.0 tqdm opencv-python pydot graphviz aiorwlock pyimzml colorama pywin32
     $ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
+	$ pip3 install git+https://github.com/Yatagarasu50469/alphatims.git@master
 
 Either switch back to, or open a new command prompt as an administrator and enter the following command:
     
@@ -491,7 +492,7 @@ While it does not currently function for some MSI formats, (verified operational
     $ python -m pip install --upgrade pip
     $ sudo apt-get update
     $ sudo apt-get install -y wget git python3-opencv
-    $ pip3 install datetime glob2 IPython joblib pandas pathlib2 psutil matplotlib numba pillow ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow-gpu=2.8.4 tensorflow-addons==0.18.0 tqdm numpy opencv-python pydot graphviz aiorwlock pyimzml colorama alphatims
+    $ pip3 install datetime glob2 IPython joblib pandas pathlib2 psutil matplotlib numba pillow ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow-gpu=2.8.4 tensorflow-addons==0.18.0 tqdm numpy opencv-python pydot graphviz aiorwlock pyimzml colorama
     $ wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
     $ sudo dpkg -i packages-microsoft-prod.deb
     $ rm packages-microsoft-prod.deb

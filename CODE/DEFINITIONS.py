@@ -1134,7 +1134,7 @@ class Result:
                 for sample in self.samples: self.resizeRD(sample)
                 
                 if parallelization:
-                
+                    
                     #Setup an actor to hold global sampling progress across multiple processes
                     samplingProgress_Actor = SamplingProgress_Actor.remote()
             
@@ -1183,8 +1183,11 @@ class Result:
 #Visualize single sample progression step
 def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, parallelization=False, samplingProgress_Actor=None):
 
-    #If running visualization in parallel, reset backend to avoid main thread/loop issues
-    if parallelization: matplotlib.use('Agg')
+    #If in parallel, reset matplotlib backend (to avoid main thread/loop issues) and ignore warnings
+    if parallelization: 
+        warnings.filterwarnings("ignore")
+        logging.root.setLevel(logging.ERROR)
+        matplotlib.use('Agg')
 
     #Turn percent measured into a string
     percMeasured = "{:.2f}".format(sample.percMeasured)

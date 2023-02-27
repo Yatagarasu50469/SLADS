@@ -7,6 +7,7 @@
 
 from __future__ import absolute_import, division, print_function
 import alphatims
+import alphatims.bruker
 import colorama
 import cv2
 import contextlib
@@ -139,9 +140,6 @@ from tensorflow.tools.docs import doc_controls
 tf.get_logger().setLevel('ERROR')
 warnings.filterwarnings("ignore")
 logging.root.setLevel(logging.ERROR)
-
-#Import remaining alphatims after logging level has been set
-import alphatims.bruker
 
 #Turn off alphatims internal tqdm callback
 alphatims.utils.set_progress_callback(None)
