@@ -273,7 +273,7 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                 if (impFlag or postFlag) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(mask[lineNum]==1).min()/finalDim[1])*(((sampleWidth*1e3)/scanRate)/60)
                 elif (impFlag or postFlag) and impOffset: sys.exit('Error - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
             
-                #Seup storage locations for each measured location
+                #Setup storage locations for each measured location
                 chanDataLine, mzDataLine = [[] for _ in range(0, len(mzRanges))], []
                 
                 #Set positions to be scanned for the line
@@ -283,13 +283,18 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                 #Read in and process spectrum data for each position, storing for later analysis
                 for pos in positions:
                     if data.format == 'Bruker':
-                        if not useAlphaTims: mzs, ints = data.scan(pos, True)
-                        else: mzs, ints = data[pos]['mz_values'], data[pos]['corrected_intensity_values']
+                        if not useAlphaTims: 
+                            mzs, ints = data.scan(pos, True)
+                        else: 
+                            mzs, ints = data[pos]['mz_values'].values, data[pos]['corrected_intensity_values'].values
+                            sortedIndices = np.argsort(mzs)
+                            mzs, ints = mzs[sortedIndices], ints[sortedIndices]
                         sumImageLine.append(np.sum(ints))
                     else: 
                         mzs, ints = data.scan(pos, False, True)
-                    filtIndexLow, filtIndexHigh = bisect_left(mzs, mzLowerBound), bisect_right(mzs, mzUpperBound)
-                    if readAllMSI: mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
+                    if readAllMSI: 
+                        filtIndexLow, filtIndexHigh = bisect_left(mzs, mzLowerBound), bisect_right(mzs, mzUpperBound)
+                        mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
                     for mzRangeNum in range(0, len(mzRanges)):
                         mzRange = mzRanges[mzRangeNum]
                         chanDataLine[mzRangeNum].append(np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]))

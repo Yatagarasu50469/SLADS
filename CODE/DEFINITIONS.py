@@ -562,7 +562,7 @@ class SampleData:
                         if (self.impFlag or self.postFlag) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(self.mask[lineNum]==1).min()/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
                         elif (self.impFlag or self.postFlag) and impOffset: sys.exit('Error - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
                         
-                        #Seup storage locations for each measured location
+                        #Setup storage locations for each measured location
                         chanDataLine, mzDataLine = [[] for _ in range(0, len(self.mzRanges))], []
                         
                         #Set positions to be scanned for the line
@@ -572,13 +572,18 @@ class SampleData:
                         #Read in and process spectrum data for each location
                         for pos in positions:
                             if data.format == 'Bruker':
-                                if not self.useAlphaTims: mzs, ints = data.scan(pos, True)
-                                else: mzs, ints = data[pos]['mz_values'], data[pos]['corrected_intensity_values']
+                                if not self.useAlphaTims: 
+                                    mzs, ints = data.scan(pos, True)
+                                else: 
+                                    mzs, ints = data[pos]['mz_values'].values, data[pos]['corrected_intensity_values'].values
+                                    sortedIndices = np.argsort(mzs)
+                                    mzs, ints = mzs[sortedIndices], ints[sortedIndices]
                                 sumImageLine.append(np.sum(ints))
                             else:
                                 mzs, ints = data.scan(pos, False, True)
-                            filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
-                            if self.readAllMSI: mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices))
+                            if self.readAllMSI: 
+                                filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
+                                mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices))
                             for mzRangeNum in range(0, len(self.mzRanges)):
                                 mzRange = self.mzRanges[mzRangeNum]
                                 chanDataLine[mzRangeNum].append(np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]))
