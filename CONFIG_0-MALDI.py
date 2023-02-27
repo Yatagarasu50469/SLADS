@@ -39,10 +39,12 @@ postModel = False
 #Should parallelization calls be used; if memory overflow issues develop, try setting to False (massively increases computation time)
 parallelization = True
 
-#If parallelization is enabled how many CPU threads should be reserved for other computer functions
-#Recommend starting at half of the available threads if using hyperthreading; decrease just enough that CPU is not pinned at 100% in parallel training operations
-#May increase up to the total number of system CPU threads to decrease relative memory pressure
-reserveThreadCount = 0
+#If parallelization is enabled, how many CPU threads should be used? (0 will use any/all available)
+#Recommend starting at half of the available system threads if using hyperthreading,
+#or 1-2 less than the number of system CPU cores if not using hyperthreading.
+#Adjust to where the CPU just below 100% usage during parallel operations 
+#May decrease value to help reduce RAM pressure. 
+availableThreads = 0
 
 #Which GPU(s) should be used for training; ('None', any/all available; '-1', CPU only)
 availableGPUs = 'None'
@@ -293,6 +295,9 @@ storeTestingSampleData = False
 
 #Should progress bars use ascii formatting
 asciiFlag = False
+
+#If performing a benchmark, should processing be skipped (default: False)
+benchmarkNoProcessing = False
 
 ##################################################################
 

@@ -59,7 +59,7 @@
                     0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
                     0.9.4   Fix group-based and c value selection, distributed multi-GPU simulations, updated Otsu segmented linewise
                     0.9.5   MALDI optical, input config, .tdf/.tsf compatibility, disable whole spectra metrics option, .imzML output
-                    0.9.6   Adjust ERD processing and visualizations, add progression map
+                    0.9.6   Adjust ERD processing and visualizations, add progression map, compute times, and alphatims option
                     x.x.x+  Implementation line revisiting
                     x.x.x+  Add norm. options
                     x.x.x+  GLANDS
@@ -292,7 +292,7 @@ The actual location of the specified file may vary depending on potential past V
 Open a new command prompt (critically, not as an administrator!) and enter the following commands (If GPU acceleration is not to be used change tensorflow-gpu==2.8.4 below to tensorflow==2.8.4):
 
     $ python -m pip install --upgrade pip
-    $ pip3 install datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve]==2.1.0 scipy sobol sobol-seq natsort multiprocess scikit-image scikit-learn tensorflow-gpu==2.8.4 tensorflow-addons==0.18.0 tqdm opencv-python pydot graphviz aiorwlock pyimzml colorama
+    $ pip3 install datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve]==2.1.0 scipy sobol sobol-seq natsort multiprocess scikit-image scikit-learn tensorflow-gpu==2.8.4 tensorflow-addons==0.18.0 tqdm opencv-python pydot graphviz aiorwlock pyimzml colorama alphatims pywin32 
     $ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
 
 Either switch back to, or open a new command prompt as an administrator and enter the following command:
@@ -305,6 +305,8 @@ If the final printout indicates actions relating to the MSI file format intended
 ###  **CONFIGURATION**
 
 **Note:** 
+There are very few sanity checks inside of the code to ensure only correct/valid configurations are used. If an unexpected error occurs, please double check the sample and program configuration files to ensure they are correct before opening an issue or contacting the program author. Thank you.
+
 All critical parameters for SLADS may be altered in a configuration file (Ex. ./CONFIG_0.py). Variable descriptions are provided inside of an example configuration provided and are grouped according to the following method:
 
     L0:     Tasks to be performed
@@ -318,7 +320,7 @@ All critical parameters for SLADS may be altered in a configuration file (Ex. ./
     L4:     Non-operational - Do not change
     L5:     Debug/Deprecated - Will most likely be removed in future
 
-Multiple configuration files in the form of CONFIG_*descriptor*.py, can be generated for which SLADS will be run sequentially. RESULTS_*descriptor* folders will correspond with the numbering of the CONFIG files, with the RESULTS folder without a description, containing results from the last run performed. 
+Multiple configuration files in the form of CONFIG_*descriptor*.py, can be generated and then automatically run sequentially. RESULTS_*descriptor* folders will correspond with the numbering of the CONFIG files, with the RESULTS folder without a description, containing results from the last run performed. 
 
 For all samples, a 'sampleInfo.txt' file must be included in each of the sample directories (specifically within the subdirectories in TRAIN, TEST, and IMP, as the tasks to be performed may dictate). The actual content is dependent on the file type as listed below, where each piece of information should be on its own line without additional description, as shown in the EXAMPLE sample directory. 
 
@@ -328,9 +330,11 @@ For MSI data, another file: 'channels.csv', should also be placed in the base di
 
 For MALDI samples, aligned optical images may be incorporated into the model, however all samples must have an image of the same resolution included and training must have been conducted with the same optical flags enabled as intended to be used during simulation/implementation. The optical image should be placed in each sample's directory as 'optical.png'.
 
+For DESI Bruker .tdf samples (.d files with timsTOF enabled) alphatims may be used instead of multiplierz, by specifying the sample type DESI-ALPHA. Alphatims is only compatible with DESI Bruker .tdf files, use of alphatims with Bruker .tsf, or other vendor MSI files is not supported!
+
 ###  **DESI MSI**
     - Sample Type
-        Specify the kind of file for correct parsing of the remaining fields (DESI, MALDI, IMAGE)
+        Specify the kind of file for correct parsing of the remaining fields (DESI, DESI-ALPHA, MALDI, IMAGE)
     - Number of lines in the sample 
         Not to be confused with the number of line files present in the directory!
     - Width (mm) 
@@ -487,7 +491,7 @@ While it does not currently function for some MSI formats, (verified operational
     $ python -m pip install --upgrade pip
     $ sudo apt-get update
     $ sudo apt-get install -y wget git python3-opencv
-    $ pip3 install datetime glob2 IPython joblib pandas pathlib2 psutil matplotlib numba pillow ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow-gpu=2.8.4 tensorflow-addons==0.18.0 tqdm numpy opencv-python pydot graphviz aiorwlock pyimzml colorama
+    $ pip3 install datetime glob2 IPython joblib pandas pathlib2 psutil matplotlib numba pillow ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow-gpu=2.8.4 tensorflow-addons==0.18.0 tqdm numpy opencv-python pydot graphviz aiorwlock pyimzml colorama alphatims
     $ wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
     $ sudo dpkg -i packages-microsoft-prod.deb
     $ rm packages-microsoft-prod.deb
@@ -582,6 +586,12 @@ The install branch for mulitiplierz was modified as of v0.9.5 and is not backwar
 
     $ pip3 uninstall multiplierz
     $ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@4a458283441f609e2f4118ca462073a97f401bdc
+
+### **Receiving "cuda_malloc_async isn't currently supported on GPU..." indicates an issue with my CUDA version, but I have verified the installation is correct.**
+
+If your NVIDIA GPU architecture is older than Pascal (i.e. Maxwell and earlier with compute capability below 6.1), then you will need to comment out the following line in EXTERNAL.py:
+
+    os.environ["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
 
 # PUBLICATIONS
 

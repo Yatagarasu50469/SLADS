@@ -41,3 +41,17 @@ def performImplementation(optimalC, modelName):
     #Call for completion/printout
     result.complete()
 
+    #Print out final results
+    dataPrintout = [[]]
+    dataPrintout.append(['Final %:', result.samples[-1].percMeasured])
+    dataPrintout.append(['Run Time (s):', result.finalTime])
+    dataPrintout.append([])
+    dataPrintout.append(['Note: The following values should not be considered wholly representative of actual code performance/efficiency.'])
+    dataPrintout.append(['They are only intended for debugging and internal evaluation of relative system performance!'])
+    dataPrintout.append([])
+    dataPrintout.append(['File Load Time (s):', result.avgTimeFileLoad])
+    dataPrintout.append(['Targeted Reconstruction Compute Time (s):', result.avgTimeComputeRecon])
+    dataPrintout.append(['ERD Compute Time (s):', result.avgTimeComputeERD])
+    
+    pd.DataFrame(dataPrintout).to_csv(dir_ImpDataFinal + 'dataPrintout.csv')
+    pd.DataFrame(dataPrintout).to_csv(result.dir_sampleResults + 'dataPrintout.csv')

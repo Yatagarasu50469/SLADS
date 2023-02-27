@@ -205,7 +205,7 @@ def optimizeC(sampleDataSet):
             areaUnderCurveList.append(np.mean(AUC))
             
             #Extract RD computation times
-            allRDTimes = np.concatenate([result.computeRDTimes for result in results[cNum]])
+            allRDTimes = np.concatenate([result.avgTimesComputeRD for result in results[cNum]])
             
             #Save information for output to file
             dataPrintout.append(['c Value', cValues[cNum]])
@@ -332,7 +332,7 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
         resetRay(numberCPUS)
     
     #Get timing data for RD generation, average, and save
-    allRDTimes = np.concatenate([result.computeRDTimes for result in results])
+    allRDTimes = np.concatenate([result.avgTimesComputeRD for result in results])
     dataPrintout = [['','Average', '', 'Standard Deviation']]
     dataPrintout.append(['RD Compute Time (s)', np.mean(allRDTimes), '+/-', np.std(allRDTimes)])
     pd.DataFrame(dataPrintout).to_csv(dir_TrainingResults + 'trainingValidation_RDTimes.csv')

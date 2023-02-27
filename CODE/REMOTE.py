@@ -7,10 +7,9 @@
 class Model_Actor:
     def __init__(self, erdModel, modelPath, gpuNum=-1):
         warnings.filterwarnings("ignore")
-        loggerServe.setLevel(logging.ERROR)
         self.erdModel = erdModel
         if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': self.model = np.load(modelPath+'.npy', allow_pickle=True).item()
-        elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS':         
+        elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': 
             if gpuNum >= 0:
                 with tf.device('/device:GPU:'+str(gpuNum)): 
                     self.model = tf.function(tf.keras.models.load_model(modelPath, compile=False), experimental_relax_shapes=True)
@@ -186,8 +185,12 @@ class Reader_MSI_Actor:
     
 #Read in the sample MSI data for a set of indexes and set those values in shared memory location; must use blocking call (ray.get) to prevent data corruption
 @ray.remote
-def msi_parhelper(allImagesActor, readAllMSI, scanFileNames, indexData, mzOriginalIndices, mzRanges, sampleType, mzLowerBound, mzUpperBound, mzLowerIndex, mzPrecision, mzRound, mzInitialCount, mask, newTimes, finalDim, sampleWidth, scanRate, mzFinal=None, mzFinalGrid=None, chanValues=None, chanFinalGrid=None, impFlag=False, postFlag=False, impOffset=None, scanMethod=None, lineMethod=None, physicalLineNums=None, ignoreMissingLines=None, missingLines=None, unorderedNames=None):
+def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, indexData, mzOriginalIndices, mzRanges, sampleType, mzLowerBound, mzUpperBound, mzLowerIndex, mzPrecision, mzRound, mzInitialCount, mask, newTimes, finalDim, sampleWidth, scanRate, mzFinal=None, mzFinalGrid=None, chanValues=None, chanFinalGrid=None, impFlag=False, postFlag=False, impOffset=None, scanMethod=None, lineMethod=None, physicalLineNums=None, ignoreMissingLines=None, missingLines=None, unorderedNames=None):
     warnings.filterwarnings("ignore")
+    logging.root.setLevel(logging.ERROR)
+    import alphatims.bruker
+    alphatims.utils.set_progress_callback(None)
+    
     mzDataTotal, chanDataTotal, sumDataTotal = [], [], []
     if sampleType == 'MALDI':
     
@@ -223,7 +226,12 @@ def msi_parhelper(allImagesActor, readAllMSI, scanFileNames, indexData, mzOrigin
         
             #Load the line data and flag errors during the process (primarily checking for files without data)
             errorFlag = False
-            try: data = mzFile(scanFileName)
+            try: 
+                if not useAlphaTims: 
+                    data = mzFile(scanFileName, numThreads=1)
+                else: 
+                    data = alphatims.bruker.TimsTOF(scanFileName, use_hdf_if_available=False)
+                    data.format = 'Bruker'
             except: errorFlag = True
             
             #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number minus 1
@@ -246,7 +254,8 @@ def msi_parhelper(allImagesActor, readAllMSI, scanFileNames, indexData, mzOrigin
                 #Extract original measurement times and setup/read TIC data as applicable
                 if data.format == 'Bruker': 
                     sumImageLine = []
-                    origTimes = np.asarray(data.ms1_frames)[:,1]/60
+                    if not useAlphaTims: origTimes = np.asarray(data.ms1_frames)[:,1]/60
+                    else: origTimes = np.delete(data.rt_values, 0, axis = 0)/60
                 else: 
                     imageData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
                     origTimes, sumImageLine = imageData[:,0], imageData[:,1]
@@ -271,7 +280,8 @@ def msi_parhelper(allImagesActor, readAllMSI, scanFileNames, indexData, mzOrigin
                 #Read in and process spectrum data for each position, storing for later analysis
                 for pos in positions:
                     if data.format == 'Bruker':
-                        mzs, ints = data.scan(pos, True)
+                        if not useAlphaTims: mzs, ints = data.scan(pos, True)
+                        else: mzs, ints = data[pos]['mz_values'], data[pos]['corrected_intensity_values']
                         sumImageLine.append(np.sum(ints))
                     else: 
                         mzs, ints = data.scan(pos, False, True)
@@ -306,7 +316,8 @@ def msi_parhelper(allImagesActor, readAllMSI, scanFileNames, indexData, mzOrigin
                     mzDataTotal.append(mzDataLine)
         
                 #Close the file
-                data.close()
+                if not useAlphaTims: data.close()
+                else: del data
         
         #If there was new data read, transfer such to shared memory actor
         if len(newReadScanFiles) > 0: _ = ray.get(allImagesActor.setValues.remote(indexData, mzDataTotal, chanDataTotal, sumDataTotal, origTimesTotal, np.array(lineNumTotal), newReadScanFiles, allDataInterpFailTotal))

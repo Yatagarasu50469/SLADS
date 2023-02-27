@@ -99,7 +99,7 @@ if postModel:
     postprocess(natsort.natsorted(glob.glob(dir_PostData + '/*'), reverse=False), optimalC, modelName)
 
 #Copy the results folder and the config file into it
-resultCopy = shutil.copytree('./RESULTS', destResultsFolder)
+resultCopy = shutil.copytree(dir_Results, destResultsFolder)
 configCopy = shutil.copy(configFileName, destResultsFolder+'/'+os.path.basename(configFileName))
 
 #Shutdown ray

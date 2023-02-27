@@ -6,6 +6,7 @@
 #==================================================================
 
 from __future__ import absolute_import, division, print_function
+import alphatims
 import colorama
 import cv2
 import contextlib
@@ -31,6 +32,7 @@ import pickle
 import PIL
 import PIL.ImageOps
 import platform
+import psutil
 import pyimzml
 import random
 import re
@@ -92,7 +94,7 @@ sys.coinit_flags = 0 #Change method of instantiation for COM objects
 #Make tensorflow only report errors (3), warnings (2), information (1), all (0) (disable for debug)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-#Allocate memory for CUDA in an asynchronous manner
+#Allocate memory for CUDA in an asynchronous manner; disable this line if GPU compute is < 6.1 (Maxwell and previous)
 os.environ["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
 
 #Disable Ray memory monitor as it will sometimes decide to kill processes with suprising/unexpected/unmanageable/untracable errors
@@ -133,12 +135,16 @@ from tensorflow.python.util import dispatch
 from tensorflow.python.util.tf_export import keras_export
 from tensorflow.tools.docs import doc_controls
 
-#Further restrict logging levels to only report errors (disable for debug)
+#Further restrict warning/logging levels to only report errors (disable for debug)
 tf.get_logger().setLevel('ERROR')
 warnings.filterwarnings("ignore")
+logging.root.setLevel(logging.ERROR)
 
-#Get logger for ray server deployments
-loggerServe = logging.getLogger("ray.serve")
+#Import remaining alphatims after logging level has been set
+import alphatims.bruker
+
+#Turn off alphatims internal tqdm callback
+alphatims.utils.set_progress_callback(None)
 
 #OS SPECIFIC IMPORTS
 #==================================================================

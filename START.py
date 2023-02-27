@@ -7,7 +7,7 @@
 #╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝  █  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝  █   ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝
 #                                          █                                            █
 #
-#MODIFIED:	        21 February 2023
+#MODIFIED:	        27 February 2023
 #
 #VERSION:	        0.9.6
 #
@@ -62,7 +62,7 @@
 #                   0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
 #                   0.9.4   Fix group-based and c value selection, distributed multi-GPU simulations, updated Otsu segmented linewise
 #                   0.9.5   MALDI optical, input config, .tdf/.tsf compatibility, disable whole spectra metrics option, .imzML output
-#                   0.9.6   Adjust ERD processing and visualizations, add progression map
+#                   0.9.6   Adjust ERD processing and visualizations, add progression map, compute times, and alphatims option
 #                   x.x.x+  Implementation line revisiting
 #                   x.x.x+  Add norm. options
 #                   x.x.x+  GLANDS
@@ -78,7 +78,7 @@
 #Current version information
 versionNum='0.9.6'
 
-#Import needed libraries for subprocess initialization
+#Import needed libraries for subprocess initialization/troubleshooting
 import glob
 import natsort
 import subprocess
@@ -89,11 +89,10 @@ configFileNames = natsort.natsorted(glob.glob('./CONFIG_*.py'))
 #Validate syntax of any configuration files
 _ = [exec(open(configFileName, encoding='utf-8').read()) for configFileName in configFileNames]
 
-#Run each configuration sequentially as a subprocess (GPU VRAM not cleared by Tensorflow, leading to crash otherwise); pass interrupts to active subprocess
+#Sequentially run each configuration as a subprocess (otherwise GPU VRAM is not cleared); catch and exit on subprocess exceptions
 for configFileName in configFileNames: 
-    process = subprocess.Popen(["python", "CODE/RUN_CONFIG.py", configFileName, versionNum], shell=False)
-    try: process.wait()
-    except: exit()
+    try: process = subprocess.run(["python", "CODE/RUN_CONFIG.py", configFileName, versionNum], check=True)
+    except subprocess.CalledProcessError as err: exit()
 
 #Shutdown python kernel
 exit()

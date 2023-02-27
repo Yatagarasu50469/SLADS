@@ -56,6 +56,8 @@ class SampleData:
         self.mzIndices = None
         self.allImagesPath = None
         self.squareAllImagesPath = None
+        self.avgTimeFileLoad = None
+        self.useAlphaTims = False
         
         #If linewise and visiting all lines, then set the % per line as the original stop percentage and the latter to 100
         if self.scanMethod == 'linewise' and lineVisitAll: 
@@ -85,7 +87,12 @@ class SampleData:
             lineIndex += 1
         except: 
             self.sampleType = 'IMAGE'
-
+            
+        #Check if alphatims should be used instead of multiplierz
+        if self.sampleType == 'DESI-ALPHA':
+            self.sampleType = 'DESI'
+            self.useAlphaTims = True
+        
         if self.sampleType == 'DESI':
 
             #Read the max number of lines that are expected 
@@ -362,7 +369,7 @@ class SampleData:
         
         #If a simulation or post-processing, read all the sample data and save in hdf5 if applicable, optimized for loading whole channel images, force clear the actor memory
         if self.simulationFlag or self.postFlag: 
-            self.readScanData()
+            self.avgTimeFileLoad = self.readScanData()
             if self.dataMSI: 
                 if parallelization: 
                     if self.readAllMSI: self.allImagesMax = ray.get(self.reader_MSI_Actor.writeToDisk.remote(self.squareDim))
@@ -440,6 +447,9 @@ class SampleData:
     
     def readScanData(self, newIdxs=[]):
         
+        #Start file loading timer
+        t0_readFile = time.time()
+        
         #Get the MSI file extension automatically if it isn't already known
         if self.lineExt == None:
             extensions = list(map(lambda x:x, np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
@@ -489,7 +499,7 @@ class SampleData:
                     self.chanImages[:, y, x] = [np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]) for mzRange in self.mzRanges]
             else:
                 _ = ray.get(self.reader_MSI_Actor.setCoordinates.remote(coordinates))
-                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate) for indexes in np.array_split(np.arange(0, len(coordinates)), numberCPUS)])
+                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.useAlphaTims, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate) for indexes in np.array_split(np.arange(0, len(coordinates)), numberCPUS)])
             
             #Close the MSI file
             del data
@@ -508,7 +518,12 @@ class SampleData:
                     
                     #Load the line data and flag errors during the process (primarily checking for files without data)
                     errorFlag = False
-                    try: data = mzFile(scanFileName)
+                    try: 
+                        if not self.useAlphaTims: 
+                            data = mzFile(scanFileName, numThreads=1)
+                        else: 
+                            data = alphatims.bruker.TimsTOF(scanFileName, use_hdf_if_available=False)
+                            data.format = 'Bruker'
                     except: errorFlag = True
                     
                     #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number minus 1
@@ -524,14 +539,15 @@ class SampleData:
                         
                         #If ignoring missing lines and there are stored missing lines (simulation with ordered filenames only), then determine the offset for correct indexing
                         if self.ignoreMissingLines and len(self.missingLines) > 0: lineNum -= int(np.sum(lineNum > self.missingLines))
-                    
+                        
                         #Add file name to those that will have been already scanned (when this process finishes)
                         self.readScanFiles.append(scanFileName)
                         
                         #Extract original measurement times and setup/read TIC data as applicable
                         if data.format == 'Bruker': 
                             sumImageLine = []
-                            origTimes = np.asarray(data.ms1_frames)[:,1]/60
+                            if not self.useAlphaTims: origTimes = np.asarray(data.ms1_frames)[:,1]/60
+                            else: origTimes = np.delete(data.rt_values, 0, axis = 0)/60
                         else: 
                             imageData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
                             origTimes, sumImageLine = imageData[:,0], imageData[:,1]
@@ -556,7 +572,8 @@ class SampleData:
                         #Read in and process spectrum data for each location
                         for pos in positions:
                             if data.format == 'Bruker':
-                                mzs, ints = data.scan(pos, True)
+                                if not self.useAlphaTims: mzs, ints = data.scan(pos, True)
+                                else: mzs, ints = data[pos]['mz_values'], data[pos]['corrected_intensity_values']
                                 sumImageLine.append(np.sum(ints))
                             else:
                                 mzs, ints = data.scan(pos, False, True)
@@ -572,11 +589,12 @@ class SampleData:
                         self.sumImage[lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(sumImageLine, nan=0, posinf=0, neginf=0), left=0, right=0)
                         
                         #Close the file
-                        data.close()
+                        if not self.useAlphaTims: data.close()
+                        else: del data
             
             #Otherwise read data in parallel and perform remaining interpolations of any remaining m/z data to regular grid in serial (parallel operation is too memory intensive)
             else:
-                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.mzFinal, self.mzFinalGrid_id, self.chanValues, self.chanFinalGrid_id, self.impFlag, self.postFlag, impOffset, scanMethod, lineMethod, self.physicalLineNums, self.ignoreMissingLines, self.missingLines, self.unorderedNames) for indexes in np.array_split(np.arange(0, len(scanFileNames)), numberCPUS)])
+                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.useAlphaTims, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.mzFinal, self.mzFinalGrid_id, self.chanValues, self.chanFinalGrid_id, self.impFlag, self.postFlag, impOffset, scanMethod, lineMethod, self.physicalLineNums, self.ignoreMissingLines, self.missingLines, self.unorderedNames) for indexes in np.array_split(np.arange(0, len(scanFileNames)), numberCPUS)])
                 if self.readAllMSI: _ = ray.get(self.reader_MSI_Actor.interpolateDESI.remote(self.mzFinal, self.mzFinalGrid))
                 for scanFileName in ray.get(self.reader_MSI_Actor.getReadScanFiles.remote()): self.readScanFiles.append(scanFileName)
 
@@ -600,6 +618,11 @@ class SampleData:
             
         #Find the maximum value in each channel image for easy referencing
         self.chanImagesMax = np.max(self.chanImages, axis=(1,2))
+        
+        #Stop file load timer and return average across number of files scanned
+        t1_readFile = time.time()
+        if len(scanFileNames)>0: return (t1_readFile-t0_readFile)/len(scanFileNames)
+        else: return 0
 
 #Storage object for holding updatable variables needed over the course of scanning (here to prevent unneccessary memory usage)
 class TempScanData:
@@ -677,7 +700,8 @@ class Sample:
                 if sampleData.unorderedNames and impModel and scanMethod == 'linewise': sampleData.physicalLineNums[len(sampleData.physicalLineNums.keys())+1] = int(newIdxs[0][0])
                 sampleData.mask = self.mask
                 equipWait()
-                sampleData.readScanData(newIdxs)
+                avgTimeFileLoad = sampleData.readScanData(newIdxs)
+                result.avgTimesFileLoad.append(avgTimeFileLoad)
             if not sampleData.postFlag:
                 self.chanImages[:, newIdxs[:,0], newIdxs[:,1]] = sampleData.chanImages[:, newIdxs[:,0], newIdxs[:,1]]
                 self.sumImage[newIdxs[:,0], newIdxs[:,1]] = sampleData.sumImage[newIdxs[:,0], newIdxs[:,1]]
@@ -706,6 +730,7 @@ class Sample:
         
         #If not just updating the RD, then compute reconstructions (using square dimensionality), resizing to physical dimensions for DESI
         if not updateRD:
+            t0_computeRecon = time.time()
             if sampleData.sampleType == 'DESI':
                 self.squareSumReconImage = computeReconIDW(resize(self.sumImage, tuple(sampleData.squareDim), order=0), tempScanData)
                 self.squareChanReconImages = computeReconIDW(np.moveaxis(resize(np.moveaxis(self.chanImages, 0, -1), tuple(sampleData.squareDim), order=0), -1, 0), tempScanData)
@@ -722,12 +747,15 @@ class Sample:
             self.chanReconImages[:, self.measuredIdxs[:,0], self.measuredIdxs[:,1]] = self.chanImages[:, self.measuredIdxs[:,0], self.measuredIdxs[:,1]]
             self.sumReconImage[self.measuredIdxs[:,0], self.measuredIdxs[:,1]] = self.sumImage[self.measuredIdxs[:,0], self.measuredIdxs[:,1]]
             
+            t1_computeRecon = time.time()
+            result.avgTimesComputeRecon.append(t1_computeRecon-t0_computeRecon)
+            
         #Compute feature information for for training/utilizing SLADS models
         if (sampleData.datagenFlag or ((erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net')) and not sampleData.bestCFlag and not sampleData.oracleFlag) and len(tempScanData.squareUnMeasuredIdxs) > 0: 
-            t0 = time.time()
+            t0_computePoly = time.time()
             self.polyFeatures = [computePolyFeatures(sampleData, tempScanData, squareChanReconImage) for squareChanReconImage in self.squareChanReconImages]
-            t1 = time.time()
-            polyComputeTime = t1-t0
+            t1_computePoly = time.time()
+            polyComputeTime = t1_computePoly-t0_computePoly
         else: polyComputeTime = 0
         
         #If every location has been scanned all E/RD values are zero
@@ -761,10 +789,10 @@ class Sample:
                 else: self.RDPPs = abs(sampleData.squareChanImages-self.squareChanReconImages)
         
             #Compute/Update the RD and use it in place of an ERD
-            t0 = time.time()
+            t0_computeRD = time.time()
             computeRD(self, sampleData, tempScanData, cValue, updateLocations)
-            t1 = time.time()
-            if not updateRD: result.computeRDTimes.append(t1-t0)
+            t1_computeRD = time.time()
+            if not updateRD: result.avgTimesComputeRD.append(t1_computeRD-t0_computeRD)
             self.squareRDValues = self.squareRDs[:, tempScanData.squareUnMeasuredIdxs[:,0], tempScanData.squareUnMeasuredIdxs[:,1]]
             if sampleData.sampleType == 'DESI': self.RD = resize(self.squareRD, tuple(sampleData.finalDim), order=0)*(1-self.mask)
             else: self.RD = self.squareRD*(1-self.mask)
@@ -772,10 +800,10 @@ class Sample:
         
         #If there are unmeasured locations left and the ground-truth data isn't known, compute the ERD
         else: 
-            t0 = time.time()
+            t0_computeERD = time.time()
             computeERD(self, sampleData, tempScanData, model)
-            t1 = time.time()
-            result.computeERDTimes.append((t1-t0)+polyComputeTime)
+            t1_computeERD = time.time()
+            result.avgTimesComputeERD.append((t1_computeERD-t0_computeERD)+polyComputeTime)
             
         #Process ERD for next measurement(s) selection, resizing for DESI
         if sampleData.sampleType == 'DESI':
@@ -823,13 +851,18 @@ class Result:
         self.sampleData = sampleData
         self.dir_Results = dir_Results
         self.cValue = cValue
-        
         self.samples = []
         self.cSelectionList = []
         self.percsMeasured = []
-        self.computeRDTimes = []
-        self.computeERDTimes = []
+        self.avgTimesComputeRD = []
+        self.avgTimesComputeERD = []
+        self.avgTimesComputeRecon = []
+        self.avgTimesFileLoad = []
         self.lastMask = None
+        self.avgTimeComputeRD = 0
+        self.avgTimeComputeERD = 0
+        self.avgTimeComputeRecon = 0
+        self.avgTimeFileLoad = 0
         
         #If there is to be a results directory, then ensure it is setup
         if self.dir_Results != None:
@@ -997,6 +1030,18 @@ class Result:
             
     #Generate visualiations/metrics as needed at the end of scanning
     def complete(self):
+        
+        #If the data was loaded during initialization of the sample data, pull the stored avg file read time, otherwise compute value
+        if self.sampleData.postFlag or self.sampleData.simulationFlag: self.avgTimeFileLoad = self.sampleData.avgTimeFileLoad
+        elif len(avgTimesFileLoad) > 0: self.avgTimeFileLoad = np.mean(self.avgTimesFileLoad)
+        
+        #If applicable, compute average computation times
+        if len(self.avgTimesComputeRecon) > 0: self.avgTimeComputeRecon = np.mean(self.avgTimesComputeRecon)
+        if len(self.avgTimesComputeERD) > 0: self.avgTimeComputeERD = np.mean(self.avgTimesComputeERD)
+        if len(self.avgTimesComputeRD) > 0: self.avgTimeComputeRD = np.mean(self.avgTimesComputeRD)
+        
+        #If performing a benchmark where processing is not needed, return before processing
+        if benchmarkNoProcessing: return
         
         #Make sure samples is writable
         self.samples = copy.deepcopy(self.samples)
