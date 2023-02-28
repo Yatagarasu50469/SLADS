@@ -809,11 +809,8 @@ class Sample:
             t1_computeERD = time.time()
             result.avgTimesComputeERD.append((t1_computeERD-t0_computeERD)+polyComputeTime)
         
-        #Duplicate the per-channel E/RDs for processing
-        self.processedERDs = copy.deepcopy(self.ERDs)
-        
-        #Mask the E/RDs to just unmeasured locations
-        self.processedERDs *= (1-self.mask)
+        #Duplicate the per-channel E/RDs for processing, masking to just the unmeasured locations
+        self.processedERDs = copy.deepcopy(self.ERDs)*(1-self.mask)
         
         #Mask the E/RDs to the FOV foreground mask if applicable
         if sampleData.useMaskFOV: self.processedERDs *= sampleData.maskFOV
@@ -830,14 +827,17 @@ class Sample:
         self.processedERDs[self.processedERDs<0] = 0
         self.processedERDs = np.nan_to_num(self.processedERDs, nan=0, posinf=0, neginf=0)
         
-        #Rescale for potential Otsu thresholding
-        minValues = np.min(self.processedERDs, axis=(1,2))
-        diffValues = np.max(self.processedERDs, axis=(1,2))-minValues
-        tempA = (np.moveaxis(self.processedERDs, 0, -1)-minValues)
-        self.processedERDs = np.moveaxis(np.divide(tempA, diffValues, out=np.zeros_like(tempA), where=diffValues!=0), -1, 0)
+        #Rescale each channel to between 0 and 1
+        #minValues = np.min(self.processedERDs, axis=(1,2))
+        #diffValues = np.max(self.processedERDs, axis=(1,2))-minValues
+        #tempA = (np.moveaxis(self.processedERDs, 0, -1)-minValues)
+        #self.processedERDs = np.moveaxis(np.divide(tempA, diffValues, out=np.zeros_like(tempA), where=diffValues!=0), -1, 0)
         
         #Average across all channels
         self.processedERD = np.mean(self.processedERDs, axis=0)
+        
+        #Rescale processed final ERD for potential Otsu selection
+        if np.max(self.processedERD) != 0: self.processedERD = ((self.processedERD-np.min(self.processedERD))/(np.max(self.processedERD)-np.min(self.processedERD)))
         
 #Sample scanning progress and final results processing
 class Result:
@@ -1307,7 +1307,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
             
             if sampleData.impFlag or sampleData.postFlag: ax = plt.subplot2grid((1,5), (0,1))
             elif sampleData.simulationFlag: ax = plt.subplot2grid((2,4), (1,3))
-            im = ax.imshow(sample.processedERDs[chanNum], cmap='viridis', aspect='auto', vmin=0, vmax=1, interpolation='none')
+            im = ax.imshow(sample.processedERDs[chanNum], cmap='viridis', aspect='auto', vmin=0, interpolation='none')
             ax.set_title('Processed ERD')
             cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
         
@@ -1324,7 +1324,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
             borderlessPlot(sample.ERDs[chanNum], saveLocation, aspect='auto', cmap='viridis', vmin=0)
             
             saveLocation = dir_chanProgressions[chanNum] + 'erd_processed_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-            borderlessPlot(sample.processedERDs[chanNum], saveLocation, aspect='auto', cmap='viridis', vmin=0, vmax=1)
+            borderlessPlot(sample.processedERDs[chanNum], saveLocation, aspect='auto', cmap='viridis', vmin=0)
         
         if knownRD:
             saveLocation = dir_chanProgressions[chanNum] + 'rd_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
@@ -1413,7 +1413,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
         
         if sampleData.impFlag or sampleData.postFlag: ax = plt.subplot2grid((1,5), (0,1))
         elif sampleData.simulationFlag: ax = plt.subplot2grid((2,4), (1,3))
-        im = ax.imshow(sample.processedERD, cmap='viridis', aspect='auto', vmin=0, vmax=1, interpolation='none')
+        im = ax.imshow(sample.processedERD, cmap='viridis', aspect='auto', vmin=0, interpolation='none')
         ax.set_title('Processed ERD')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
     
@@ -1430,7 +1430,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
         borderlessPlot(sample.ERD, saveLocation, aspect='auto', cmap='viridis', vmin=0)
         
         saveLocation = dir_progression + 'ERD_processed_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        borderlessPlot(sample.processedERD, saveLocation, aspect='auto', cmap='viridis', vmin=0, vmax=1)
+        borderlessPlot(sample.processedERD, saveLocation, aspect='auto', cmap='viridis', vmin=0)
     
     if knownRD:
         saveLocation = dir_progression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
