@@ -1466,6 +1466,11 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
 
 def runSampling(sampleData, cValue, model, percToScan, percToViz, lineVisitAll, dir_Results, tqdmHide, samplingProgress_Actor=None, percProgUpdate=None):
     
+    #If in parallel, ignore warnings
+    if parallelization: 
+        warnings.filterwarnings("ignore")
+        logging.root.setLevel(logging.ERROR)
+
     #Make sure random selection is consistent
     if consistentSeed: 
         np.random.seed(0)
