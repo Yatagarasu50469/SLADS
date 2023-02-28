@@ -292,7 +292,7 @@ The actual location of the specified file may vary depending on potential past V
 Open a new command prompt (critically, not as an administrator!) and enter the following commands (If GPU acceleration is not to be used change tensorflow-gpu==2.8.4 below to tensorflow==2.8.4):
 
     $ python -m pip install --upgrade pip
-    $ pip3 install datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve]==2.1.0 scipy sobol sobol-seq natsort multiprocess scikit-image scikit-learn tensorflow-gpu==2.8.4 tensorflow-addons==0.18.0 tqdm opencv-python pydot graphviz aiorwlock pyimzml colorama pywin32
+    $ pip3 install datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image scikit-learn tensorflow-gpu==2.8.4 tensorflow-addons==0.18.0 tqdm opencv-python pydot graphviz aiorwlock pyimzml colorama pywin32
     $ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
 	$ pip3 install git+https://github.com/Yatagarasu50469/alphatims.git@master
 

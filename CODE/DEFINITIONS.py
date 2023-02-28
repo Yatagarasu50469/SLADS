@@ -1556,14 +1556,23 @@ def computeRD(sample, sampleData, tempScanData, cValue, updateLocations):
         if len(indices) == 0: return
         squareUnMeasuredLocations = tempScanData.squareUnMeasuredIdxs[indices]
         
-        #Set RD Values at affected unmearued locations to 0
+        #Set RD Values at affected unmeasured locations to 0
         sample.squareRDs[:, squareUnMeasuredLocations[:,0], squareUnMeasuredLocations[:,1]] = 0
     
-        #Set RD values at measured locations to zero
-        sample.squareRDs = sample.squareRDs*(1-sample.squareMask)
-    
-        #Average the results together to form a single RD, by which to make selections
+        #Average the results together to form a single RD
         sample.squareRD = np.mean(sample.squareRDs, axis=0)
+        
+        #Resize as needed according to sample type, ensuring RD values at measured locations are zero
+        if sampleData.sampleType == 'DESI': 
+            sample.RD = resize(sample.squareRD, tuple(sampleData.finalDim), order=0)*(1-sample.mask)
+            sample.RDs = np.moveaxis(resize(np.moveaxis(sample.squareRDs, 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)*(1-sample.mask)
+        else: 
+            sample.RD = sample.squareRD
+            sample.RDs = sample.squareRDs
+        
+        #Ensure RD values at square measured locations to zero
+        sample.squareRD = sample.squareRD*(1-sample.squareMask)
+        sample.squareRDs = sample.squareRDs*(1-sample.squareMask)
         
         #Exit the method
         return

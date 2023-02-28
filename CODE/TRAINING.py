@@ -434,7 +434,7 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
          
         #Set dynamic resource tuning option
         AUTOTUNE = tf.data.AUTOTUNE
-         
+        
         #Setup training dataset for model
         trainData = trainData.repeat()
         trainData = trainData.shuffle(trainCount, seed=0, reshuffle_each_iteration=False)
