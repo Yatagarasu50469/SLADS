@@ -799,24 +799,15 @@ class Sample:
             t1_computeRD = time.time()
             if not updateRD: result.avgTimesComputeRD.append(t1_computeRD-t0_computeRD)
             self.squareRDValues = self.squareRDs[:, tempScanData.squareUnMeasuredIdxs[:,0], tempScanData.squareUnMeasuredIdxs[:,1]]
-            if sampleData.sampleType == 'DESI': self.RD = resize(self.squareRD, tuple(sampleData.finalDim), order=0)*(1-self.mask)
-            else: self.RD = self.squareRD*(1-self.mask)
-            self.squareERD = self.RD
+            self.squareERD, self.squareERDs = self.squareRD, self.squareRDs
+            self.ERD, self.ERDs = self.RD, self.RDs
         
-        #If there are unmeasured locations left and the ground-truth data isn't known, compute the ERD
+        #If there are unmeasured locations left and the ground-truth data isn't known, compute and process the ERD
         else: 
             t0_computeERD = time.time()
             computeERD(self, sampleData, tempScanData, model)
             t1_computeERD = time.time()
             result.avgTimesComputeERD.append((t1_computeERD-t0_computeERD)+polyComputeTime)
-            
-        #Process ERD for next measurement(s) selection, resizing for DESI
-        if sampleData.sampleType == 'DESI':
-            self.ERD = resize(self.squareERD, tuple(sampleData.finalDim), order=0)
-            self.ERDs = np.moveaxis(resize(np.moveaxis(self.squareERDs , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)
-        else:
-            self.ERD = self.squareERD
-            self.ERDs = self.squareERDs
         
         #Duplicate the per-channel E/RDs for processing
         self.processedERDs = copy.deepcopy(self.ERDs)
@@ -847,7 +838,7 @@ class Sample:
         
         #Average across all channels
         self.processedERD = np.mean(self.processedERDs, axis=0)
-
+        
 #Sample scanning progress and final results processing
 class Result:
     def __init__(self, sampleData, dir_Results, cValue):
@@ -1617,11 +1608,20 @@ def computeRD(sample, sampleData, tempScanData, cValue, updateLocations):
     #Compute RD Values
     sample.squareRDs[:, squareUnMeasuredLocations[:,0], squareUnMeasuredLocations[:,1]] = np.asarray([np.sum(sampleData.gaussianWindows[sigmaValues[index]]*paddedRDPPs[:, offsetWinStartPos[index][0]:offsetWinStopPos[index][0]+1, offsetWinStartPos[index][1]:offsetWinStopPos[index][1]+1], axis=(1,2)) for index in range(0, len(squareUnMeasuredLocations))]).T
     
-    #Set RD values at measured locations to zero
-    sample.squareRDs = sample.squareRDs*(1-sample.squareMask)
-    
-    #Average the results together to form a single RD, by which to make selections
+    #Average the results together to form a single RD
     sample.squareRD = np.mean(sample.squareRDs, axis=0)
+    
+    #Resize as needed according to sample type, ensuring RD values at measured locations are zero
+    if sampleData.sampleType == 'DESI': 
+        sample.RD = resize(sample.squareRD, tuple(sampleData.finalDim), order=0)*(1-sample.mask)
+        sample.RDs = np.moveaxis(resize(np.moveaxis(sample.squareRDs, 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)*(1-sample.mask)
+    else: 
+        sample.RD = sample.squareRD
+        sample.RDs = sample.squareRDs
+    
+    #Ensure RD values at square measured locations to zero
+    sample.squareRD = sample.squareRD*(1-sample.squareMask)
+    sample.squareRDs = sample.squareRDs*(1-sample.squareMask)
 
 #Extract features of the reconstruction to use as inputs to SLADS(-Net) models
 def computePolyFeatures(sampleData, tempScanData, reconImage):
@@ -1745,6 +1745,14 @@ def computeERD(sample, sampleData, tempScanData, model):
     sample.squareERDs[sample.squareERDs<0] = 0
     sample.squareERDs = np.nan_to_num(sample.squareERDs, nan=0, posinf=0, neginf=0)
     sample.squareERD = np.mean(sample.squareERDs, axis=0)
+    
+    #Resize as needed according to sample type
+    if sampleData.sampleType == 'DESI':
+        sample.ERD = resize(sample.squareERD, tuple(sampleData.finalDim), order=0)
+        sample.ERDs = np.moveaxis(resize(np.moveaxis(sample.squareERDs , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)
+    else:
+        sample.ERD = sample.squareERD
+        sample.ERDs = sample.squareERDs
 
 #Determine which unmeasured points of a sample should be scanned given the current E/RD
 def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cValue, percToScan):
