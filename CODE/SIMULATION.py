@@ -61,7 +61,7 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
     #Perform completion/visualization routines
     chanAvgPSNR_Results, allAvgPSNR_Results, sumImagePSNR_Results, ERDPSNR_Results = [], [], [], []
     chanAvgSSIM_Results, allAvgSSIM_Results, sumImageSSIM_Results, ERDSSIM_Results = [], [], [], []
-    quantityMeasured_Results, timeResults, allAvgTimesComputeERD, allAvgTimesComputeRecon, allAvgTimesFileLoad = [], [], [], [], []
+    quantityMeasured_Results, timeResults, allAvgTimesComputeERD, allAvgTimesComputeRecon, allAvgTimesFileLoad, lastQuantityMeasured = [], [], [], [], [], []
     
     #Set the quantity measured metric for labeling the x axes
     xLabel = '% Measured'
@@ -81,7 +81,7 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         #If pointwise, then consider the percentage measured at each step; if linewise then consider the number of lines scanned
         #Since number of points on each line is different, this approach is not as descriptive as hoped and was therefore disabled.
         quantityMeasured_Results.append([sample.percMeasured for sample in result.samples])
-        lastQuantityMeasured = [quantityMeasured_Results[i][-1] for i in range(0, numJobs)]
+        lastQuantityMeasured.append(result.samples[-1].percMeasured)
         #if scanMethod == 'pointwise': quantityMeasured_Results.append([sample.percMeasured for sample in result.samples])
         #elif scanMethod == 'linewise': quantityMeasured_Results.append([(np.sum(np.sum(sample.mask, axis=1)>0)/sample.mask.shape[0])*100 for sample in result.samples])
     
