@@ -1183,7 +1183,9 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
     if parallelization: 
         warnings.filterwarnings("ignore")
         logging.root.setLevel(logging.ERROR)
+        import matplotlib
         matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
 
     #Turn percent measured into a string
     percMeasured = "{:.2f}".format(sample.percMeasured)

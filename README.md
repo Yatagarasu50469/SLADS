@@ -237,24 +237,24 @@ This code has been verified to function on Windows 10/11, CentOS 7/8 (through Do
     datetime           5.0
     glob2              0.7
     graphviz           0.20.1
-    IPython            8.8.0
+    IPython            8.11.0
     joblib             1.2.0
-    matplotlib         3.6.3
+    matplotlib         3.7.0
     multiprocess       0.70.14
-    natsort            8.2.0
+    natsort            8.3.0
     numba              0.56.4
     numpy              1.23.5
-    opencv-python      4.7.0.68
-    pandas             1.5.2
+    opencv-python      4.7.0.72
+    pandas             1.5.3
     pathlib            1.0.1
     pillow             9.4.0
     psutil             5.9.4
     pydot              1.4.2
     pyimzml            1.5.3
-    ray[serve]         2.1.0 
-    scikit-image       0.19.3
-    scikit-learn       1.2.0
-    scipy              1.10.0
+    ray                2.3.0 
+    scikit-image       0.20.0
+    scikit-learn       1.2.1
+    scipy              1.9.1
     sobol              0.9
     sobol-seq          0.2.0
     tensorflow-addons  0.18.0
