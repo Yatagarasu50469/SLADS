@@ -251,7 +251,7 @@ This code has been verified to function on Windows 10/11, CentOS 7/8 (through Do
     psutil             5.9.4
     pydot              1.4.2
     pyimzml            1.5.3
-    ray                2.3.0 
+    ray                2.1.0 
     scikit-image       0.20.0
     scikit-learn       1.2.1
     scipy              1.9.1
@@ -292,7 +292,7 @@ The actual location of the specified file may vary depending on potential past V
 Open a new command prompt (critically, not as an administrator!) and enter the following commands (If GPU acceleration is not to be used change tensorflow-gpu==2.8.4 below to tensorflow==2.8.4):
 
     $ python -m pip install --upgrade pip
-    $ pip3 install datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image scikit-learn tensorflow-gpu==2.8.4 tensorflow-addons==0.18.0 tqdm opencv-python pydot graphviz aiorwlock pyimzml colorama pywin32
+    $ pip3 install datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve]==2.1.0 scipy sobol sobol-seq natsort multiprocess scikit-image scikit-learn tensorflow-gpu==2.8.4 tensorflow-addons==0.18.0 tqdm opencv-python pydot graphviz aiorwlock pyimzml colorama pywin32
     $ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
 	$ pip3 install git+https://github.com/Yatagarasu50469/alphatims.git@master
 
@@ -492,7 +492,7 @@ While it does not currently function for some MSI formats, (verified operational
     $ python -m pip install --upgrade pip
     $ sudo apt-get update
     $ sudo apt-get install -y wget git python3-opencv
-    $ pip3 install datetime glob2 IPython joblib pandas pathlib2 psutil matplotlib numba pillow ray[serve] scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow-gpu=2.8.4 tensorflow-addons==0.18.0 tqdm numpy opencv-python pydot graphviz aiorwlock pyimzml colorama
+    $ pip3 install datetime glob2 IPython joblib pandas pathlib2 psutil matplotlib numba pillow ray[serve]==2.1.0 scipy sobol sobol-seq natsort multiprocess scikit-image sklearn tensorflow-gpu=2.8.4 tensorflow-addons==0.18.0 tqdm numpy opencv-python pydot graphviz aiorwlock pyimzml colorama
     $ wget -q https://packages.microsoft.com/config/ubuntu/18.04/packages-microsoft-prod.deb
     $ sudo dpkg -i packages-microsoft-prod.deb
     $ rm packages-microsoft-prod.deb
@@ -593,6 +593,10 @@ The install branch for mulitiplierz was modified as of v0.9.5 and is not backwar
 If your NVIDIA GPU architecture is older than Pascal (i.e. Maxwell and earlier with compute capability below 6.1), then you will need to comment out the following line in EXTERNAL.py:
 
     os.environ["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
+	
+### **Why the limitation to Ray version 2.1.0**
+
+Ray versions above 2.1.0 will randomly crash due to port conflicts: https://github.com/ray-project/ray/issues/25793
 
 # PUBLICATIONS
 
