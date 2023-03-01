@@ -627,7 +627,7 @@ class SampleData:
         #Stop file load timer and return average across number of files scanned
         t1_readFile = time.time()
         if len(scanFileNames)>0: return (t1_readFile-t0_readFile)/len(scanFileNames)
-        else: return 0
+        else: return np.nan
 
 #Storage object for holding updatable variables needed over the course of scanning (here to prevent unneccessary memory usage)
 class TempScanData:
@@ -921,7 +921,7 @@ class Result:
             
             #If an implementation run, save the physicalLineNums.csv, measuredMask.csv, and progressMap.csv to the same folder as the scanned MSI files and the results folder; otherwise just save to results
             if self.dir_Results != None: 
-                if not self.sampleData.simulationFlag and not self.sampleData.postFlag:
+                if self.sampleData.impFlag: #not self.sampleData.simulationFlag and not self.sampleData.postFlag:
                     if self.sampleData.unorderedNames: np.savetxt(dir_ImpDataFinal+'physicalLineNums.csv', np.asarray(list(self.sampleData.physicalLineNums.items())), delimiter=',', fmt='%d')
                     np.savetxt(dir_ImpDataFinal+'measuredMask.csv', self.lastMask, delimiter=',', fmt='%d')
                     if len(self.lastProgMap.shape)>0: np.savetxt(dir_ImpDataFinal+'progressMap.csv', np.nan_to_num(self.lastProgMap, nan=-1), delimiter=',', fmt='%d')
@@ -1027,9 +1027,9 @@ class Result:
     #Generate visualiations/metrics as needed at the end of scanning
     def complete(self):
         
-        #If the data was loaded during initialization of the sample data, pull the stored avg file read time, otherwise compute value
+        #If the data was loaded during initialization of the sample data, pull the stored avg. file read time, otherwise compute value
         if self.sampleData.postFlag or self.sampleData.simulationFlag: self.avgTimeFileLoad = self.sampleData.avgTimeFileLoad
-        elif len(avgTimesFileLoad) > 0: self.avgTimeFileLoad = np.mean(self.avgTimesFileLoad)
+        elif len(self.avgTimesFileLoad) > 0: self.avgTimeFileLoad = np.nanmean(self.avgTimesFileLoad)
         
         #If applicable, compute average computation times
         if len(self.avgTimesComputeRecon) > 0: self.avgTimeComputeRecon = np.mean(self.avgTimesComputeRecon)

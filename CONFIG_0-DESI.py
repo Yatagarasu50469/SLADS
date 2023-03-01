@@ -266,6 +266,9 @@ overrideChannelsFile = None
 #If a folder other than the default './INPUT/' should be used, specify it here (default: None)
 overrideInputsFolder = None
 
+#If a folder other than the default './RESULTS/' should be used, specify it here (default: None)
+overrideResultsFolder = None
+
 #Should static window be used in RD generation
 staticWindow = False
 
