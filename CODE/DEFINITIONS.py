@@ -1301,7 +1301,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
             
             if sampleData.impFlag or sampleData.postFlag: ax = plt.subplot2grid((1,5), (0,1))
             elif sampleData.simulationFlag: ax = plt.subplot2grid((2,4), (1,3))
-            im = ax.imshow(sample.processedERDs[chanNum], cmap='viridis', aspect='auto', vmin=0, interpolation='none')
+            im = ax.imshow(np.nan_to_num(sample.processedERDs[chanNum], nan=0, posinf=0, neginf=0), cmap='viridis', aspect='auto', vmin=0, interpolation='none')
             ax.set_title('Processed ERD')
             cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
         
@@ -1318,7 +1318,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
             borderlessPlot(sample.ERDs[chanNum], saveLocation, aspect='auto', cmap='viridis', vmin=0)
             
             saveLocation = dir_chanProgressions[chanNum] + 'erd_processed_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-            borderlessPlot(sample.processedERDs[chanNum], saveLocation, aspect='auto', cmap='viridis', vmin=0)
+            borderlessPlot(np.nan_to_num(sample.processedERDs[chanNum], nan=0, posinf=0, neginf=0), saveLocation, aspect='auto', cmap='viridis', vmin=0)
         
         if knownRD:
             saveLocation = dir_chanProgressions[chanNum] + 'rd_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
@@ -1407,7 +1407,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
         
         if sampleData.impFlag or sampleData.postFlag: ax = plt.subplot2grid((1,5), (0,1))
         elif sampleData.simulationFlag: ax = plt.subplot2grid((2,4), (1,3))
-        im = ax.imshow(sample.processedERD, cmap='viridis', aspect='auto', vmin=0, interpolation='none')
+        im = ax.imshow(np.nan_to_num(sample.processedERD, nan=0, posinf=0, neginf=0), cmap='viridis', aspect='auto', vmin=0, interpolation='none')
         ax.set_title('Processed ERD')
         cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
     
@@ -1424,7 +1424,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
         borderlessPlot(sample.ERD, saveLocation, aspect='auto', cmap='viridis', vmin=0)
         
         saveLocation = dir_progression + 'ERD_processed_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        borderlessPlot(sample.processedERD, saveLocation, aspect='auto', cmap='viridis', vmin=0)
+        borderlessPlot(np.nan_to_num(sample.processedERD, nan=0, posinf=0, neginf=0), saveLocation, aspect='auto', cmap='viridis', vmin=0)
     
     if knownRD:
         saveLocation = dir_progression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'

@@ -6,6 +6,7 @@
 #runtime_env={"env_vars": {"PYTHONWARNINGS": "ignore"}} doesn't work
 def resetRay(numberCPUS):
     ray.shutdown()
+    if ray.is_initialized(): sys.exit('Error - Ray was still initialized after calling shutdown. Please try running the code again, if this message appears a second time, you may need to restart your machine.')
     ray.init(num_cpus=numberCPUS, configure_logging=True, logging_level=logging.ERROR, include_dashboard=False, log_to_driver=True)
 
 #Limit GPU(s) if indicated
