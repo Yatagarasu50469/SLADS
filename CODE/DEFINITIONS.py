@@ -116,7 +116,7 @@ class SampleData:
             lineIndex += 1
             
             #Read window tolerance (ppm)
-            self.ppm = float(sampleInfo[lineIndex].rstrip())*1e-6
+            self.ppm = truncate(float(sampleInfo[lineIndex].rstrip())*1e-6, 7)
             lineIndex += 1
 
             #Read in lower m/z bound
@@ -142,7 +142,7 @@ class SampleData:
             lineIndex += 1
             
             #Read window tolerance (ppm)
-            self.ppm = float(sampleInfo[lineIndex].rstrip())*1e-6
+            self.ppm = truncate(float(sampleInfo[lineIndex].rstrip())*1e-6, 7)
             lineIndex += 1
             
             #Read in lower m/z bound
@@ -264,11 +264,14 @@ class SampleData:
         #If not just post-processing, setup initial sets
         if not self.postFlag: self.generateInitialSets(self.scanMethod)
         
-        #If MSI data, determine minimum difference between m/z at the lower m/z boundary and extract releavant precision information
+        #If MSI data, determine the needed precision to prevent overlap when mapping m/z values to a common spectrum
+        #How many decimal places are used in the lowerbound mz range, as first limited by the ppm precision
+        #Arbitrary precision rounding is problematic, so go to the lower power of 10 instead
         if self.dataMSI:
-            mzMinDiff = (self.mzLowerBound*self.ppmPos)-(self.mzLowerBound*self.ppmNeg)
-            self.mzPrecision = truncate(mzMinDiff, -int(np.floor(np.log10(mzMinDiff))))
-            self.mzRound = -math.floor(np.log10(self.mzPrecision))
+            ppmRound = ('%f' % self.ppm).rstrip('0').rstrip('.')[::-1].find('.')
+            mzMinDiff = np.round((self.mzLowerBound*self.ppmPos)-(self.mzLowerBound*self.ppmNeg), ppmRound)
+            self.mzRound =str(mzMinDiff)[::-1].find('.')
+            self.mzPrecision = np.float32(10**-self.mzRound)
         
         #If reading in all MSI Data determine set of non-overlapping bins based on ppm
         if self.dataMSI and self.readAllMSI:
@@ -286,22 +289,15 @@ class SampleData:
                 mzNewValue = (self.mzFinal[-1]*self.ppmPos)/self.ppmNeg
                 if mzNewValue*self.ppmNeg <= self.mzUpperBound: self.mzFinal.append(mzNewValue)
                 else: break
-                
+            
             #Set final mz as a contiguous array 
             self.mzFinal = np.ascontiguousarray(self.mzFinal)
             
             #Compute lower/upper bin bounds for each of the final m/z ranges
             self.mzLowerValues, self.mzUpperValues = self.mzFinal*self.ppmNeg, self.mzFinal*self.ppmPos
             
-            #For each of the m/z values in the maximum precision distribution, find which final m/z bin it will map to
-            self.mzDistIndices = []
-            mzFinalIndex = 0
-            for mzIndex in range(0, len(self.mzInitialDist)):
-                while self.mzUpperValues[mzFinalIndex] < self.mzInitialDist[mzIndex]: mzFinalIndex+=1
-                self.mzDistIndices.append(mzFinalIndex)
-                
             #Find unique index mapping between maximum precision distribution and the non-overlapping ppm bins
-            self.mzIndices, self.mzOriginalIndices = np.unique(self.mzDistIndices, return_index=True)
+            _, self.mzOriginalIndices = np.unique([bisect_left(self.mzUpperValues, mzValue) for mzValue in self.mzInitialDist], return_index=True)
             
             #Now that all of the final dimensions have been determined, setup .hdf5 file locations, and either a shared memory actor or array, for storing results 
             self.allImagesPath = self.sampleFolder+os.path.sep+'allImages.hdf5'
@@ -324,7 +320,8 @@ class SampleData:
             if self.chanValues.shape == (): self.chanValues = np.array([self.chanValues])
             self.numChannels = len(self.chanValues)
             self.chanValues.sort()
-            self.mzRanges = np.round(np.column_stack((self.chanValues*self.ppmNeg, self.chanValues*self.ppmPos)), self.mzRound)
+            #self.mzRanges = np.round(np.column_stack((self.chanValues*self.ppmNeg, self.chanValues*self.ppmPos)), self.mzRound)
+            self.mzRanges = np.column_stack((self.chanValues*self.ppmNeg, self.chanValues*self.ppmPos))
             
             #For DESI MSI samples, create regular grids for interpolating all/targeted m/z data
             if self.sampleType == 'DESI': 
@@ -494,8 +491,9 @@ class SampleData:
                 for i, (x, y, z) in tqdm(enumerate(coordinates), total = len(coordinates), desc='Reading', leave=False, disable=self.impFlag, ascii=asciiFlag):
                     mzs, ints = data.getspectrum(i)
                     self.sumImage[y, x] = np.sum(ints)
-                    filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
-                    if self.readAllMSI: self.allImages[:, y, x] = np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices).astype(np.float32)
+                    if self.readAllMSI: 
+                        filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
+                        self.allImages[:, y, x] = np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices).astype(np.float32)
                     self.chanImages[:, y, x] = [np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]) for mzRange in self.mzRanges]
             else:
                 _ = ray.get(self.reader_MSI_Actor.setCoordinates.remote(coordinates))
@@ -747,10 +745,11 @@ class Sample:
                 self.sumReconImage = self.squareSumReconImage
                 self.chanReconImages = self.squareChanReconImages
                 
-            #Copy back the original measured values to the reconstructions (might only be needed for DESI)
-            self.measuredIdxs = np.transpose(np.where(self.mask==1))
-            self.chanReconImages[:, self.measuredIdxs[:,0], self.measuredIdxs[:,1]] = self.chanImages[:, self.measuredIdxs[:,0], self.measuredIdxs[:,1]]
-            self.sumReconImage[self.measuredIdxs[:,0], self.measuredIdxs[:,1]] = self.sumImage[self.measuredIdxs[:,0], self.measuredIdxs[:,1]]
+            #Copy back the original measured values to the reconstructions (only needed for DESI)
+            if sampleData.sampleType == 'DESI':
+                self.measuredIdxs = np.transpose(np.where(self.mask==1))
+                self.chanReconImages[:, self.measuredIdxs[:,0], self.measuredIdxs[:,1]] = self.chanImages[:, self.measuredIdxs[:,0], self.measuredIdxs[:,1]]
+                self.sumReconImage[self.measuredIdxs[:,0], self.measuredIdxs[:,1]] = self.sumImage[self.measuredIdxs[:,0], self.measuredIdxs[:,1]]
             
             t1_computeRecon = time.time()
             result.avgTimesComputeRecon.append(t1_computeRecon-t0_computeRecon)
@@ -970,9 +969,10 @@ class Result:
                 self.reconImages = np.array([computeReconIDW(self.reconImages[index], tempScanData) for index in range(0, len(self.reconImages))], dtype=np.float32)
                 if self.sampleData.sampleType == 'DESI': self.reconImages = np.moveaxis(resize(np.moveaxis(self.reconImages, 0, -1), tuple(self.sampleData.finalDim), order=0), -1, 0)
                 
-                #Copy back the original measured values to the reconstructions (might only be needed for DESI)
-                measuredIdxs = np.transpose(np.where(sample.mask==1))
-                self.reconImages[:, measuredIdxs[:,0], measuredIdxs[:,1]] = self.sampleData.allImages[:, measuredIdxs[:,0], measuredIdxs[:,1]]
+                #Copy back the original measured values to the reconstructions (only needed for DESI)
+                if self.sampleData.sampleType == 'DESI': 
+                    measuredIdxs = np.transpose(np.where(sample.mask==1))
+                    self.reconImages[:, measuredIdxs[:,0], measuredIdxs[:,1]] = self.sampleData.allImages[:, measuredIdxs[:,0], measuredIdxs[:,1]]
                 
                 if not lastReconOnly:
                     sample.allImagesPSNRList = [compare_psnr(self.sampleData.allImages[index], self.reconImages[index], data_range=self.sampleData.allImagesMax[index]) for index in range(0, len(self.sampleData.allImages))]
@@ -1141,7 +1141,7 @@ class Result:
                     #Initialize a global progress bar and start parallel sampling operations
                     pbar = tqdm(total=maxProgress, desc = 'Visualizing', leave=False, ascii=asciiFlag)                    
                     computePool = Pool(numberCPUS)
-                    results = computePool.starmap_async(visualizeStep, futures)
+                    results = computePool.starmap_async(visualizeStep_parhelper, futures)
                     computePool.close()
                     
                     #While some results have yet to be returned, regularly update the global progress bar, then obtain results and purge/reset ray
@@ -1175,17 +1175,9 @@ class Result:
                 for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
                 animation.release()
                 animation = None
-        
+
 #Visualize single sample progression step
 def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, parallelization=False, samplingProgress_Actor=None):
-
-    #If in parallel, reset matplotlib backend (to avoid main thread/loop issues) and ignore warnings
-    if parallelization: 
-        warnings.filterwarnings("ignore")
-        logging.root.setLevel(logging.ERROR)
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
 
     #Turn percent measured into a string
     percMeasured = "{:.2f}".format(sample.percMeasured)
@@ -1222,7 +1214,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
     #Setup measurement progression image variables if needed
     if len(sample.progMap.shape)>0:
         progMapValues = np.unique(sample.progMap[~np.isnan(sample.progMap)]).astype(int)
-        cmapProgMap = matplotlib.cm.get_cmap('autumn', len(progMapValues))
+        cmapProgMap = plt.get_cmap('autumn', len(progMapValues))
         cmapProgMap.set_bad(color='black')
         boundValuesProgMap = np.linspace(1, progMapValues.max()+1, len(progMapValues)+1, dtype=int)
         normProgMap = matplotlib.colors.BoundaryNorm(boundValuesProgMap, cmapProgMap.N)
@@ -1318,7 +1310,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
         if not(sampleData.impFlag or sampleData.postFlag): f.subplots_adjust(top = 0.85)
         saveLocation = dir_chanProgressions[chanNum] + 'progression_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) +'.png'
         plt.savefig(saveLocation)
-        plt.close(f)
+        plt.close()
 
         #Do borderless saves for each channel image here; skip mask/progMap as they will be produced in the progression output
         if knownERD:
@@ -1424,7 +1416,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
     f.subplots_adjust(top = 0.85)
     saveLocation = dir_progression + 'progression' + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '_avg.png'
     plt.savefig(saveLocation)
-    plt.close(f)
+    plt.close()
 
     #Borderless saves
     if knownERD:
@@ -1851,15 +1843,15 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
         
     return newIdxs
 
-#Re-index a set of m/z values to a common grid
+#Re-index a set of m/z values to a common grid, all data should be or converted to float32 for numba acceleration to work correctly
 @jit(nopython=True, nogil=True)
 def mzFastIndex(mz, values, mzLowerIndex, mzPrecision, mzRound, mzInitialCount):
     indices = np.empty(len(mz), dtype=np.float32)
-    np.round(np.floor(mz/mzPrecision)*mzPrecision, mzRound, indices)
     mzValues = np.zeros(mzInitialCount, dtype=np.float32)
+    np.round(np.floor(mz/mzPrecision)*mzPrecision, mzRound, indices)
     mzValues[(indices/mzPrecision).astype(np.int32)-mzLowerIndex] = values
     return mzValues
-    
+
 #Calculate k-nn and determine inverse distance weights
 def findNeighbors(tempScanData):
     tempScanData.neighborDistances, tempScanData.neighborIndices = NearestNeighbors(n_neighbors=numNeighbors).fit(tempScanData.squareMeasuredIdxs).kneighbors(tempScanData.squareUnMeasuredIdxs)
@@ -1980,13 +1972,13 @@ def computeDifference(array1, array2):
 def truncate(value, decimalPlaces=0): return np.trunc(value*10**decimalPlaces)/(10**decimalPlaces)
 
 def borderlessPlot(image, saveLocation, cmap='viridis', aspect='auto', vmin=None, vmax=None, norm=None):
-    fig=plt.figure()
-    ax=fig.add_subplot(1,1,1)
+    f=plt.figure()
+    ax=f.add_subplot(1,1,1)
     plt.axis('off')
     plt.imshow(image, cmap=cmap, aspect=aspect, vmin=vmin, vmax=vmax, interpolation='none')
-    extent = ax.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    extent = ax.get_window_extent().transformed(f.dpi_scale_trans.inverted())
     plt.savefig(saveLocation, bbox_inches=extent)
-    plt.close(fig)
+    plt.close()
 
 def basicPlot(xData, yData, saveLocation, xLabel='', yLabel=''):
     font = {'size' : 18}

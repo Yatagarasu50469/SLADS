@@ -63,9 +63,11 @@ class Recon_Actor:
         else: self.reconImages[tempScanData.squareUnMeasuredIdxs[:,0], tempScanData.squareUnMeasuredIdxs[:,1]] = np.sum(self.reconImages[tempScanData.squareMeasuredIdxs[:,0], tempScanData.squareMeasuredIdxs[:,1]][tempScanData.neighborIndices]*tempScanData.neighborWeights, axis=-1)
         if self.sampleType == 'DESI': self.reconImages = np.moveaxis(resize(np.moveaxis(self.reconImages, 0, -1), tuple(self.finalDim), order=0), -1, 0)
     
-        #Copy back the original measured values to the reconstructions (might only be needed for DESI)
-        measuredIdxs = np.transpose(np.where(mask==1))
-        self.reconImages[:, measuredIdxs[:,0], measuredIdxs[:,1]] = self.allImages[self.indexes, measuredIdxs[:,0], measuredIdxs[:,1]]
+        #Copy back the original measured values to the reconstructions (only needed for DESI)
+        #Only one indexing vector or array is currently allowed for fancy indexing in hdf5
+        if self.sampleType == 'DESI': 
+            measuredIdxs = np.transpose(np.where(mask==1))
+            for measuredIdx in measuredIdxs: self.reconImages[:, measuredIdx[0], measuredIdx[1]] = self.allImages[self.indexes, measuredIdx[0], measuredIdx[1]]
         
     #Return allImages already loaded; Warning: Performing any operations beyond just the return will induce significant copy overhead!
     def getAllImages(self):
@@ -329,4 +331,12 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
         
         #If there was new data read, transfer such to shared memory actor
         if len(newReadScanFiles) > 0: _ = ray.get(allImagesActor.setValues.remote(indexData, mzDataTotal, chanDataTotal, sumDataTotal, origTimesTotal, np.array(lineNumTotal), newReadScanFiles, allDataInterpFailTotal))
-        
+
+#If parallel calls of visualize step, need to reset the matplotlib backend
+#Trying to use conditional removes existing matplotlib packages from local context breaking serial operation
+def visualizeStep_parhelper(sample, sampleData, dir_progression, dir_chanProgressions, parallelization=False, samplingProgress_Actor=None):
+    warnings.filterwarnings("ignore")
+    logging.root.setLevel(logging.ERROR)
+    matplotlib.use('agg')
+    import matplotlib.pyplot as plt
+    visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, parallelization, samplingProgress_Actor)

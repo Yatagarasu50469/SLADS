@@ -7,7 +7,7 @@
 #╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝  █  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝  █   ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝ ╚══════╝
 #                                          █                                            █
 #
-#MODIFIED:	        1 March 2023
+#MODIFIED:	        8 March 2023
 #
 #VERSION:	        0.9.6
 #
@@ -62,7 +62,7 @@
 #                   0.9.3   Whole spectra metrics, improved data aug. and file loading, fix RAM OOM, .imzML out, I/O norm. options
 #                   0.9.4   Fix group-based and c value selection, distributed multi-GPU simulations, updated Otsu segmented linewise
 #                   0.9.5   MALDI optical, input config, .tdf/.tsf compatibility, disable whole spectra metrics option, .imzML output
-#                   0.9.6   Adjust ERD processing and visualizations, add progression map, compute times, and alphatims option
+#                   0.9.6   Adjust ERD processing/visuals, add progression map, compute times, and alphatims option, fix whole spectra read
 #                   x.x.x+  Implementation line revisiting
 #                   x.x.x+  Add norm. options
 #                   x.x.x+  GLANDS

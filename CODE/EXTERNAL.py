@@ -46,7 +46,7 @@ import sklearn
 import time
 import warnings
 
-from bisect import bisect_left, bisect_right
+from bisect import bisect_left, bisect_right, bisect
 from collections import defaultdict
 from IPython import display
 from IPython.core.debugger import set_trace as Tracer
@@ -85,7 +85,7 @@ from typeguard import typechecked
 from sobol import *
 from tqdm.auto import tqdm
 
-matplotlib.use('Agg') #Non-interactive plotting mode
+matplotlib.use('agg') #Non-interactive plotting mode
 sys.coinit_flags = 0 #Change method of instantiation for COM objects
 
 
