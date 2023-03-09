@@ -58,6 +58,10 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         resetRay(numberCPUS)
     else: results = [runSampling(sampleDataset[sampleNum], optimalC, models[0], percToScan, percToViz, lineVisitAll, dir_Results, False) for sampleNum in tqdm(range(0, numJobs), desc='Scanning', position=0, leave=True, ascii=asciiFlag)]
 
+    #Remove loaded models from memory, returning any allocated resources to Ray
+    models.clear()
+    del models
+
     #Perform completion/visualization routines
     chanAvgPSNR_Results, allAvgPSNR_Results, sumImagePSNR_Results, ERDPSNR_Results = [], [], [], []
     chanAvgSSIM_Results, allAvgSSIM_Results, sumImageSSIM_Results, ERDSSIM_Results = [], [], [], []

@@ -37,7 +37,10 @@ def performImplementation(optimalC, modelName):
     print('Writing DONE')
     with open(dir_ImpDataFinal + 'DONE', 'w') as filehandle: filehandle.writelines('')
     if os.path.isfile(dir_ImpDataFinal + 'LOCK'): os.remove(dir_ImpDataFinal + 'LOCK')
-
+    
+    #Remove loaded model from memory, returning any allocated resources to Ray
+    del model
+    
     #Call for completion/printout
     result.complete()
 

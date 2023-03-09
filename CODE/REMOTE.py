@@ -2,8 +2,8 @@
 #REMOTE METHODS FOR RAY
 #==================================================================
 
-#Define actor for utilizing trained models, enabling worker reuse
-@ray.remote(num_gpus=modelGPUs)
+#Define actor for utilizing trained models, enabling worker reuse; do not allocate a dedicated CPU thread
+@ray.remote(num_cpus=0, num_gpus=modelGPUs)
 class Model_Actor:
     def __init__(self, erdModel, modelPath, gpuNum=-1):
         warnings.filterwarnings("ignore")
