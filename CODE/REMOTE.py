@@ -21,7 +21,7 @@ class Model_Actor:
         elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': return self.model(data, training=False)[:,:,:,0].numpy()
 
 #Ray actor for holding global progress in parallel sampling operations
-@ray.remote
+@ray.remote(num_cpus=0)
 class SamplingProgress_Actor:
     def __init__(self): 
         warnings.filterwarnings("ignore")
@@ -99,8 +99,8 @@ class Recon_Actor:
             self.squareAllImagesFile.close()
             del self.squareAllImagesFile
 
-#Ray actor for holding MSI data in a shared memory location for parallel operations
-@ray.remote
+#Ray actor for holding MSI data in a shared memory location for parallel operations; do not allocate a dedicated CPU thread
+@ray.remote(num_cpus=0)
 class Reader_MSI_Actor:
     
     #Create buffers for holding all MSI images, the specified channel images, and the sum of all values
@@ -132,7 +132,7 @@ class Reader_MSI_Actor:
         elif self.sampleType == 'DESI':
             self.sumImage[lineNumTotal, :] = sumDataTotal
             self.chanImages[lineNumTotal, :, :] = chanDataTotal
-            for indexNum in range(0, len(indexData)): self.readScanFiles.append(newReadScanFiles[indexNum])
+            self.readScanFiles += newReadScanFiles
             for indexNum in range(0, len(mzDataTotal)):
                 if allDataInterpFailTotal[indexNum]: 
                     self.mzDataComplete.append(mzDataTotal[indexNum])
@@ -252,7 +252,7 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
             
                 #If ignoring missing lines, then determine the offset for correct indexing
                 if ignoreMissingLines and len(missingLines) > 0: lineNum -= int(np.sum(lineNum > missingLines))
-                    
+                
                 #Add file name to those that will have been already scanned (when this process finishes)
                 newReadScanFiles.append(scanFileName)
             
@@ -324,7 +324,7 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                                 allDataInterpFail = True
                     allDataInterpFailTotal.append(allDataInterpFail)
                     mzDataTotal.append(mzDataLine)
-        
+                
                 #Close the file
                 if not useAlphaTims: data.close()
                 else: del data

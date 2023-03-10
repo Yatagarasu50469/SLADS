@@ -203,7 +203,7 @@ percToVizC = None
 #NEURAL NETWORK MODEL PARAMETERS
 ##################################################################
 
-#Specify what input data constitutes a model (DLADS or GLANDS) input (Options: 'opticalImage', 'mask', 'reconData', 'measureData')
+#Specify what input data constitutes a model (DLADS or GLANDS) input (Options: 'opticalData', 'mask', 'reconData', 'measureData')
 #DLADS default: ['mask', 'reconData', 'measureData']
 #GLANDS default: ['mask', 'measureData']
 inputChannels = ['mask', 'reconData', 'measureData']
