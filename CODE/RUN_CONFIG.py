@@ -2,8 +2,8 @@
 #MAIN PROGRAM
 #==================================================================
 
-#Import all involved external libraries
-exec(open("./CODE/EXTERNAL.py", encoding='utf-8').read())
+#Import sys here rather than in EXTERNAL.py, as needed to parse input arguments
+import sys
 
 #Obtain the configuration file and version number from input variables
 configFileName = sys.argv[1]
@@ -12,6 +12,9 @@ except: versionNum = 'N/A'
 
 #Load in chosen configuration options
 exec(open(configFileName, encoding='utf-8').read())
+
+#Import and setup external libraries
+exec(open("./CODE/EXTERNAL.py", encoding='utf-8').read())
 
 #Setup aesthetics
 exec(open("./CODE/AESTHETICS.py", encoding='utf-8').read())

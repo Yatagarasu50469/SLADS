@@ -4,7 +4,7 @@
 
 #Indicate and setup the destination folder for results of this configuration
 destResultsFolder = './RESULTS_'+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0]
-if preventResultsOverwrite: sys.exit('Error! - The destination results folder already exists')
+if preventResultsOverwrite: sys.exit('\nError - The destination results folder already exists')
 elif os.path.exists(destResultsFolder): shutil.rmtree(destResultsFolder)
 
 #Set a base model name for the specified configuration; must specify/append c value during run
@@ -43,18 +43,18 @@ dir_ImpResults = dir_Results + 'IMP'+ os.path.sep
 dir_PostResults = dir_Results + 'POST'+ os.path.sep
 
 #Check that the result directory exists for cases where existing training data/model are to be used
-if (not os.path.exists(dir_Results)) and (not trainingModel): sys.exit('Error - dir_Results: ' + dir_Results + ' does not exist')
+if (not os.path.exists(dir_Results)) and (not trainingModel): sys.exit('\nError - dir_Results: ' + dir_Results + ' does not exist')
 elif not os.path.exists(dir_Results): os.makedirs(dir_Results)
 
 #Input data directories
-if not os.path.exists(dir_InputData): sys.exit('Error - dir_InputData does not exist')
-if not os.path.exists(dir_TrainingData) and (trainingDataGen or trainingModel): sys.exit('Error - dir_TrainingData: ' + dir_TrainingData + ' does not exist')
-if not os.path.exists(dir_TestingData) and testingModel: sys.exit('Error - dir_TestingData: ' + dir_TestingData + ' does not exist')
-if not os.path.exists(dir_ImagesData) and (trainingDataGen or trainingModel):  sys.exit('Error - dir_ImagesData: ' + dir_ImagesData + ' does not exist')
-if not os.path.exists(dir_ImagesTrainData) and (trainingDataGen or trainingModel):  sys.exit('Error - dir_ImagesTrainData: ' + dir_ImagesTrainData + ' does not exist')
-if not os.path.exists(dir_ImagesTestData) and (trainingDataGen or trainingModel):  sys.exit('Error - dir_ImagesTestData: ' + dir_ImagesTestData + ' does not exist')
-if not os.path.exists(dir_ImpData) and impModel: sys.exit('Error - dir_ImpData: ' + dir_ImpData + ' does not exist')
-if not os.path.exists(dir_PostData) and postModel: sys.exit('Error - dir_PostData: ' + dir_PostData + ' does not exist')
+if not os.path.exists(dir_InputData): sys.exit('\nError - dir_InputData does not exist')
+if not os.path.exists(dir_TrainingData) and (trainingDataGen or trainingModel): sys.exit('\nError - dir_TrainingData: ' + dir_TrainingData + ' does not exist')
+if not os.path.exists(dir_TestingData) and testingModel: sys.exit('\nError - dir_TestingData: ' + dir_TestingData + ' does not exist')
+if not os.path.exists(dir_ImagesData) and (trainingDataGen or trainingModel):  sys.exit('\nError - dir_ImagesData: ' + dir_ImagesData + ' does not exist')
+if not os.path.exists(dir_ImagesTrainData) and (trainingDataGen or trainingModel):  sys.exit('\nError - dir_ImagesTrainData: ' + dir_ImagesTrainData + ' does not exist')
+if not os.path.exists(dir_ImagesTestData) and (trainingDataGen or trainingModel):  sys.exit('\nError - dir_ImagesTestData: ' + dir_ImagesTestData + ' does not exist')
+if not os.path.exists(dir_ImpData) and impModel: sys.exit('\nError - dir_ImpData: ' + dir_ImpData + ' does not exist')
+if not os.path.exists(dir_PostData) and postModel: sys.exit('\nError - dir_PostData: ' + dir_PostData + ' does not exist')
 
 #As needed, reset the training directories
 if (trainingDataGen or trainingModel) and not loadTrainValDatasets:

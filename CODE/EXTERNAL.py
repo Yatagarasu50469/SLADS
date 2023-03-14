@@ -38,7 +38,6 @@ import pyimzml
 import random
 import re
 import requests
-import sys
 import scipy
 import skimage
 import shutil
@@ -93,7 +92,7 @@ sys.coinit_flags = 0 #Change method of instantiation for COM objects
 #==================================================================
 
 #Make tensorflow only report errors (3), warnings (2), information (1), all (0) (disable for debug)
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+if not debugMode: os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 #Allocate memory for CUDA in an asynchronous manner; disable this line if GPU compute is < 6.1 (Maxwell and previous)
 os.environ["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
@@ -103,10 +102,10 @@ os.environ["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
 #os.environ['RAY_DISABLE_MEMORY_MONITOR'] = '1'
 
 #Stop Ray from crashing the program when errors occur (otherwise may crash despite being handled by try/catch!)
-os.environ["RAY_IGNORE_UNHANDLED_ERRORS"] = "1"
+if not debugMode: os.environ["RAY_IGNORE_UNHANDLED_ERRORS"] = "1"
 
 #Prevent Ray from printing spill logs
-os.environ["RAY_verbose_spill_logs"] = "0"
+if not debugMode: os.environ["RAY_verbose_spill_logs"] = "0"
 
 #Disable HDF5 lock, allowing parallel access
 #os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
@@ -137,9 +136,10 @@ from tensorflow.python.util.tf_export import keras_export
 from tensorflow.tools.docs import doc_controls
 
 #Further restrict warning/logging levels to only report errors (disable for debug)
-tf.get_logger().setLevel('ERROR')
-warnings.filterwarnings("ignore")
-logging.root.setLevel(logging.ERROR)
+if not debugMode: 
+    tf.get_logger().setLevel('ERROR')
+    warnings.filterwarnings("ignore")
+    logging.root.setLevel(logging.ERROR)
 
 #Turn off alphatims internal tqdm callback
 alphatims.utils.set_progress_callback(None)

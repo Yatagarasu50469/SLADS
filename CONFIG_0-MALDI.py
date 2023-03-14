@@ -302,6 +302,12 @@ asciiFlag = False
 #If performing a benchmark, should processing be skipped (default: False)
 benchmarkNoProcessing = False
 
+#Should the program save measured location information to disk after every iteration; intended for debugging (default: False)
+saveIterationFlag = False
+
+#Should otherwise hidden warnings and error logging be generated (default: False)
+debugMode = False
+
 ##################################################################
 
 

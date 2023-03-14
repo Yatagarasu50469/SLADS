@@ -6,8 +6,9 @@
 @ray.remote(num_cpus=0, num_gpus=modelGPUs)
 class Model_Actor:
     def __init__(self, erdModel, modelPath, gpuNum=-1):
-        warnings.filterwarnings("ignore")
-        logging.root.setLevel(logging.ERROR)
+        if not debugMode:
+            warnings.filterwarnings("ignore")
+            logging.root.setLevel(logging.ERROR)
         self.erdModel = erdModel
         if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': self.model = np.load(modelPath+'.npy', allow_pickle=True).item()
         elif self.erdModel == 'DLADS' or self.erdModel == 'GLANDS': 
@@ -24,8 +25,9 @@ class Model_Actor:
 @ray.remote(num_cpus=0)
 class SamplingProgress_Actor:
     def __init__(self): 
-        warnings.filterwarnings("ignore")
-        logging.root.setLevel(logging.ERROR)
+        if not debugMode:
+            warnings.filterwarnings("ignore")
+            logging.root.setLevel(logging.ERROR)
         self.current = 0.0
     def update(self, amount): self.current += amount
     def getCurrent(self): return self.current
@@ -36,8 +38,9 @@ class Recon_Actor:
     
     #Set internal parameters for handling image reconst ruction process
     def __init__(self, indexes, sampleType, squareDim, finalDim, allImagesMax):
-        warnings.filterwarnings("ignore")
-        logging.root.setLevel(logging.ERROR)
+        if not debugMode:
+            warnings.filterwarnings("ignore")
+            logging.root.setLevel(logging.ERROR)
         self.indexes = indexes
         self.sampleType = sampleType
         self.squareDim = squareDim
@@ -105,8 +108,9 @@ class Reader_MSI_Actor:
     
     #Create buffers for holding all MSI images, the specified channel images, and the sum of all values
     def __init__(self, sampleType, readAllMSI, mzNum, chanNum, yDim, xDim, allImagesPath, squareAllImagesPath):
-        warnings.filterwarnings("ignore")
-        logging.root.setLevel(logging.ERROR)
+        if not debugMode:
+            warnings.filterwarnings("ignore")
+            logging.root.setLevel(logging.ERROR)
         self.readAllMSI = readAllMSI
         self.sampleType = sampleType
         self.yDim = yDim
@@ -192,8 +196,9 @@ class Reader_MSI_Actor:
 #Read in the sample MSI data for a set of indexes and set those values in shared memory location; must use blocking call (ray.get) to prevent data corruption
 @ray.remote
 def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, indexData, mzOriginalIndices, mzRanges, sampleType, mzLowerBound, mzUpperBound, mzLowerIndex, mzPrecision, mzRound, mzInitialCount, mask, newTimes, finalDim, sampleWidth, scanRate, mzFinal=None, mzFinalGrid=None, chanValues=None, chanFinalGrid=None, impFlag=False, postFlag=False, impOffset=None, scanMethod=None, lineMethod=None, physicalLineNums=None, ignoreMissingLines=None, missingLines=None, unorderedNames=None):
-    warnings.filterwarnings("ignore")
-    logging.root.setLevel(logging.ERROR)
+    if not debugMode:
+        warnings.filterwarnings("ignore")
+        logging.root.setLevel(logging.ERROR)
     alphatims.utils.set_progress_callback(None)
     
     mzDataTotal, chanDataTotal, sumDataTotal = [], [], []
@@ -237,14 +242,19 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                 else: 
                     data = alphatims.bruker.TimsTOF(scanFileName, use_hdf_if_available=False)
                     data.format = 'Bruker'
-            except: errorFlag = True
+            except: 
+                errorFlag = True
+                if not debugMode: print('\nWarning - Failed to load any data from file: ' + scanFileName + ' This file will be ignored this iteration.')
             
             #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number minus 1
             if not errorFlag:
                 fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
                 if unorderedNames: 
-                    try: lineNum = physicalLineNums[fileNum+1]
-                    except: errorFlag = True #print('\nWarning - Attempt to find the physical line number for the file: ' + scanFileName + ' has failed; the file will therefore be ignored this iteration.')
+                    try: 
+                        lineNum = physicalLineNums[fileNum+1]
+                    except: 
+                        errorFlag = True
+                        if not debugMode: print('\nWarning - Failed to find the physical line number for the file: ' + scanFileName + ' This file will be ignored this iteration.')
                 else: lineNum = fileNum
             
             #If error still has not occurred 
@@ -273,7 +283,7 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                 
                 #If the data is being sparesly acquired in lines, then the listed times in the file need to be shifted
                 if (impFlag or postFlag) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(mask[lineNum]==1).min()/finalDim[1])*(((sampleWidth*1e3)/scanRate)/60)
-                elif (impFlag or postFlag) and impOffset: sys.exit('Error - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
+                elif (impFlag or postFlag) and impOffset: sys.exit('\nError - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
             
                 #Setup storage locations for each measured location
                 chanDataLine, mzDataLine = [[] for _ in range(0, len(mzRanges))], []
@@ -316,11 +326,11 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                             mzDataLine = scipy.interpolate.RegularGridInterpolator((origTimes, mzFinal), np.asarray(mzDataLine, dtype='float64'), bounds_error=False, fill_value=0)(mzFinalGrid).astype('float32').T
                             break
                         except: 
-                            if timeOutCounter==10: print('Warning - Interpolation of m/z line data in parallel failed, due to memory limit. This process will retry, but if this warning occurs repeatedly, better perfomance might be achieved by increasing the number of reserved threads, or disabling parallelization.')
+                            if timeOutCounter==10: print('\nWarning - Interpolation of m/z line data in parallel failed, due to memory limit. This process will retry, but if this warning occurs repeatedly, better perfomance might be achieved by increasing the number of reserved threads, or disabling parallelization.')
                             time.sleep(1)
                             timeOutCounter += 1
                             if timeOutCounter == 20: 
-                                print('Warning - Interpolation of m/z line data in parallel failed multiple times due to memory limit, initiating fallback for file import. If this warning occurs repeatedly, better perfomance might be achieved by increasing the number of reserved threads, or disabling parallelization.')
+                                print('\nWarning - Interpolation of m/z line data in parallel failed multiple times due to memory limit, initiating fallback for file import. If this warning occurs repeatedly, better perfomance might be achieved by increasing the number of reserved threads, or disabling parallelization.')
                                 allDataInterpFail = True
                     allDataInterpFailTotal.append(allDataInterpFail)
                     mzDataTotal.append(mzDataLine)
@@ -335,8 +345,9 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
 #If parallel calls of visualize step, need to reset the matplotlib backend
 #Trying to use conditional removes existing matplotlib packages from local context breaking serial operation
 def visualizeStep_parhelper(sample, sampleData, dir_progression, dir_chanProgressions, parallelization=False, samplingProgress_Actor=None):
-    warnings.filterwarnings("ignore")
-    logging.root.setLevel(logging.ERROR)
+    if not debugMode:
+        warnings.filterwarnings("ignore")
+        logging.root.setLevel(logging.ERROR)
     matplotlib.use('agg')
     import matplotlib.pyplot as plt
     visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, parallelization, samplingProgress_Actor)

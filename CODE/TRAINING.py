@@ -76,7 +76,7 @@ class EpochEnd(Callback):
 
             #If there are no validation tensors, then just save a plot of the training losses
             if self.noValFlag:
-                f = plt.figure(figsize=(20,10))
+                f = plt.figure(figsize=(25,5))
                 f.subplots_adjust(top = 0.80)
                 f.subplots_adjust(wspace=0.2, hspace=0.2)
                 
@@ -88,7 +88,7 @@ class EpochEnd(Callback):
                 ax.set_title('Training Loss: ' + str(round(self.train_lossList[-1],8)), fontsize=15, fontweight='bold')
                 
             else:
-                f = plt.figure(figsize=(40,25))
+                f = plt.figure(figsize=(25,15))
                 f.subplots_adjust(top = 0.88)
                 f.subplots_adjust(wspace=0.2, hspace=0.2)
                 
@@ -197,7 +197,7 @@ def optimizeC(sampleDataSet):
         for cNum in tqdm(range(0, len(cValues)), desc='Evaluation', leave=True, ascii=asciiFlag):
         
             #Double check that results were split correctly according to cValue
-            if np.sum(np.diff([results[cNum][index].cValue for index in range(0, len(results[cNum]))]))>0: sys.exit('Error! - Results for c values were not split correctly.')
+            if np.sum(np.diff([results[cNum][index].cValue for index in range(0, len(results[cNum]))]))>0: sys.exit('\nError - Results for c values were not split correctly.')
             
             #Compute and save area under the PSNR curve
             for result in tqdm(results[cNum], desc='Samples', leave=False, ascii=asciiFlag): result.complete()
@@ -362,7 +362,7 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
 def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, modelName):
 
     #Verify that there is some data allocated for training
-    if len(trainingDatabase) == 0: sys.exit('Error! - No training data available.')
+    if len(trainingDatabase) == 0: sys.exit('\nError - No training data available.')
 
     #If consistency in the random generator is desired for comparisons, then reset seed
     if consistentSeed: 

@@ -59,13 +59,11 @@ class SampleData:
         self.avgTimeFileLoad = None
         self.useAlphaTims = False
         
-        #If linewise and visiting all lines, then set the % per line as the original stop percentage and the latter to 100
-        if self.scanMethod == 'linewise' and lineVisitAll: 
+        #If linewise, set the % per line as the original stop percentage, if visiting all lines then set the latter value to 100
+        if self.scanMethod == 'linewise':
             self.linePerc = copy.deepcopy(stopPerc)
-            self.stopPerc = 100.0
-        else: 
-            self.linePerc = 0.0
-            self.stopPerc = stopPerc
+            if lineVisitAll: self.stopPerc = 100.0
+            else: self.stopPerc = stopPerc
         
         #Store location of MSI data and sample name
         if self.name == 'NoSampleName_0': self.name = os.path.basename(sampleFolder)
@@ -168,7 +166,7 @@ class SampleData:
             lineIndex += 1
             
         else: 
-            sys.exit('Error - Unknown sample type: ' + self.sampleType + ' specified in sampleInfo.txt for : ' + sampleFolder)
+            sys.exit('\nError - Unknown sample type: ' + self.sampleType + ' specified in sampleInfo.txt for : ' + sampleFolder)
 
         #MSI specific
         if self.sampleType == 'MALDI' or self.sampleType == 'DESI':
@@ -211,12 +209,12 @@ class SampleData:
                 elif 'raw' in extensions: self.lineExt = '.raw'
                 elif 'RAW' in extensions: self.lineExt = '.RAW'
                 elif 'imzML' in extensions: self.lineExt = '.imzML'
-                else: sys.exit('Error! - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
+                else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
             elif self.sampleType == 'IMAGE':
                 if 'png' in extensions: self.lineExt = '.png'
                 elif 'jpg' in extensions: self.lineExt = '.jpg'
                 elif 'tiff' in extensions: self.lineExt = '.tiff'
-                else: sys.exit('Error! - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
+                else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
             scanFileNames = natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'+self.lineExt), reverse=False)
             if self.sampleType == 'DESI' and self.ignoreMissingLines and not self.unorderedNames:
                 self.missingLines = np.asarray(list(set(np.arange(1, self.finalDim[0]).tolist()) - set([int(scanFileName.split('line-')[1].split('.')[0].lstrip('0')) for scanFileName in scanFileNames])))-1
@@ -251,7 +249,7 @@ class SampleData:
         #If post-processing load the measurement mask
         if self.postFlag:
             try: self.mask = np.loadtxt(self.sampleFolder+os.path.sep+'measuredMask.csv', np.float32, delimiter=',')
-            except: sys.exit('Error - Unable to load measurement mask for sample: ' + self.name)
+            except: sys.exit('\nError - Unable to load measurement mask for sample: ' + self.name)
             try: 
                 self.progMap = np.loadtxt(self.sampleFolder+os.path.sep+'progressMap.csv', np.float32, delimiter=',')
                 self.progMap[self.progMap==-1]=np.nan
@@ -351,7 +349,7 @@ class SampleData:
                 if os.path.isfile(self.sampleFolder+os.path.sep+'optical'+extension): 
                     opticalImageFound = True
                     break
-            if not opticalImageFound: sys.exit('Error - applyOptical was enabled, but no optical image was found for sample: ' + sample.name)
+            if not opticalImageFound: sys.exit('\nError - applyOptical was enabled, but no optical image was found for sample: ' + sample.name)
             
             #Load the optical image, rescaling range 0 to 1 and inversing non-zero values (remove background and positively weight structures)
             opticalImage = (cv2.imread(self.sampleFolder+os.path.sep+'optical'+extension, 0)/255)
@@ -456,12 +454,12 @@ class SampleData:
                 elif 'raw' in extensions: self.lineExt = '.raw'
                 elif 'RAW' in extensions: self.lineExt = '.RAW'
                 elif 'imzML' in extensions: self.lineExt = '.imzML'
-                else: sys.exit('Error! - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
+                else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
             elif self.sampleType == 'IMAGE':
                 if 'png' in extensions: self.lineExt = '.png'
                 elif 'jpg' in extensions: self.lineExt = '.jpg'
                 elif 'tiff' in extensions: self.lineExt = '.tiff'
-                else: sys.exit('Error! - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
+                else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
         
         #TODO: MALDI experimental operation is not yet implemented, where the program should just read new positions referencing the chosen new idxs
         
@@ -473,7 +471,7 @@ class SampleData:
             for chanNum in range(0, len(scanFileNames)):
                 self.chanValues.append(scanFileNames[chanNum].split('-chan-')[1].split('.')[0])
                 try: self.chanImages[chanNum] = cv2.imread(scanFileNames[chanNum], 0)
-                except: sys.exit('Error - Unable to read file' + scanFileNames[chanNum])
+                except: sys.exit('\nError - Unable to read file' + scanFileNames[chanNum])
             self.sumImage = np.sum(np.atleast_3d(self.chanImages), axis=0)
 
         #If MALDI, then there is only a single file with all of the spectral data
@@ -481,7 +479,7 @@ class SampleData:
         
             #Establish file pointer for the single imzML file and verify it is readable
             try: data = ImzMLParser(scanFileNames[0])
-            except: sys.exit('Error - Unable to read file' + scanFileNames[0])
+            except: sys.exit('\nError - Unable to read file' + scanFileNames[0])
             
             #Adjust stored coordinates to be zero-based
             coordinates = np.asarray(data.coordinates)-1
@@ -522,14 +520,19 @@ class SampleData:
                         else: 
                             data = alphatims.bruker.TimsTOF(scanFileName, use_hdf_if_available=False)
                             data.format = 'Bruker'
-                    except: errorFlag = True
+                    except: 
+                        errorFlag = True
+                        if not debugMode: print('\nWarning - Failed to load any data from file: ' + scanFileName + ' This file will be ignored this iteration.')
                     
                     #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number minus 1
                     if not errorFlag:
                         fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
                         if self.unorderedNames: 
-                            try: lineNum = self.physicalLineNums[fileNum+1]
-                            except: errorFlag = True #print('\nWarning - Attempt to find the physical line number for the file: ' + scanFileName + ' has failed; the file will therefore be ignored this iteration.')
+                            try: 
+                                lineNum = self.physicalLineNums[fileNum+1]
+                            except: 
+                                errorFlag = True 
+                                if not debugMode: print('\nWarning - Failed to find the physical line number for the file: ' + scanFileName + ' This file will be ignored this iteration.')
                         else: lineNum = fileNum
                     
                     #If error still has not occurred 
@@ -558,7 +561,7 @@ class SampleData:
                         
                         #If the data is being sparesly acquired in lines, then the listed times in the file need to be shifted
                         if (self.impFlag or self.postFlag) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(self.mask[lineNum]==1).min()/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
-                        elif (self.impFlag or self.postFlag) and impOffset: sys.exit('Error - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
+                        elif (self.impFlag or self.postFlag) and impOffset: sys.exit('\nError - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
                         
                         #Setup storage locations for each measured location
                         chanDataLine, mzDataLine = [[] for _ in range(0, len(self.mzRanges))], []
@@ -912,21 +915,18 @@ class Result:
         #Save a copy of the measurement step for later evaluation
         self.samples.append(copy.deepcopy(sample))
         
-        #When scan has completed
-        if completedRunFlag: 
+        #When applicable, save the physicalLineNums.csv, measuredMask.csv, and progressMap.csv to the same folder as the scanned MSI files and the results folder; otherwise just save to results
+        if (completedRunFlag or saveIterationFlag) and self.dir_Results != None: 
+            if self.sampleData.impFlag: #not self.sampleData.simulationFlag and not self.sampleData.postFlag:
+                if self.sampleData.unorderedNames: np.savetxt(dir_ImpDataFinal+'physicalLineNums.csv', np.asarray(list(self.sampleData.physicalLineNums.items())), delimiter=',', fmt='%d')
+                np.savetxt(dir_ImpDataFinal+'measuredMask.csv', self.lastMask, delimiter=',', fmt='%d')
+                if len(self.lastProgMap.shape)>0: np.savetxt(dir_ImpDataFinal+'progressMap.csv', np.nan_to_num(self.lastProgMap, nan=-1), delimiter=',', fmt='%d')
+            if self.sampleData.unorderedNames: np.savetxt(self.dir_sampleResults+'physicalLineNums.csv', np.asarray(list(self.sampleData.physicalLineNums.items())), delimiter=',', fmt='%d')
+            np.savetxt(self.dir_sampleResults+'measuredMask.csv', self.lastMask, delimiter=',', fmt='%d')
+            if len(self.lastProgMap.shape)>0: np.savetxt(self.dir_sampleResults+'progressMap.csv', np.nan_to_num(self.lastProgMap, nan=-1), delimiter=',', fmt='%d')
         
-            #Store the final scan time
-            self.finalTime = time.time()-self.startTime
-            
-            #If an implementation run, save the physicalLineNums.csv, measuredMask.csv, and progressMap.csv to the same folder as the scanned MSI files and the results folder; otherwise just save to results
-            if self.dir_Results != None: 
-                if self.sampleData.impFlag: #not self.sampleData.simulationFlag and not self.sampleData.postFlag:
-                    if self.sampleData.unorderedNames: np.savetxt(dir_ImpDataFinal+'physicalLineNums.csv', np.asarray(list(self.sampleData.physicalLineNums.items())), delimiter=',', fmt='%d')
-                    np.savetxt(dir_ImpDataFinal+'measuredMask.csv', self.lastMask, delimiter=',', fmt='%d')
-                    if len(self.lastProgMap.shape)>0: np.savetxt(dir_ImpDataFinal+'progressMap.csv', np.nan_to_num(self.lastProgMap, nan=-1), delimiter=',', fmt='%d')
-                if self.sampleData.unorderedNames: np.savetxt(self.dir_sampleResults+'physicalLineNums.csv', np.asarray(list(self.sampleData.physicalLineNums.items())), delimiter=',', fmt='%d')
-                np.savetxt(self.dir_sampleResults+'measuredMask.csv', self.lastMask, delimiter=',', fmt='%d')
-                if len(self.lastProgMap.shape)>0: np.savetxt(self.dir_sampleResults+'progressMap.csv', np.nan_to_num(self.lastProgMap, nan=-1), delimiter=',', fmt='%d')
+        #Store the final scan time if run has completed
+        if completedRunFlag: self.finalTime = time.time()-self.startTime
     
     #For a given measurement step find PSNR/SSIM of reconstructions, compute the RD, find PSNR of ERD
     def extractSimulationData(self, sample, lastReconOnly=False):
@@ -1452,7 +1452,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
 def runSampling(sampleData, cValue, model, percToScan, percToViz, lineVisitAll, dir_Results, tqdmHide, samplingProgress_Actor=None, percProgUpdate=None):
     
     #If in parallel, ignore warnings
-    if parallelization: 
+    if parallelization and not debugMode: 
         warnings.filterwarnings("ignore")
         logging.root.setLevel(logging.ERROR)
 
@@ -1463,8 +1463,9 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, lineVisitAll, 
     
     #If groupwise is active, specify how many points should be scanned each step
     if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random') and percToScan != None: sampleData.pointsToScan = int(np.ceil(((sampleData.stopPerc/100)*sampleData.area)/(sampleData.stopPerc/percToScan)))
-    elif sampleData.scanMethod == 'linewise' and lineMethod=='percLine' and sampleData.useMaskFOV: sampleData.pointsToScan = [int(np.ceil((sampleData.linePerc/100)*np.sum(sampleData.maskFOV[lineIndex]))) for lineIndex in range(0, sampleData.finalDim[0])]
-    elif sampleData.scanMethod == 'linewise' and lineMethod=='percLine': sampleData.pointsToScan = [int(np.ceil((sampleData.linePerc/100)*sampleData.finalDim[1])) for _ in range(0, sampleData.finalDim[0])]
+    elif sampleData.scanMethod == 'linewise' and sampleData.useMaskFOV: sampleData.pointsToScan = [int(np.ceil((sampleData.linePerc/100)*np.sum(sampleData.maskFOV[lineIndex]))) for lineIndex in range(0, sampleData.finalDim[0])]
+    elif sampleData.scanMethod == 'linewise': sampleData.pointsToScan = [int(np.ceil((sampleData.linePerc/100)*sampleData.finalDim[1])) for _ in range(0, sampleData.finalDim[0])]
+    else: sys.exit('\nError - The number of points to scan could not be determined. Please confirm that the configuration file options specified were valid.') 
     
     #Create a segmented storage object for variables that must be referenced over the length of scanning, yet (for better memory overhead) are not desired to be retained in the result object
     tempScanData = TempScanData()
@@ -1482,9 +1483,9 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, lineVisitAll, 
     for initialSet in sampleData.initialSets: sample.performMeasurements(sampleData, tempScanData, result, initialSet, model, cValue, False)
     
     #Check stopping criteria, just in case of a bad input
-    if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): sys.exit('Error - All points were scanned or the stopping criteria have been met after the initial acquisition for sample: ' + sample.name)
-    elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: sys.exit('Error - All lines were scanned after the inital acquisition for sample: ' + sample.name)
-    if not sampleData.datagenFlag and np.sum(sample.processedERD) == 0: sys.exit('Error - Initial ERD indicates there are no places to scan for sample: ' + sampleData.name + ' This probably means something went wrong during the sample read process, please check that the file formats are compatible.')
+    if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random' or not lineVisitAll) and (sample.percMeasured >= sampleData.stopPerc): sys.exit('\nError - All points were scanned or the stopping criteria have been met after the initial acquisition for sample: ' + sample.name)
+    elif sampleData.scanMethod == 'linewise' and len(sampleData.linesToScan)-np.sum(np.sum(sample.mask, axis=1)>0) == 0: sys.exit('\nError - All lines were scanned after the inital acquisition for sample: ' + sample.name)
+    if not sampleData.datagenFlag and np.sum(sample.processedERD) == 0: sys.exit('\nError - Initial ERD indicates there are no places to scan for sample: ' + sampleData.name + ' This probably means something went wrong during the sample read process, please check that the file formats are compatible.')
     
     #Perform the first update for the result
     result.update(sample, completedRunFlag)
@@ -1576,7 +1577,7 @@ def computeRD(sample, sampleData, tempScanData, cValue, updateLocations):
         #Since this is trying to be avoided with percToScan, actually computing updated RD values would have no benefit over percToViz with the current reconstruction method
         #Provided that IDW might be replaced in the future, the framework has been left to update RD values, assuming new reconstructions and RDPPs are available.
         #For now, when using percToScan, with an oracle run or c value optimization, it is temorarily assumed that the RD values for locations dependent on newly measured data are zero
-        sys.exit('Error - RD values cannot be truly/correctly updated unless reconstructions and RDPPs have also been updated. As the current reconstruction method requires updating neighbor information, this cannot currently be performed and yield a performance improvement.')
+        sys.exit('\nError - RD values cannot be truly/correctly updated unless reconstructions and RDPPs have also been updated. As the current reconstruction method requires updating neighbor information, this cannot currently be performed and yield a performance improvement.')
         
         #Compute the affected locations' new nearest neighbor distances and sigma values
         neighborDistances, _ = NearestNeighbors(n_neighbors=1).fit(updateLocations).kneighbors(squareUnMeasuredLocations)
@@ -1733,8 +1734,8 @@ def computeERD(sample, sampleData, tempScanData, model):
                 except: sampleData.OOM_singleChannel = True
             
             #If an OOM occured for both mutiple and single channel inferencing, then exit; need to either restart program with no GPUs, or there isn't enough system RAM
-            if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(gpus) > 0): sys.exit('Error - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on system GPU; please try disabling the GPU in the CONFIG.')
-            if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(gpus) == 0): sys.exit('Error - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on this system by the loaded model.')
+            if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(gpus) > 0): sys.exit('\nError - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on system GPU; please try disabling the GPU in the CONFIG.')
+            if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(gpus) == 0): sys.exit('\nError - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on this system by the loaded model.')
             
     else:
         if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 

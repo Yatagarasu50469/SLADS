@@ -2,12 +2,22 @@
 #COMPUTE RESOURCE SPECIFICATION
 #==================================================================
 
-#Reset ray memory and compute; shouldn't be needed but is since pools do not seem to close properly (set log_to_driver=False to stop all PID messages)
-#runtime_env={"env_vars": {"PYTHONWARNINGS": "ignore"}} doesn't work
+#Reset ray memory and compute; shouldn't be needed but is since pools do not seem to close and free memory properly (set log_to_driver=False to stop all PID messages)
 def resetRay(numberCPUS):
-    ray.shutdown()
-    if ray.is_initialized(): sys.exit('Error - Ray was still initialized after calling shutdown. Please try running the code again, if this message appears a second time, you may need to restart your machine.')
-    ray.init(num_cpus=numberCPUS, configure_logging=True, logging_level=logging.ERROR, include_dashboard=False, log_to_driver=True)
+    if ray.is_initialized(): rayUp = True
+    else: rayUp = False
+    while rayUp:
+        try: 
+            ray.shutdown()
+            rayUp = False
+        except: 
+            print('\nWarning - Ray failed to shutdown correctly, if this message repeatedly appears sequentially, exit the program with CTL+C.')
+    while not rayUp: 
+        try: 
+            ray.init(num_cpus=numberCPUS, configure_logging=debugMode, logging_level=logging.ERROR, include_dashboard=False)
+            rayUp = True
+        except:
+            print('\nWarning - Ray failed to startup correctly, if this message repeatedly appears sequentially, exit the program with CTL+C.')
 
 #Limit GPU(s) if indicated
 if availableGPUs != 'None': os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
