@@ -1824,12 +1824,13 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
             indexes = np.sort(np.argsort(sample.processedERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
             newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
         
-        #If a segment of a line should be scanned using a minimum percentage, choose the line with maximum sum physical ERD
+        #If a segment of a line should be scanned using a given percentage, choose the line with maximum sum physical ERD
         elif lineMethod == 'segLine' and segLineMethod == 'minPerc': 
            lineToScanIdx = np.nanargmax(np.nansum(sample.processedERD, axis=1))
-           indexes = np.sort(np.argsort(sample.processedERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
-           if len(indexes)>0: newIdxs = np.column_stack([np.ones(indexes[-1]-indexes[0]+1, dtype=np.float32)*lineToScanIdx, np.arange(indexes[0],indexes[-1]+1)]).astype(int)
-
+           if np.nansum(sample.processedERD[lineToScanIdx]) == 0: startPos = ((sampleData.finalDim[1]-sampleData.pointsToScan[lineToScanIdx])//2)-1
+           else: startPos = np.argmax(np.nansum(np.lib.stride_tricks.sliding_window_view(sample.processedERD[lineToScanIdx], sampleData.pointsToScan[lineToScanIdx]), axis=1))
+           newIdxs = np.column_stack([np.ones(sampleData.pointsToScan[lineToScanIdx], dtype=np.float32)*lineToScanIdx, np.arange(startPos,startPos+sampleData.pointsToScan[lineToScanIdx])]).astype(int)
+        
         #If a segment of a line should be scanned using Otsu, choose the line with the most scannable positions
         elif lineMethod == 'segLine' and segLineMethod == 'otsu': 
             otsuMask = sample.processedERD>=skimage.filters.threshold_otsu(sample.processedERD, nbins=100)

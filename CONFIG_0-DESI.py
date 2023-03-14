@@ -143,7 +143,7 @@ lineMethod = 'segLine'
 #How should individual points on a chosen line be selected: 'single' or 'group' (default: 'group')
 linePointSelection = 'group'
 
-#If using a segLine, how should the start and end points be determined (minPerc, left/right most of the top stopPerc ERD values) (default: 'otsu', left/right most of the foreground ERD found with Otsu)
+#If using a segLine, how should the start and end points be determined (minPerc, segment of stopPerc length) (default: 'otsu', foreground ERD)
 segLineMethod = 'otsu'
 
 #Should lines be allowed to be revisited (default: False)
