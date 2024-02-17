@@ -19,6 +19,7 @@ class SampleData:
         self.postFlag = postFlag
         self.oracleFlag = oracleFlag
         self.name = name
+        self.overwriteAllChanFiles = copy.deepcopy(overwriteAllChanFiles)
         
         #These flags should not be changed or used directly during this __init__ metthod
         self.datagenFlag = datagenFlag
@@ -254,7 +255,7 @@ class SampleData:
                 self.progMap = np.loadtxt(self.sampleFolder+os.path.sep+'progressMap.csv', np.float32, delimiter=',')
                 self.progMap[self.progMap==-1]=np.nan
             except: self.progMap = np.empty([])
-            
+        
         #Establish sample area to measure; do not apply percFOVMask in training/validation database
         if self.useMaskFOV and percFOVMask and not self.trainFlag: self.area = np.sum(self.maskFOV)
         else: self.area = int(round(self.finalDim[0]*self.finalDim[1]))
@@ -268,7 +269,7 @@ class SampleData:
         if self.dataMSI:
             ppmRound = ('%f' % self.ppm).rstrip('0').rstrip('.')[::-1].find('.')
             mzMinDiff = np.round((self.mzLowerBound*self.ppmPos)-(self.mzLowerBound*self.ppmNeg), ppmRound)
-            self.mzRound =str(mzMinDiff)[::-1].find('.')
+            self.mzRound = str(mzMinDiff)[::-1].find('.')
             self.mzPrecision = np.float32(10**-self.mzRound)
         
         #If reading in all MSI Data determine set of non-overlapping bins based on ppm
@@ -297,15 +298,20 @@ class SampleData:
             #Find unique index mapping between maximum precision distribution and the non-overlapping ppm bins
             _, self.mzOriginalIndices = np.unique([bisect_left(self.mzUpperValues, mzValue) for mzValue in self.mzInitialDist], return_index=True)
             
-            #Now that all of the final dimensions have been determined, setup .hdf5 file locations, and either a shared memory actor or array, for storing results 
+            #Now that all of the final dimensions have been determined, setup .hdf5 file locations
             self.allImagesPath = self.sampleFolder+os.path.sep+'allImages.hdf5'
-            if os.path.exists(self.allImagesPath): os.remove(self.allImagesPath)
-            if self.sampleType=='MALDI': 
-                self.squareAllImagesPath = None
-            elif self.sampleType=='DESI':
-                self.squareAllImagesPath = self.sampleFolder+os.path.sep+'squareAllImages.hdf5'
-                if os.path.exists(self.squareAllImagesPath): os.remove(self.squareAllImagesPath)
             
+            
+            if self.sampleType=='MALDI': self.squareAllImagesPath = None
+            
+            elif self.sampleType=='DESI': self.squareAllImagesPath = self.sampleFolder+os.path.sep+'squareAllImages.hdf5'
+            
+            
+            #If intended to overwrite and it exists, get rid of it; if not configured to overwrite, but it doesn't exist, then activate the flag
+            if self.overwriteAllChanFiles and os.path.exists(self.allImagesPath): os.remove(self.allImagesPath)
+            if self.sampleType=='DESI' and self.overwriteAllChanFiles and os.path.exists(self.squareAllImagesPath): os.remove(self.squareAllImagesPath)
+            if not self.overwriteAllChanFiles and not os.path.exists(self.allImagesPath): self.overwriteAllChanFiles = True
+            if self.sampleType=='DESI' and not self.overwriteAllChanFiles and not os.path.exists(self.squareAllImagesPath): self.overwriteAllChanFiles = True
         #If MSI data, regardless of if all channel data is to be loaded or not
         if self.dataMSI:
             
@@ -334,7 +340,7 @@ class SampleData:
             #Setup shared memory actor for operations in parallel, or local memory for serial execution
             if parallelization: 
                 self.mzOriginalIndices_id, self.mzRanges_id = ray.put(self.mzOriginalIndices), ray.put(self.mzRanges)
-                self.reader_MSI_Actor = Reader_MSI_Actor.remote(self.sampleType, self.readAllMSI, len(self.mzFinal), len(self.chanValues), self.finalDim[0], self.finalDim[1], self.allImagesPath, self.squareAllImagesPath)
+                self.reader_MSI_Actor = Reader_MSI_Actor.remote(self.sampleType, self.readAllMSI, len(self.mzFinal), len(self.chanValues), self.finalDim[0], self.finalDim[1], self.allImagesPath, self.squareAllImagesPath, self.overwriteAllChanFiles)
             else: 
                 self.allImages = np.zeros((len(self.mzFinal), self.finalDim[0], self.finalDim[1]), dtype=np.float32)
         
@@ -374,14 +380,14 @@ class SampleData:
                 else:
                     if self.readAllMSI: 
                         self.allImagesMax = np.max(self.allImages, axis=(1,2))
-                        allImagesFile = h5py.File(self.allImagesPath, 'a')
-                        _ = allImagesFile.create_dataset(name='allImages', data=self.allImages, chunks=(1, self.finalDim[0], self.finalDim[1]), dtype=np.float32)
-                        allImagesFile.close()
-                        if self.sampleType=='DESI':
-                            self.allImages = np.moveaxis(resize(np.moveaxis(self.allImages, 0, -1), tuple(self.squareDim), order=0), -1, 0)
-                            squareAllImagesFile = h5py.File(self.squareAllImagesPath, 'a')
-                            _ = squareAllImagesFile.create_dataset(name='squareAllImages', data=self.allImages, chunks=(1, self.squareDim[0], self.squareDim[1]), dtype=np.float32)
-                            squareAllImagesFile.close()
+                        if self.overwriteAllChanFiles:
+                            allImagesFile = h5py.File(self.allImagesPath, 'a')
+                            _ = allImagesFile.create_dataset(name='allImages', data=self.allImages, chunks=(1, self.finalDim[0], self.finalDim[1]), dtype=np.float32)
+                            allImagesFile.close()
+                            if self.sampleType=='DESI':
+                                squareAllImagesFile = h5py.File(self.squareAllImagesPath, 'a')
+                                _ = squareAllImagesFile.create_dataset(name='squareAllImages', data=np.moveaxis(resize(self.allImages, tuple(squareDim), order=0), -1, 0), chunks=(1, squareDim[0], squareDim[1]), dtype=np.float32)
+                                squareAllImagesFile.close()
                         del self.allImages
                 del self.mzFinalGrid, self.chanFinalGrid
     
@@ -489,13 +495,13 @@ class SampleData:
                 for i, (x, y, z) in tqdm(enumerate(coordinates), total = len(coordinates), desc='Reading', leave=False, disable=self.impFlag, ascii=asciiFlag):
                     mzs, ints = data.getspectrum(i)
                     self.sumImage[y, x] = np.sum(ints)
-                    if self.readAllMSI: 
+                    if self.overwriteAllChanFiles and self.readAllMSI: 
                         filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
                         self.allImages[:, y, x] = np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices).astype(np.float32)
                     self.chanImages[:, y, x] = [np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]) for mzRange in self.mzRanges]
             else:
                 _ = ray.get(self.reader_MSI_Actor.setCoordinates.remote(coordinates))
-                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.useAlphaTims, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate) for indexes in np.array_split(np.arange(0, len(coordinates)), numberCPUS)])
+                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.useAlphaTims, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.overwriteAllChanFiles) for indexes in np.array_split(np.arange(0, len(coordinates)), numberCPUS)])
             
             #Close the MSI file
             del data
@@ -582,7 +588,7 @@ class SampleData:
                                 sumImageLine.append(np.sum(ints))
                             else:
                                 mzs, ints = data.scan(pos, False, True)
-                            if self.readAllMSI: 
+                            if self.overwriteAllChanFiles and self.readAllMSI: 
                                 filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
                                 mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices))
                             for mzRangeNum in range(0, len(self.mzRanges)):
@@ -590,18 +596,17 @@ class SampleData:
                                 chanDataLine[mzRangeNum].append(np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]))
                         
                         #Create regular grid interpolators, aligning all/targeted m/z data, and storing results
-                        if self.readAllMSI: self.allImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.mzFinal), np.asarray(mzDataLine, dtype='float64'), bounds_error=False, fill_value=0)(self.mzFinalGrid).astype('float32')
+                        if self.overwriteAllChanFiles and self.readAllMSI: self.allImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.mzFinal), np.asarray(mzDataLine, dtype='float64'), bounds_error=False, fill_value=0)(self.mzFinalGrid).astype('float32')
                         self.chanImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.chanValues), np.asarray(chanDataLine, dtype='float64').T, bounds_error=False, fill_value=0)(self.chanFinalGrid).astype('float32')
                         self.sumImage[lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(sumImageLine, nan=0, posinf=0, neginf=0), left=0, right=0)
                         
-                        #Close the file
-                        if not self.useAlphaTims: data.close()
-                        else: del data
+                        #Close the file; (Do not use multiplierz function: data.close() - it's really slow and unclear why
+                        del data
             
             #Otherwise read data in parallel and perform remaining interpolations of any remaining m/z data to regular grid in serial (parallel operation is too memory intensive)
             else:
-                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.useAlphaTims, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.mzFinal, self.mzFinalGrid_id, self.chanValues, self.chanFinalGrid_id, self.impFlag, self.postFlag, impOffset, scanMethod, lineMethod, self.physicalLineNums, self.ignoreMissingLines, self.missingLines, self.unorderedNames) for indexes in np.array_split(np.arange(0, len(scanFileNames)), numberCPUS)])
-                if self.readAllMSI: _ = ray.get(self.reader_MSI_Actor.interpolateDESI.remote(self.mzFinal, self.mzFinalGrid))
+                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.useAlphaTims, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.overwriteAllChanFiles, self.mzFinal, self.mzFinalGrid_id, self.chanValues, self.chanFinalGrid_id, self.impFlag, self.postFlag, impOffset, scanMethod, lineMethod, self.physicalLineNums, self.ignoreMissingLines, self.missingLines, self.unorderedNames) for indexes in np.array_split(np.arange(0, len(scanFileNames)), numberCPUS)])
+                if self.readAllMSI: _ = ray.get(self.reader_MSI_Actor.interpolateDESI.remote(self.mzFinal, self.mzFinalGrid_id))
                 for scanFileName in ray.get(self.reader_MSI_Actor.getReadScanFiles.remote()): self.readScanFiles.append(scanFileName)
 
         #If parallelization is enabled, and this is a MSI sample, then read MSI data in parallel, retrieve from shared memory, and process data into accessible shape
@@ -621,7 +626,7 @@ class SampleData:
         #If DESI MSI, then need to resize the images to obtain square dimensionality, otherwise the square dimensions are equal to the original
         if self.sampleType == 'DESI': self.squareChanImages = np.moveaxis(resize(np.moveaxis(self.chanImages, 0, -1), tuple(self.squareDim), order=0), -1, 0)
         else: self.squareChanImages = self.chanImages
-            
+        
         #Find the maximum value in each channel image for easy referencing
         self.chanImagesMax = np.max(self.chanImages, axis=(1,2))
         
@@ -1102,6 +1107,9 @@ class Result:
                     _ = [ray.get(recon_Actor.closeAllImages.remote()) for recon_Actor in self.recon_Actors]
                     self.recon_Actors.clear()
                     del self.recon_Actors
+                    resetRay(numberCPUS) #adding this might help with the crash at 1138?
+                    #otherwise need to swap out starmap for the alternate solution used in v0.10.0...
+                    #nope, doesn't solve the problem...
                 
         #If this is a simulation, not for training database generation, then summarize PSNR/SSIM scores across all measurement steps
         if self.sampleData.simulationFlag and not self.sampleData.datagenFlag:
@@ -1133,30 +1141,25 @@ class Result:
                     
                     #Setup an actor to hold global sampling progress across multiple processes
                     samplingProgress_Actor = SamplingProgress_Actor.remote()
-            
+                    
                     #Setup visualization jobs and determine total amount of work that is going to be done
-                    futures = [(self.samples[index], self.sampleData, self.dir_progression, self.dir_chanProgressions, parallelization, samplingProgress_Actor) for index in range(0, len(self.samples))]
-                    maxProgress = len(futures)
+                    samples_id = ray.put(self.samples)
+                    futures = [visualizeStep_parhelper.remote(samples_id, indexes, self.sampleData, self.dir_progression, self.dir_chanProgressions, parallelization, samplingProgress_Actor) for indexes in np.array_split(np.arange(0, len(self.samples)), numberCPUS)]
+                    maxProgress = len(self.samples)
                     
-                    #Initialize a global progress bar and start parallel sampling operations
-                    pbar = tqdm(total=maxProgress, desc = 'Visualizing', leave=False, ascii=asciiFlag)                    
-                    computePool = Pool(numberCPUS)
-                    results = computePool.starmap_async(visualizeStep_parhelper, futures)
-                    computePool.close()
-                    
-                    #While some results have yet to be returned, regularly update the global progress bar, then obtain results and purge/reset ray
+                    #Initialize a global progress bar and start parallel visualization operations
+                    pbar = tqdm(total=maxProgress, desc = 'Visualizing', leave=False, ascii=asciiFlag)
                     pbar.n = 0
                     pbar.refresh()
-                    while (True):
+                    while len(futures):
+                        _, futures = ray.wait(futures)
                         pbar.n = np.clip(round(ray.get(samplingProgress_Actor.getCurrent.remote()),0), 0, maxProgress)
                         pbar.refresh()
-                        if results.ready(): 
-                            pbar.n = maxProgress
-                            pbar.refresh()
-                            pbar.close()
-                            break
                         time.sleep(0.1)
-                    computePool.join()
+                    pbar.n = maxProgress
+                    pbar.refresh()
+                    pbar.close()
+                    del samples_id
                     resetRay(numberCPUS)
                 else: 
                     _ = [visualizeStep(sample, self.sampleData, self.dir_progression, self.dir_chanProgressions) for sample in tqdm(self.samples, desc='Visualizing', leave=False, ascii=asciiFlag)]
@@ -1463,6 +1466,7 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, lineVisitAll, 
     
     #If groupwise is active, specify how many points should be scanned each step
     if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random') and percToScan != None: sampleData.pointsToScan = int(np.ceil(((sampleData.stopPerc/100)*sampleData.area)/(sampleData.stopPerc/percToScan)))
+    elif (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random') and percToScan == None: sampleData.pointsToScan = 1
     elif sampleData.scanMethod == 'linewise' and sampleData.useMaskFOV: sampleData.pointsToScan = [int(np.ceil((sampleData.linePerc/100)*np.sum(sampleData.maskFOV[lineIndex]))) for lineIndex in range(0, sampleData.finalDim[0])]
     elif sampleData.scanMethod == 'linewise': sampleData.pointsToScan = [int(np.ceil((sampleData.linePerc/100)*sampleData.finalDim[1])) for _ in range(0, sampleData.finalDim[0])]
     else: sys.exit('\nError - The number of points to scan could not be determined. Please confirm that the configuration file options specified were valid.') 
@@ -1764,6 +1768,7 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
     if sampleData.scanMethod == 'random':
         np.random.shuffle(sample.unMeasuredIdxs)
         newIdxs = sample.unMeasuredIdxs[:sampleData.pointsToScan].astype(int)
+    
     elif sampleData.scanMethod == 'pointwise':
     
         #If performing a groupwise scan, use reconstruction as the measurement value, until reaching target number of points to scan

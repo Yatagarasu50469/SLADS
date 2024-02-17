@@ -269,6 +269,9 @@ overrideInputsFolder = None
 #If a folder other than the default './RESULTS/' should be used, specify it here (default: None)
 overrideResultsFolder = None
 
+#If existing allChanImages.hdf5 and squareAllImages.hdf5 files should be overwritten or should attempt to be loaded (default: False)
+overwriteAllChanFiles = False
+
 #Should static window be used in RD generation
 staticWindow = False
 

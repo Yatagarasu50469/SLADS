@@ -107,7 +107,7 @@ class Recon_Actor:
 class Reader_MSI_Actor:
     
     #Create buffers for holding all MSI images, the specified channel images, and the sum of all values
-    def __init__(self, sampleType, readAllMSI, mzNum, chanNum, yDim, xDim, allImagesPath, squareAllImagesPath):
+    def __init__(self, sampleType, readAllMSI, mzNum, chanNum, yDim, xDim, allImagesPath, squareAllImagesPath, overwriteAllChanFiles):
         if not debugMode:
             warnings.filterwarnings("ignore")
             logging.root.setLevel(logging.ERROR)
@@ -117,9 +117,12 @@ class Reader_MSI_Actor:
         self.xDim = xDim
         self.allImagesPath = allImagesPath
         self.squareAllImagesPath = squareAllImagesPath
-        if self.readAllMSI: self.allImages = np.zeros((yDim, xDim, mzNum), dtype=np.float32)
-        self.chanImages = np.zeros((yDim, xDim, chanNum), dtype=np.float32)
+        self.overwriteAllChanFiles = overwriteAllChanFiles
+        if self.readAllMSI: 
+            if self.overwriteAllChanFiles: self.allImages = np.zeros((yDim, xDim, mzNum), dtype=np.float32)
+            else: self.allImages = h5py.File(allImagesPath, 'r')['allImages']
         self.sumImage = np.zeros((yDim, xDim), dtype=np.float32)
+        self.chanImages = np.zeros((yDim, xDim, chanNum), dtype=np.float32)
         if sampleType == 'DESI': self.mzDataComplete, self.origTimesComplete, self.lineNumComplete, self.readScanFiles = [], [], [], []
     
     #Set internal reference for indexing different coordinates
@@ -130,7 +133,7 @@ class Reader_MSI_Actor:
     def setValues(self, indexData, mzDataTotal, chanDataTotal, sumDataTotal, origTimesTotal=None, lineNumTotal=None, newReadScanFiles=None, allDataInterpFailTotal=None):
         if self.sampleType == 'MALDI':
             yLocations, xLocations = self.coordinates[indexData,1], self.coordinates[indexData,0]
-            if self.readAllMSI: self.allImages[yLocations, xLocations, :] = mzDataTotal
+            if self.overwriteAllChanFiles and self.readAllMSI: self.allImages[yLocations, xLocations, :] = mzDataTotal
             self.chanImages[yLocations, xLocations, :] = chanDataTotal
             self.sumImage[yLocations, xLocations] = sumDataTotal
         elif self.sampleType == 'DESI':
@@ -142,18 +145,21 @@ class Reader_MSI_Actor:
                     self.mzDataComplete.append(mzDataTotal[indexNum])
                     self.origTimesComplete.append(copy.deepcopy(origTimesTotal[indexNum]))
                     self.lineNumComplete.append(lineNumTotal[indexNum])
-                elif self.readAllMSI: self.allImages[lineNumTotal[indexNum], :, :] = mzDataTotal[indexNum]
+                elif self.overwriteAllChanFiles and self.readAllMSI: self.allImages[lineNumTotal[indexNum], :, :] = mzDataTotal[indexNum]
     
     #Write data to a .hdf5 file at the prespecified location on disk and return the max value for each m/z; for DESI save square varations as well for later reconstructions
     def writeToDisk(self, squareDim):
-        allImagesMax = np.max(self.allImages, axis=(0,1))
-        allImagesFile = h5py.File(self.allImagesPath, 'a')
-        _ = allImagesFile.create_dataset(name='allImages', data=np.moveaxis(self.allImages, -1, 0), chunks=(1, self.yDim, self.xDim), dtype=np.float32)
-        allImagesFile.close()
-        if self.sampleType=='DESI':
-            squareAllImagesFile = h5py.File(self.squareAllImagesPath, 'a')
-            _ = squareAllImagesFile.create_dataset(name='squareAllImages', data=np.moveaxis(resize(self.allImages, tuple(squareDim), order=0), -1, 0), chunks=(1, squareDim[0], squareDim[1]), dtype=np.float32)
-            squareAllImagesFile.close()
+        if self.overwriteAllChanFiles:
+            allImagesMax = np.max(self.allImages, axis=(0,1))
+            allImagesFile = h5py.File(self.allImagesPath, 'a')
+            _ = allImagesFile.create_dataset(name='allImages', data=np.moveaxis(self.allImages, -1, 0), chunks=(1, self.yDim, self.xDim), dtype=np.float32)
+            allImagesFile.close()
+            if self.sampleType=='DESI':
+                squareAllImagesFile = h5py.File(self.squareAllImagesPath, 'a')
+                _ = squareAllImagesFile.create_dataset(name='squareAllImages', data=np.moveaxis(resize(self.allImages, tuple(squareDim), order=0), -1, 0), chunks=(1, squareDim[0], squareDim[1]), dtype=np.float32)
+                squareAllImagesFile.close()
+        else:
+            allImagesMax = np.max(self.allImages, axis=(1,2))
         return allImagesMax
         
     #Return list of scan files that have already been read
@@ -195,7 +201,7 @@ class Reader_MSI_Actor:
     
 #Read in the sample MSI data for a set of indexes and set those values in shared memory location; must use blocking call (ray.get) to prevent data corruption
 @ray.remote
-def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, indexData, mzOriginalIndices, mzRanges, sampleType, mzLowerBound, mzUpperBound, mzLowerIndex, mzPrecision, mzRound, mzInitialCount, mask, newTimes, finalDim, sampleWidth, scanRate, mzFinal=None, mzFinalGrid=None, chanValues=None, chanFinalGrid=None, impFlag=False, postFlag=False, impOffset=None, scanMethod=None, lineMethod=None, physicalLineNums=None, ignoreMissingLines=None, missingLines=None, unorderedNames=None):
+def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, indexData, mzOriginalIndices, mzRanges, sampleType, mzLowerBound, mzUpperBound, mzLowerIndex, mzPrecision, mzRound, mzInitialCount, mask, newTimes, finalDim, sampleWidth, scanRate, overwriteAllChanFiles, mzFinal=None, mzFinalGrid=None, chanValues=None, chanFinalGrid=None, impFlag=False, postFlag=False, impOffset=None, scanMethod=None, lineMethod=None, physicalLineNums=None, ignoreMissingLines=None, missingLines=None, unorderedNames=None):
     if not debugMode:
         warnings.filterwarnings("ignore")
         logging.root.setLevel(logging.ERROR)
@@ -204,7 +210,7 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
     mzDataTotal, chanDataTotal, sumDataTotal = [], [], []
     if sampleType == 'MALDI':
     
-        #Load the sinlge imzML file expected for MALDI
+        #Load the single imzML file expected for MALDI
         data = ImzMLParser(scanFileNames[0]) 
         
         #Process each of the files assigned to this helper and transmit to shared memory actor
@@ -212,7 +218,7 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
             mzs, ints = data.getspectrum(index)
             sumDataTotal.append(np.sum(ints))
             filtIndexLow, filtIndexHigh = bisect_left(mzs, mzLowerBound), bisect_right(mzs, mzUpperBound)
-            if readAllMSI: mzDataTotal.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
+            if overwriteAllChanFiles and readAllMSI: mzDataTotal.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
             chanDataTotal.append(np.asarray([np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]) for mzRange in mzRanges]))      
         _ = ray.get(allImagesActor.setValues.remote(indexData, mzDataTotal, chanDataTotal, sumDataTotal))
 
@@ -304,7 +310,7 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                         sumImageLine.append(np.sum(ints))
                     else: 
                         mzs, ints = data.scan(pos, False, True)
-                    if readAllMSI: 
+                    if overwriteAllChanFiles and readAllMSI: 
                         filtIndexLow, filtIndexHigh = bisect_left(mzs, mzLowerBound), bisect_right(mzs, mzUpperBound)
                         mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
                     for mzRangeNum in range(0, len(mzRanges)):
@@ -319,7 +325,7 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                 
                 #If reading all MSI data and m/z line data cannot be interpolated in set time, then try to initiate a fallback method to do so sequentially later
                 #Note that if system is sufficiently memory bottlenecked for this to happen, this method may crash from OOM in transmission to shared memory actor anyways
-                if readAllMSI: 
+                if overwriteAllChanFiles and readAllMSI: 
                     timeOutCounter, allDataInterpFail = 0, False
                     while True:
                         try: 
@@ -335,19 +341,19 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                     allDataInterpFailTotal.append(allDataInterpFail)
                     mzDataTotal.append(mzDataLine)
                 
-                #Close the file
-                if not useAlphaTims: data.close()
-                else: del data
+                #Close the file; (Do not use multiplierz function: data.close() - it's really slow and unclear why
+                del data
         
         #If there was new data read, transfer such to shared memory actor
         if len(newReadScanFiles) > 0: _ = ray.get(allImagesActor.setValues.remote(indexData, mzDataTotal, chanDataTotal, sumDataTotal, origTimesTotal, np.array(lineNumTotal), newReadScanFiles, allDataInterpFailTotal))
 
 #If parallel calls of visualize step, need to reset the matplotlib backend
 #Trying to use conditional removes existing matplotlib packages from local context breaking serial operation
-def visualizeStep_parhelper(sample, sampleData, dir_progression, dir_chanProgressions, parallelization=False, samplingProgress_Actor=None):
+@ray.remote
+def visualizeStep_parhelper(samples, indexes, sampleData, dir_progression, dir_chanProgressions, parallelization=False, samplingProgress_Actor=None):
     if not debugMode:
         warnings.filterwarnings("ignore")
         logging.root.setLevel(logging.ERROR)
     matplotlib.use('agg')
     import matplotlib.pyplot as plt
-    visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, parallelization, samplingProgress_Actor)
+    for index in indexes: visualizeStep(samples[index], sampleData, dir_progression, dir_chanProgressions, parallelization, samplingProgress_Actor)
