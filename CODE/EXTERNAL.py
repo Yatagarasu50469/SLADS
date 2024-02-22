@@ -1,17 +1,52 @@
 #==================================================================
-#EXTERNAL LIBRARY IMPORTS AND SETUP
+#EXTERNAL
 #==================================================================
 
-#GENERAL LIBRARY IMPORTS AND SETUP
+#ENVIRONMENTAL VARIABLES
 #==================================================================
 
-from __future__ import absolute_import, division, print_function
+#Dictionary to store environmental variables; passes to ray workers
+environmentalVariables = {}
+
+#Setup deterministic behavior for CUDA; may change in future versions...
+#"Set a debug environment variable CUBLAS_WORKSPACE_CONFIG to :16:8 (may limit overall performance) 
+#or :4096:8 (will increase library footprint in GPU memory by approximately 24MiB)."
+if manualSeedValue != -1: environmentalVariables["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
+#Disable HDF5 lock, allowing parallel access
+environmentalVariables["HDF5_USE_FILE_LOCKING"] = "FALSE"
+
+#Set matplotlib backend 
+environmentalVariables["MPLBACKEND"] = "agg"
+
+#Disable Ray memory monitor as it will sometimes decide to kill processes with suprising/unexpected/unmanageable/untracable errors
+#Default appears to be killing jobs at 95% system memory capacity
+#environmentalVariables["RAY_DISABLE_MEMORY_MONITOR"] = "1"
+
+if not debugMode: 
+
+    #Stop Ray from crashing the program when errors occur (otherwise may crash despite being handled by try/catch!)
+    environmentalVariables["RAY_IGNORE_UNHANDLED_ERRORS"] = "1"
+
+    #Prevent Ray from printing spill logs
+    environmentalVariables["RAY_verbose_spill_logs"] = "0"
+
+    #Restrict warning levels to only report errors; ONLY applicable to subprocesses!
+    environmentalVariables["PYTHONWARNINGS"] = "ignore"
+
+#Load enivronmental variables into current runtime before other imports
+import os
+for var, value in environmentalVariables.items(): os.environ[var] = value
+
+#IMPORTS
+#==================================================================
+
 import alphatims
 import alphatims.bruker
 import colorama
-import cv2
 import contextlib
 import copy
+import cv2
 import datetime
 import gc
 import glob
@@ -24,18 +59,20 @@ import matplotlib.pyplot as plt
 import multiplierz
 import multiplierz.mzAPI.raw as raw
 import multiprocessing
+import multivolumefile
 import natsort
 import numpy as np
 import numpy.matlib as matlib
-import os
 import pandas as pd
 import pickle
 import PIL
 import PIL.ImageOps
 import platform
 import psutil
+import py7zr
 import pyimzml
 import random
+import ray
 import re
 import requests
 import scipy
@@ -43,10 +80,15 @@ import skimage
 import shutil
 import sklearn
 import time
+import torch
+import torch.nn.functional as functional
+import torchvision.transforms as transforms
 import warnings
 
 from bisect import bisect_left, bisect_right, bisect
 from collections import defaultdict
+from contextlib import nullcontext
+from contextlib import redirect_stdout
 from IPython import display
 from IPython.core.debugger import set_trace as Tracer
 from itertools import chain
@@ -59,6 +101,8 @@ from numba import jit
 from PIL import Image
 from pyimzml.ImzMLParser import ImzMLParser
 from pyimzml.ImzMLWriter import ImzMLWriter
+from ray import serve
+from ray.util.multiprocessing import Pool
 from scipy import misc
 from scipy import signal
 from scipy.io import loadmat
@@ -80,72 +124,35 @@ from skimage.filters import *
 from skimage.metrics import peak_signal_noise_ratio as compare_psnr
 from skimage.metrics import structural_similarity as compare_ssim
 from skimage.transform import resize
-from typeguard import typechecked
 from sobol import *
+from torch import nn
+from torch import optim
+from torch.utils.data import Dataset, DataLoader
+from torchvision import datasets
+from torchvision.transforms import v2
+from typeguard import typechecked
 from tqdm.auto import tqdm
 
-matplotlib.use('agg') #Non-interactive plotting mode
-sys.coinit_flags = 0 #Change method of instantiation for COM objects
-
-
-#TENSORFLOW/RAY IMPORTS AND SETUP
+#LIBRARY AND WARNING SETUP
 #==================================================================
 
-#Make tensorflow only report errors (3), warnings (2), information (1), all (0) (disable for debug)
-if not debugMode: os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+#Change method of instantiation for COM objects
+sys.coinit_flags = 0 
 
-#Allocate memory for CUDA in an asynchronous manner; disable this line if GPU compute is < 6.1 (Maxwell and previous)
-os.environ["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
-
-#Disable Ray memory monitor as it will sometimes decide to kill processes with suprising/unexpected/unmanageable/untracable errors
-#Default appears to be killing jobs at 95% system memory capacity
-#os.environ['RAY_DISABLE_MEMORY_MONITOR'] = '1'
-
-#Stop Ray from crashing the program when errors occur (otherwise may crash despite being handled by try/catch!)
-if not debugMode: os.environ["RAY_IGNORE_UNHANDLED_ERRORS"] = "1"
-
-#Prevent Ray from printing spill logs
-if not debugMode: os.environ["RAY_verbose_spill_logs"] = "0"
-
-#Disable HDF5 lock, allowing parallel access
-#os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
-
-#After enivronmental settings can finish imports
-import ray
-from ray import serve
-from ray.util.multiprocessing import Pool
-
-import tensorflow as tf
-import tensorflow_addons as tfa
-from tensorflow.data.experimental import DistributeOptions, AutoShardPolicy
-from tensorflow import keras
-from tensorflow.keras import backend as K
-from tensorflow.keras import mixed_precision
-from tensorflow.keras.callbacks import Callback
-from tensorflow.keras.layers import *
-from tensorflow.keras.optimizers import *
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.utils import *
-from tensorflow.python.data.util import options as options_lib
-from tensorflow.python.framework import constant_op
-from tensorflow.python.framework import tensor_shape
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import image_ops
-from tensorflow.python.util import dispatch
-from tensorflow.python.util.tf_export import keras_export
-from tensorflow.tools.docs import doc_controls
-
-#Further restrict warning/logging levels to only report errors (disable for debug)
+#Restrict logging/warning levels (disable for debug
 if not debugMode: 
-    tf.get_logger().setLevel('ERROR')
     warnings.filterwarnings("ignore")
     logging.root.setLevel(logging.ERROR)
 
 #Turn off alphatims internal tqdm callback
 alphatims.utils.set_progress_callback(None)
 
-#OS SPECIFIC IMPORTS
+#Setup deterministic behavior for torch (this alone does not affect CUDA-specific operations)
+if manualSeedValue != -1: torch.use_deterministic_algorithms(True)
+
+#OS SPECIFIC
 #==================================================================
+
 #Determine system operating system
 systemOS = platform.system()
 

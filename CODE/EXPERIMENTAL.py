@@ -1,5 +1,5 @@
 #==================================================================
-#IMPLEMENTATION/EXPERIMENTAL SPECIFIC METHOD AND CLASS DEFINITIONS
+#IMPLEMENTATION/EXPERIMENTAL
 #==================================================================
 
 #Signal external equipment and wait for LOCK file to exist
@@ -18,11 +18,8 @@ def equipWait():
 def performImplementation(optimalC, modelName):
 
     #Setup a model only on a single GPU (if available), running once on for pre-compilation (otherwise affects reported timings)
-    if (erdModel == 'DLADS' or erdModel == 'GLANDS') and numGPUs > 0: 
-        model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName, 0)
-        _ = ray.get(model.generateERD.remote(np.empty((1,512,512,len(inputChannels)), dtype=np.float32)))
-    else: 
-        model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName)
+    if numGPUs > 0: model = Model_Actor.remote(erdModel, dir_TrainingResults, modelName, gpus[0])
+    else: model = Model_Actor.remote(erdModel, dir_TrainingResults, modelName)
     
     #Wait for equipment to initialize scan
     equipWait()

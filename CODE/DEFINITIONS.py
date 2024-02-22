@@ -1,5 +1,5 @@
 #==================================================================
-#GLOBAL METHOD AND CLASS DEFINITIONS
+#DEFINITIONS
 #==================================================================
 
 #Object for initializing and storing sample metadata
@@ -59,6 +59,7 @@ class SampleData:
         self.squareAllImagesPath = None
         self.avgTimeFileLoad = None
         self.useAlphaTims = False
+        self.squareOpticalImage = None
         
         #If linewise, set the % per line as the original stop percentage, if visiting all lines then set the latter value to 100
         if self.scanMethod == 'linewise':
@@ -212,7 +213,7 @@ class SampleData:
                 elif 'imzML' in extensions: self.lineExt = '.imzML'
                 else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
             elif self.sampleType == 'IMAGE':
-                if 'png' in extensions: self.lineExt = '.png'
+                if 'png' in extensions: self.lineExt = '.tiff'
                 elif 'jpg' in extensions: self.lineExt = '.jpg'
                 elif 'tiff' in extensions: self.lineExt = '.tiff'
                 else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
@@ -263,7 +264,7 @@ class SampleData:
         #If not just post-processing, setup initial sets
         if not self.postFlag: self.generateInitialSets(self.scanMethod)
         
-        #If MSI data, determine the needed precision to prevent overlap when mapping m/z values to a common spectrum
+        #If MSI data, determine the needed precision to prevent overlap when mapping/indexing m/z values to a common spectrum
         #How many decimal places are used in the lowerbound mz range, as first limited by the ppm precision
         #Arbitrary precision rounding is problematic, so go to the lower power of 10 instead
         if self.dataMSI:
@@ -282,7 +283,7 @@ class SampleData:
             self.mzInitialCount = int((self.mzUpperBound-self.mzLowerBound)/self.mzPrecision)+1
             self.mzInitialDist = np.round(np.round(np.linspace(self.mzLowerBound, self.mzUpperBound, self.mzInitialCount)/self.mzPrecision)*self.mzPrecision, self.mzRound)
             
-            #Determine m/z values with final non-overlapping ppm bins to enable fast loading/indexing
+            #Determine m/z values by ppm with non-overlapping bins
             self.mzFinal = [self.mzLowerBound/self.ppmNeg]
             while(True):
                 mzNewValue = (self.mzFinal[-1]*self.ppmPos)/self.ppmNeg
@@ -300,18 +301,15 @@ class SampleData:
             
             #Now that all of the final dimensions have been determined, setup .hdf5 file locations
             self.allImagesPath = self.sampleFolder+os.path.sep+'allImages.hdf5'
-            
-            
             if self.sampleType=='MALDI': self.squareAllImagesPath = None
-            
             elif self.sampleType=='DESI': self.squareAllImagesPath = self.sampleFolder+os.path.sep+'squareAllImages.hdf5'
-            
             
             #If intended to overwrite and it exists, get rid of it; if not configured to overwrite, but it doesn't exist, then activate the flag
             if self.overwriteAllChanFiles and os.path.exists(self.allImagesPath): os.remove(self.allImagesPath)
             if self.sampleType=='DESI' and self.overwriteAllChanFiles and os.path.exists(self.squareAllImagesPath): os.remove(self.squareAllImagesPath)
             if not self.overwriteAllChanFiles and not os.path.exists(self.allImagesPath): self.overwriteAllChanFiles = True
             if self.sampleType=='DESI' and not self.overwriteAllChanFiles and not os.path.exists(self.squareAllImagesPath): self.overwriteAllChanFiles = True
+        
         #If MSI data, regardless of if all channel data is to be loaded or not
         if self.dataMSI:
             
@@ -324,7 +322,6 @@ class SampleData:
             if self.chanValues.shape == (): self.chanValues = np.array([self.chanValues])
             self.numChannels = len(self.chanValues)
             self.chanValues.sort()
-            #self.mzRanges = np.round(np.column_stack((self.chanValues*self.ppmNeg, self.chanValues*self.ppmPos)), self.mzRound)
             self.mzRanges = np.column_stack((self.chanValues*self.ppmNeg, self.chanValues*self.ppmPos))
             
             #For DESI MSI samples, create regular grids for interpolating all/targeted m/z data
@@ -336,7 +333,7 @@ class SampleData:
                 if parallelization: self.chanFinalGrid_id = ray.put((chanFinalGrid_x, chanFinalGrid_y))
                 else: self.chanFinalGrid = (chanFinalGrid_x, chanFinalGrid_y)
                 del mzFinalGrid_x, mzFinalGrid_y, chanFinalGrid_x, chanFinalGrid_y
-        
+            
             #Setup shared memory actor for operations in parallel, or local memory for serial execution
             if parallelization: 
                 self.mzOriginalIndices_id, self.mzRanges_id = ray.put(self.mzOriginalIndices), ray.put(self.mzRanges)
@@ -368,7 +365,7 @@ class SampleData:
             self.squareOpticalImage = resize(opticalImage, tuple(self.squareDim), order=0)
             self.opticalImage = resize(opticalImage, tuple(self.finalDim), order=0)
         
-        #If a simulation or post-processing, read all the sample data and save in hdf5 if applicable, optimized for loading whole channel images, force clear the actor memory
+        #If a simulation or post-processing, read all the sample data and save in hdf5 if applicable, optimized for loading whole channel images
         if self.simulationFlag or self.postFlag: 
             self.avgTimeFileLoad = self.readScanData()
             if self.dataMSI: 
@@ -376,7 +373,6 @@ class SampleData:
                     if self.readAllMSI: self.allImagesMax = ray.get(self.reader_MSI_Actor.writeToDisk.remote(self.squareDim))
                     del self.reader_MSI_Actor, self.mzOriginalIndices_id, self.mzRanges_id
                     if self.sampleType == 'DESI': del self.mzFinalGrid_id, self.chanFinalGrid_id
-                    gc.collect()
                 else:
                     if self.readAllMSI: 
                         self.allImagesMax = np.max(self.allImages, axis=(1,2))
@@ -462,7 +458,7 @@ class SampleData:
                 elif 'imzML' in extensions: self.lineExt = '.imzML'
                 else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
             elif self.sampleType == 'IMAGE':
-                if 'png' in extensions: self.lineExt = '.png'
+                if 'png' in extensions: self.lineExt = '.tiff'
                 elif 'jpg' in extensions: self.lineExt = '.jpg'
                 elif 'tiff' in extensions: self.lineExt = '.tiff'
                 else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
@@ -503,7 +499,7 @@ class SampleData:
                 _ = ray.get(self.reader_MSI_Actor.setCoordinates.remote(coordinates))
                 _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.useAlphaTims, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.overwriteAllChanFiles) for indexes in np.array_split(np.arange(0, len(coordinates)), numberCPUS)])
             
-            #Close the MSI file
+            #Close the file
             del data
         
         #If DESI, each file corresponds to a full line of data
@@ -602,7 +598,7 @@ class SampleData:
                         
                         #Close the file; (Do not use multiplierz function: data.close() - it's really slow and unclear why
                         del data
-            
+
             #Otherwise read data in parallel and perform remaining interpolations of any remaining m/z data to regular grid in serial (parallel operation is too memory intensive)
             else:
                 _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.useAlphaTims, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.overwriteAllChanFiles, self.mzFinal, self.mzFinalGrid_id, self.chanValues, self.chanFinalGrid_id, self.impFlag, self.postFlag, impOffset, scanMethod, lineMethod, self.physicalLineNums, self.ignoreMissingLines, self.missingLines, self.unorderedNames) for indexes in np.array_split(np.arange(0, len(scanFileNames)), numberCPUS)])
@@ -674,7 +670,7 @@ class Sample:
     #Measure selected locations, computing reconstructions and E/RD as applicable for determination of future sampling locations
     def performMeasurements(self, sampleData, tempScanData, result, newIdxs, model, cValue, updateRD):
         
-        #Ensure newIdxs are indexible in 2 dimensions and update mask; post-processing will send empty set
+        #Ensure newIdxs are indexible in 2 dimensions and update mask; post-processing will send an empty set
         if not sampleData.postFlag:
             newIdxs = np.atleast_2d(newIdxs)
             self.mask[newIdxs[:,0], newIdxs[:,1]] = 1
@@ -738,30 +734,72 @@ class Sample:
             #Determine neighbor information for unmeasured locations
             if len(tempScanData.squareUnMeasuredIdxs) > 0: findNeighbors(tempScanData)
             else: tempScanData.neighborIndices, tempScanData.neighborWeights, tempScanData.neighborDistances = [], [], []
-        
-        #If not just updating the RD, then compute reconstructions (using square dimensionality), resizing to physical dimensions for DESI
+    
+        #If not just updating the RD
         if not updateRD:
-            t0_computeRecon = time.time()
+            t0_compute = time.time()
+            
+            #Resize DESI data to square dimensions for processing
             if sampleData.sampleType == 'DESI':
-                self.squareSumReconImage = computeReconIDW(resize(self.sumImage, tuple(sampleData.squareDim), order=0), tempScanData)
-                self.squareChanReconImages = computeReconIDW(np.moveaxis(resize(np.moveaxis(self.chanImages, 0, -1), tuple(sampleData.squareDim), order=0), -1, 0), tempScanData)
+                self.squareSumReconImage = resize(self.sumImage, tuple(sampleData.squareDim), order=0)
+                self.squareChanReconImages = np.moveaxis(resize(np.moveaxis(self.chanImages, 0, -1), tuple(sampleData.squareDim), order=0), -1, 0)
+            else: 
+                self.squareSumReconImage = self.sumImage
+                self.squareChanReconImages = self.chanImages
+            
+            #GLANDS computes both ERD and reconstruction results
+            if erdModel == 'GLANDS':
+                
+                #Prepare data for processing
+                sumImageStack = prepareInput(self.squareSumReconImage, self.squareMask, sampleData.squareOpticalImage)
+                inputStack = prepareInput(self.squareChanReconImages, self.squareMask, sampleData.squareOpticalImage)
+                
+                #Inference reconstruction for the sum image; if this fails, then the channels are definitely not going to process through the network
+                try: self.squareSumReconImage = ray.get(model.generate.remote(makeCompatible(sumImageStack), True)).copy()
+                except: sampleData.OOM_multipleChannels, sampleData.OOM_singleChannel = True, True
+                
+                #Try inferencing model results for all target channels
+                if not sampleData.OOM_multipleChannels:
+                    try: 
+                        self.squareChanReconImages, self.squareERDs = ray.get(model.generate.remote(makeCompatible(inputStack)))
+                        self.squareChanReconImages, self.squareERDs = self.squareChanReconImages.copy(), self.squareERDs.copy()
+                    except: 
+                        sampleData.OOM_multipleChannels = True
+                        if (len(gpus) > 0): print('\nWarning - Could not inference GLANDS for all channels of sample '+sampleData.name+' simultaneously on system GPU; will try processing channels iteratively.')
+                        if (len(gpus) == 0): print('\nWarning - Could not inference GLANDS for all channels of sample '+sampleData.name+' simultaneously on system; will try processing channels iteratively.')
+                
+                #If multiple channels causes an OOM, then try running each channel's data through on its own
+                if sampleData.OOM_multipleChannels and not sampleData.OOM_singleChannel: 
+                    try: 
+                        for chanNum in range(0, len(self.squareERDs)):
+                            self.squareChanReconImages[chanNum], self.squareERDs[chanNum] = ray.get(model.generate.remote(makeCompatible(inputStack[chanNum])))
+                            self.squareChanReconImages[chanNum], self.squareERDs[chanNum] = self.squareChanReconImages[chanNum].copy(), self.squareERDs[chanNum].copy()
+                    except: sampleData.OOM_singleChannel = True
+                
+                #If an OOM occured for both mutiple and single channel inferencing, then exit; need to either restart program with no GPUs, or there isn't enough system RAM
+                if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(gpus) > 0): sys.exit('\nError - Sample '+sampleData.name+' dimensions are too high for GLANDS inferencing on system GPU; please try disabling the GPU in the CONFIG.')
+                if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(gpus) == 0): sys.exit('\nError - Sample '+sampleData.name+' dimensions are too high for GLANDS inferencing on this system by the loaded model.')
+                
+            #SLADS/DLADS compute reconstruction data
+            else:
+                self.squareSumReconImage = computeReconIDW(self.squareSumReconImage, tempScanData)
+                self.squareChanReconImages = computeReconIDW(self.squareChanReconImages, tempScanData)
+                
+            #Resize DESI reconstruction results back to physical dimensions and copy back original measured values to reconstructions
+            if sampleData.sampleType == 'DESI':
                 self.sumReconImage = resize(self.squareSumReconImage, tuple(sampleData.finalDim), order=0)
                 self.chanReconImages = np.moveaxis(resize(np.moveaxis(self.squareChanReconImages , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)
-            else:
-                self.squareSumReconImage = computeReconIDW(self.sumImage, tempScanData)
-                self.squareChanReconImages = computeReconIDW(self.chanImages, tempScanData)
-                self.sumReconImage = self.squareSumReconImage
-                self.chanReconImages = self.squareChanReconImages
-                
-            #Copy back the original measured values to the reconstructions (only needed for DESI)
-            if sampleData.sampleType == 'DESI':
                 self.measuredIdxs = np.transpose(np.where(self.mask==1))
                 self.chanReconImages[:, self.measuredIdxs[:,0], self.measuredIdxs[:,1]] = self.chanImages[:, self.measuredIdxs[:,0], self.measuredIdxs[:,1]]
                 self.sumReconImage[self.measuredIdxs[:,0], self.measuredIdxs[:,1]] = self.sumImage[self.measuredIdxs[:,0], self.measuredIdxs[:,1]]
+            else:
+                self.sumReconImage = self.squareSumReconImage
+                self.chanReconImages = self.squareChanReconImages
             
-            t1_computeRecon = time.time()
-            result.avgTimesComputeRecon.append(t1_computeRecon-t0_computeRecon)
-            
+            t1_compute = time.time()
+            if erdModel == 'GLANDS': result.avgTimesComputeIter.append(t1_compute-t0_compute)
+            else: result.avgTimesComputeRecon.append(t1_compute-t0_compute)
+        
         #Compute feature information for for training/utilizing SLADS models
         if (sampleData.datagenFlag or ((erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net')) and not sampleData.bestCFlag and not sampleData.oracleFlag) and len(tempScanData.squareUnMeasuredIdxs) > 0: 
             t0_computePoly = time.time()
@@ -784,21 +822,7 @@ class Sample:
         elif sampleData.oracleFlag or sampleData.bestCFlag:
         
             #If this is a full measurement step, (i.e. whenever the reconstruction(s) are updated) compute the new RDPP
-            if not updateRD: 
-            
-                #If dataAdjust is enabled, and using DLADS or GLANDS, then can optionally rescale RDPP computation inputs to between 0 and 1 or standardize them
-                if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
-                    minValues, maxValues = np.min(sampleData.squareChanImages, axis=(1,2)), np.max(sampleData.squareChanImages, axis=(1,2))
-                    minMaxDiffs = (maxValues-minValues)
-                    tempA = (np.moveaxis(sampleData.squareChanImages, 0, -1)-minValues)
-                    tempB = (np.moveaxis(self.squareChanReconImages, 0, -1)-minValues)
-                    self.RDPPs = np.moveaxis(abs(np.divide(tempA, minMaxDiffs, out=np.zeros_like(tempA), where=minMaxDiffs!=0)-np.divide(tempB, minMaxDiffs, out=np.zeros_like(tempB), where=minMaxDiffs!=0)), -1, 0) 
-                elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
-                    meanValues, stdValues =  np.mean(sampleData.squareChanImages, axis=(1,2)), np.std(sampleData.squareChanImages, axis=(1,2))
-                    tempA = (np.moveaxis(sampleData.squareChanImages, 0, -1)-meanValues)
-                    tempB = (np.moveaxis(self.squareChanReconImages, 0, -1)-meanValues)
-                    self.RDPPs = np.moveaxis(abs(np.divide(tempA, stdValues, out=np.zeros_like(tempA), where=stdValues!=0)-np.divide(tempB, stdValues, out=np.zeros_like(tempB), where=stdValues!=0)), -1, 0) 
-                else: self.RDPPs = abs(sampleData.squareChanImages-self.squareChanReconImages)
+            if not updateRD: self.RDPPs = abs(sampleData.squareChanImages-self.squareChanReconImages)
         
             #Compute/Update the RD and use it in place of an ERD
             t0_computeRD = time.time()
@@ -809,12 +833,60 @@ class Sample:
             self.squareERD, self.squareERDs = self.squareRD, self.squareRDs
             self.ERD, self.ERDs = self.RD, self.RDs
         
-        #If there are unmeasured locations left and the ground-truth data isn't known, compute and process the ERD
-        else: 
+        #If using SLADS/DLADS and there are unmeasured locations left and the ground-truth data isn't known, compute and process the ERD
+        elif erdModel != 'GLANDS': 
             t0_computeERD = time.time()
-            computeERD(self, sampleData, tempScanData, model)
+            
+            #Compute the ERD with the prescribed model; if configured to, only use a single channel
+            if not chanSingle:
+                
+                #Prepare model inputs
+                if erdModel == 'DLADS': inputStack = prepareInput(self.squareChanReconImages, self.squareMask, sampleData.squareOpticalImage)
+                
+                if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
+                    for chanNum in range(0, len(self.squareERDs)): self.squareERDs[chanNum, tempScanData.squareUnMeasuredIdxs[:, 0], tempScanData.squareUnMeasuredIdxs[:, 1]] = ray.get(model.generateERD.remote(self.polyFeatures[chanNum]))
+                elif erdModel == 'DLADS': 
+                    
+                    #First try inferencing all target channels at the same time 
+                    if not sampleData.OOM_multipleChannels:
+                        try: self.squareERDs = ray.get(model.generate.remote(inputStack)).copy()
+                        except: 
+                            sampleData.OOM_multipleChannels = True
+                            if (len(gpus) > 0): print('\nWarning - Could not inference ERD for all channels of sample '+sampleData.name+' simultaneously on system GPU; will try processing channels iteratively.')
+                            if (len(gpus) == 0): print('\nWarning - Could not inference ERD for all channels of sample '+sampleData.name+' simultaneously on system; will try processing channels iteratively.')
+                    
+                    #If multiple channels causes an OOM, then try running each channel through on its own
+                    if sampleData.OOM_multipleChannels and not sampleData.OOM_singleChannel: 
+                        
+                        try: self.squareERDs = np.concatenate([ray.get(model.generate.remote(inputStack[chanNum])).copy() for chanNum in range(0, len(self.squareERDs))])
+                        except: sampleData.OOM_singleChannel = True
+                    
+                    #If an OOM occured for both mutiple and single channel inferencing, then exit; need to either restart program with no GPUs, or there isn't enough system RAM
+                    if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(gpus) > 0): sys.exit('\nError - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on system GPU; please try disabling the GPU in the CONFIG.')
+                    if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(gpus) == 0): sys.exit('\nError - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on this system by the loaded model.')
+            
+            else:
+                if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
+                    ERDValues = ray.get(model.generate.remote(self.polyFeatures[0]))
+                    self.squareERDs[:, tempScanData.squareUnMeasuredIdxs[:, 0], tempScanData.squareUnMeasuredIdxs[:, 1]] = np.repeat(np.expand_dims(ERDValues, 0), len(self.squareERDs), 0)
+                elif erdModel == 'DLADS': 
+                    self.squareERDs = np.repeat(ray.get(model.generate.remote(inputStack[0])).copy(), len(self.squareERDs), 0)
+            
             t1_computeERD = time.time()
             result.avgTimesComputeERD.append((t1_computeERD-t0_computeERD)+polyComputeTime)
+    
+        #Set any negative/nan/inf values to 0 and average across all channels
+        self.squareERDs[self.squareERDs<0] = 0
+        self.squareERDs = np.nan_to_num(self.squareERDs, nan=0, posinf=0, neginf=0)
+        self.squareERD = np.mean(self.squareERDs, axis=0)
+        
+        #Resize as needed according to data type
+        if sampleData.sampleType == 'DESI':
+            self.ERD = resize(self.squareERD, tuple(sampleData.finalDim), order=0)
+            self.ERDs = np.moveaxis(resize(np.moveaxis(self.squareERDs , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)
+        else:
+            self.ERD = self.squareERD
+            self.ERDs = self.squareERDs
         
         #Duplicate the per-channel E/RDs for processing, masking to just the unmeasured locations
         self.processedERDs = copy.deepcopy(self.ERDs)*(1-self.mask)
@@ -848,24 +920,27 @@ class Sample:
         
 #Sample scanning progress and final results processing
 class Result:
-    def __init__(self, sampleData, dir_Results, cValue):
+    def __init__(self, sampleData, dir_Results, cValue, model):
         self.startTime = time.time()
         self.finalTime = time.time()
         self.sampleData = sampleData
         self.dir_Results = dir_Results
         self.cValue = cValue
+        self.model = model
         self.samples = []
         self.cSelectionList = []
         self.percsMeasured = []
         self.avgTimesComputeRD = []
         self.avgTimesComputeERD = []
         self.avgTimesComputeRecon = []
+        self.avgTimesComputeIter = []
         self.avgTimesFileLoad = []
         self.lastMask = None
         self.avgTimeComputeRD = 0
         self.avgTimeComputeERD = 0
         self.avgTimeComputeRecon = 0
         self.avgTimeFileLoad = 0
+        self.avgTimeComputeIter = 0
         
         #If there is to be a results directory, then ensure it is setup
         if self.dir_Results != None:
@@ -892,10 +967,8 @@ class Result:
         if self.sampleData.dataMSI and self.sampleData.simulationFlag and self.sampleData.liveOutputFlag:
             
             #If operating in parallel, create actors for reconstruction and load portions of the data into each, otherwise load data into main memory
-            if parallelization:
-                self.recon_Actors = [Recon_Actor.remote(indexes, self.sampleData.sampleType, self.sampleData.squareDim, self.sampleData.finalDim, self.sampleData.allImagesMax) for indexes in np.array_split(np.arange(0, len(self.sampleData.mzFinal)), numberCPUS)]
-                #If performing a non-training simulation, then potentially could pass a ray object id rather than reading in from hdf5...
-                #_ = [ray.get(reconIDW_Actor.setupFromShared.remote(self.allImages_id)) for reconIDW_Actor in reconIDW_Actors]
+            if parallelization and erdModel != 'GLANDS':
+                self.recon_Actors = [Recon_Actor.remote(indexes, self.sampleData.sampleType, self.sampleData.squareDim, self.sampleData.finalDim, self.sampleData.allImagesMax, self.sampleData.allImagesPath, self.sampleData.squareAllImagesPath, self.sampleData.squareOpticalImage, erdModel) for indexes in np.array_split(np.arange(0, len(self.sampleData.mzFinal)), numberCPUS)]
             else:
                 self.sampleData.allImagesFile = h5py.File(self.sampleData.allImagesPath, 'a')
                 self.sampleData.allImages = self.sampleData.allImagesFile['allImages'][:]
@@ -933,7 +1006,7 @@ class Result:
         #Store the final scan time if run has completed
         if completedRunFlag: self.finalTime = time.time()-self.startTime
     
-    #For a given measurement step find PSNR/SSIM of reconstructions, compute the RD, find PSNR of ERD
+    #For a given measurement step find PSNR/SSIM of reconstructions; if applicable: compute the RD and/or find metrics for ERD
     def extractSimulationData(self, sample, lastReconOnly=False):
         
         #Create a segmented storage object for variables that must be referenced
@@ -943,43 +1016,51 @@ class Result:
         tempScanData.squareMeasuredIdxs = np.transpose(np.where(sample.squareMask==1))
         if self.sampleData.useMaskFOV: tempScanData.squareUnMeasuredIdxs = np.transpose(np.where((sample.squareMask==0) & (self.sampleData.squareMaskFOV==1)))
         else: tempScanData.squareUnMeasuredIdxs = np.transpose(np.where(sample.squareMask==0))
-                
+        
         #Determine neighbor information for unmeasured locations
         if len(tempScanData.squareUnMeasuredIdxs) > 0: findNeighbors(tempScanData)
         else: tempScanData.neighborIndices, tempScanData.neighborWeights, tempScanData.neighborDistances = [], [], []
         
-        #Find PSNR/SSIM scores for all channel reconstructions
+        #Find PSNR/SSIM scores for channel reconstructions
         if not lastReconOnly:
             sample.chanImagesPSNRList = [compare_psnr(self.sampleData.chanImages[index], sample.chanReconImages[index], data_range=self.sampleData.chanImagesMax[index]) for index in range(0, len(self.sampleData.chanImages))]
             sample.sumImagePSNR = compare_psnr(self.sampleData.sumImage, sample.sumReconImage, data_range=np.max(self.sampleData.sumImage))
             sample.chanImagesSSIMList = [compare_ssim(self.sampleData.chanImages[index], sample.chanReconImages[index], data_range=self.sampleData.chanImagesMax[index]) for index in range(0, len(self.sampleData.chanImages))]
             sample.sumImageSSIM = compare_ssim(self.sampleData.sumImage, sample.sumReconImage, data_range=np.max(self.sampleData.sumImage))
         
-        #MSI Specific; if enabled then perform and evaluate reconstructions over the whole spectrum for the data known at the given measurement step
+        #MSI specific; if enabled then perform and evaluate reconstructions over the whole spectrum for the data known at the given measurement step
         if (self.sampleData.allChanEvalFlag or lastReconOnly) and self.sampleData.dataMSI:
             
-            #If operating in parallel, utilize actors created in the complete() method, or at initialization for live simulation; for serial, could vectorize, but extremely RAM intensive and usable batch size is unpredictable per system
-            if parallelization:
+            #If operating in parallel, utilize actors created in the complete() method, or at initialization for live simulation; for serial, could vectorize, but extremely RAM intensive and usable batch size is system specific
+            #Consider adding a batch option for GLANDS as parallelized reconsturciton is not an option
+            if parallelization and erdModel != 'GLANDS':
                 tempScanData_id, squareMask_id, mask_id = ray.put(tempScanData), ray.put(sample.squareMask), ray.put(sample.mask)
                 _ = ray.get([recon_Actor.applyMask.remote(squareMask_id) for recon_Actor in self.recon_Actors])
-                _ = ray.get([recon_Actor.computeRecon.remote(tempScanData_id, mask_id) for recon_Actor in self.recon_Actors])
+                _ = ray.get([recon_Actor.computeReconIDW.remote(tempScanData_id, mask_id) for recon_Actor in self.recon_Actors])
                 _ = ray.get([recon_Actor.computeMetrics.remote() for recon_Actor in self.recon_Actors])
                 if not lastReconOnly:
                     sample.allImagesPSNRList = np.concatenate([ray.get(recon_Actor.getPSNR.remote()) for recon_Actor in self.recon_Actors])
                     sample.allImagesSSIMList = np.concatenate([ray.get(recon_Actor.getSSIM.remote()) for recon_Actor in self.recon_Actors])
-                del tempScanData_id, squareMask_id
+                del tempScanData_id, squareMask_id, mask_id
             else:
                 if self.sampleData.sampleType == 'DESI': self.reconImages = self.sampleData.squareAllImages*sample.squareMask
                 else: self.reconImages = self.sampleData.allImages*sample.squareMask
-                self.reconImages = np.array([computeReconIDW(self.reconImages[index], tempScanData) for index in range(0, len(self.reconImages))], dtype=np.float32)
+                if erdModel == 'GLANDS':
+                    inputStack = prepareInput(self.reconImages, samplesquareMask, self.sampleData.squareOpticalImage)
+                    self.reconImages = np.array([ray.get(model.generate.remote(makeCompatible(self.inputStack[index]), True)).copy() for index in range(0, len(self.reconImages))], dtype=np.float32)
+                else:
+                    self.reconImages = np.array([computeReconIDW(self.reconImages[index], tempScanData) for index in range(0, len(self.reconImages))], dtype=np.float32)
                 if self.sampleData.sampleType == 'DESI': self.reconImages = np.moveaxis(resize(np.moveaxis(self.reconImages, 0, -1), tuple(self.sampleData.finalDim), order=0), -1, 0)
                 
-                #Copy back the original measured values to the reconstructions (only needed for DESI)
+                #Copy back the original measured values to the reconstructions
+                #h5py doesn't like fancy indexing that can be done with numpy, so using a multiplication for recombination of known values instead
                 if self.sampleData.sampleType == 'DESI': 
-                    measuredIdxs = np.transpose(np.where(sample.mask==1))
-                    self.reconImages[:, measuredIdxs[:,0], measuredIdxs[:,1]] = self.sampleData.allImages[:, measuredIdxs[:,0], measuredIdxs[:,1]]
+                    self.reconImages = (self.reconImages*sample.mask) + self.sampleData.allImages*(1-sample.mask)
                 
                 if not lastReconOnly:
+                    
+                    #err = np.mean(np.square(self.sampleData.allImages - self.reconImages))
+                    #PSNR = 10*np.log10((np.mean(self.sampleData.allImagesMax) ** 2) / err)
                     sample.allImagesPSNRList = [compare_psnr(self.sampleData.allImages[index], self.reconImages[index], data_range=self.sampleData.allImagesMax[index]) for index in range(0, len(self.sampleData.allImages))]
                     sample.allImagesSSIMList = [compare_ssim(self.sampleData.allImages[index], self.reconImages[index], data_range=self.sampleData.allImagesMax[index]) for index in range(0, len(self.sampleData.allImages))]
         
@@ -987,39 +1068,31 @@ class Result:
         elif not lastReconOnly:
             sample.allImagesPSNRList = sample.chanImagesPSNRList
             sample.allImagesSSIMList = sample.chanImagesSSIMList
-            
-        #Prior to and for model training there is RD, but no ERD
-        if self.sampleData.simulationFlag and not self.sampleData.trainFlag and not lastReconOnly:
-            
-            #Compute RD; if every location has been scanned all positions are zero
-            if len(tempScanData.squareUnMeasuredIdxs) == 0: 
-                sample.squareRD = np.zeros(self.sampleData.squareDim, dtype=np.float32)
-                sample.RD = np.zeros(self.sampleData.finalDim, dtype=np.float32)
-            else: 
-                #If dataAdjust is enabled, and using either DLADS or GLANDS, then can optionally rescale RDPP computation inputs to between 0 and 1 or standardize them
-                if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
-                    minValues, maxValues = np.min(self.sampleData.squareChanImages, axis=(1,2)), np.max(self.sampleData.squareChanImages, axis=(1,2))
-                    minMaxDiffs = (maxValues-minValues)
-                    tempA = (np.moveaxis(self.sampleData.squareChanImages, 0, -1)-minValues)
-                    tempB = (np.moveaxis(sample.squareChanReconImages, 0, -1)-minValues)
-                    sample.RDPPs = np.moveaxis(abs(np.divide(tempA, minMaxDiffs, out=np.zeros_like(tempA), where=minMaxDiffs!=0)-np.divide(tempB, minMaxDiffs, out=np.zeros_like(tempB), where=minMaxDiffs!=0)), -1, 0) 
-                elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
-                    meanValues, stdValues =  np.mean(self.sampleData.squareChanImages, axis=(1,2)), np.std(self.sampleData.squareChanImages, axis=(1,2))
-                    tempA = (np.moveaxis(self.sampleData.squareChanImages, 0, -1)-meanValues)
-                    tempB = (np.moveaxis(sample.squareChanReconImages, 0, -1)-meanValues)
-                    sample.RDPPs = np.moveaxis(abs(np.divide(tempA, stdValues, out=np.zeros_like(tempA), where=stdValues!=0)-np.divide(tempB, stdValues, out=np.zeros_like(tempB), where=stdValues!=0)), -1, 0) 
-                else: sample.RDPPs = abs(self.sampleData.squareChanImages-sample.squareChanReconImages)
-                
-                computeRD(sample, self.sampleData, tempScanData, self.cValue, [])
-
-            #Determine SSIM/PSNR between averaged RD and ERD
-            maxRangeValue = np.max([sample.squareRD, sample.squareERD])
-            sample.ERDPSNR = compare_psnr(sample.squareRD, sample.squareERD, data_range=maxRangeValue)
-            sample.ERDSSIM = compare_ssim(sample.squareRD, sample.squareERD, data_range=maxRangeValue)
+        #Tracer() #Slide6-v2-2 has some inf for PSNR...they are identical...which PSNR can't handle...
+        #Probably got lucky with the MALDI data I think...
         
-            #Resize RD(s) for final visualizations; has to be done here for live output case, but in complete() method otherwise
-            if self.sampleData.liveOutputFlag: self.resizeRD(sample)
+        #GLANDS does not use a ground-truth RD
+        if erdModel != 'GLANDS':
+        
+            #Prior to and for model training there is RD, but no ERD
+            if self.sampleData.simulationFlag and not self.sampleData.trainFlag and not lastReconOnly:
+                
+                #Compute RD; if every location has been scanned all positions are zero
+                if len(tempScanData.squareUnMeasuredIdxs) == 0: 
+                    sample.squareRD = np.zeros(self.sampleData.squareDim, dtype=np.float32)
+                    sample.RD = np.zeros(self.sampleData.finalDim, dtype=np.float32)
+                else: 
+                    sample.RDPPs = abs(self.sampleData.squareChanImages-sample.squareChanReconImages)
+                    computeRD(sample, self.sampleData, tempScanData, self.cValue, [])
 
+                #Determine SSIM/PSNR between averaged RD and ERD
+                maxRangeValue = np.max([sample.squareRD, sample.squareERD])
+                sample.ERDPSNR = compare_psnr(sample.squareRD, sample.squareERD, data_range=maxRangeValue)
+                sample.ERDSSIM = compare_ssim(sample.squareRD, sample.squareERD, data_range=maxRangeValue)
+            
+                #Resize RD(s) for final visualizations; has to be done here for live output case, but in complete() method otherwise
+                if self.sampleData.liveOutputFlag: self.resizeRD(sample)
+        
     #Resize RD(s) for final visualization if DESI, otherwise set variable name 
     def resizeRD(self, sample):
         if self.sampleData.sampleType == 'DESI':
@@ -1029,7 +1102,7 @@ class Result:
             sample.RD = sample.squareRD
             sample.RDs = sample.squareRDs
             
-    #Generate visualiations/metrics as needed at the end of scanning
+    #Generate visualizations/metrics as needed at the end of scanning
     def complete(self):
         
         #If the data was loaded during initialization of the sample data, pull the stored avg. file read time, otherwise compute value
@@ -1040,6 +1113,8 @@ class Result:
         if len(self.avgTimesComputeRecon) > 0: self.avgTimeComputeRecon = np.mean(self.avgTimesComputeRecon)
         if len(self.avgTimesComputeERD) > 0: self.avgTimeComputeERD = np.mean(self.avgTimesComputeERD)
         if len(self.avgTimesComputeRD) > 0: self.avgTimeComputeRD = np.mean(self.avgTimesComputeRD)
+        if erdModel != 'GLANDS' and (len(self.avgTimesComputeRecon) > 0) and (len(self.avgTimesComputeERD) > 0): self.avgTimesComputeIter = self.avgTimesComputeRecon + self.avgTimesComputeERD
+        if len(self.avgTimesComputeIter) > 0: self.avgTimeComputeIter = np.mean(self.avgTimesComputeIter)
         
         #If performing a benchmark where processing is not needed, return before processing
         if benchmarkNoProcessing: return
@@ -1051,13 +1126,11 @@ class Result:
         if self.sampleData.dataMSI:
         
             #If all channel reconstructions are needed, then setup actors if in parallel, or load data into main memory
+            #For GLANDS will have to do reconstructions and evaluations outside of the actor...
+            #Tracer()
             if self.sampleData.allChanEvalFlag or (self.sampleData.imzMLExportFlag and not self.sampleData.trainFlag):
-                if parallelization:
-                    self.recon_Actors = [Recon_Actor.remote(indexes, self.sampleData.sampleType, self.sampleData.squareDim, self.sampleData.finalDim, self.sampleData.allImagesMax) for indexes in np.array_split(np.arange(0, len(self.sampleData.mzFinal)), numberCPUS)]
-                    _ = ray.get([recon_Actor.setup.remote(self.sampleData.allImagesPath, self.sampleData.squareAllImagesPath) for recon_Actor in self.recon_Actors])
-                    #_ = [ray.get(recon_Actor.setup.remote(self.sampleData.allImagesPath, self.sampleData.squareAllImagesPath)) for recon_Actor in self.recon_Actors]
-                    #If performing a non-training simulation, then potentially could pass a ray object id rather than reading in from hdf5...
-                    #_ = [ray.get(reconIDW_Actor.setupFromShared.remote(self.allImages_id)) for reconIDW_Actor in reconIDW_Actors]
+                if parallelization and erdModel != 'GLANDS':
+                    self.recon_Actors = [Recon_Actor.remote(indexes, self.sampleData.sampleType, self.sampleData.squareDim, self.sampleData.finalDim, self.sampleData.allImagesMax, self.sampleData.allImagesPath, self.sampleData.squareAllImagesPath, self.sampleData.squareOpticalImage, erdModel) for indexes in np.array_split(np.arange(0, len(self.sampleData.mzFinal)), numberCPUS)]
                 else:
                     self.sampleData.allImagesFile = h5py.File(self.sampleData.allImagesPath, 'r')
                     self.sampleData.allImages = self.sampleData.allImagesFile['allImages']
@@ -1082,7 +1155,7 @@ class Result:
                 coordinates = list(map(tuple, list(np.ndindex(tuple(self.sampleData.finalDim)))))
                 
                 #Export all measured, reconstructed data in .imzML format
-                if parallelization: self.reconImages = np.concatenate([ray.get(recon_Actor.getReconImages.remote()) for recon_Actor in self.recon_Actors])
+                if parallelization and erdModel != 'GLANDS': self.reconImages = np.concatenate([ray.get(recon_Actor.getReconImages.remote()) for recon_Actor in self.recon_Actors])
                 writer = ImzMLWriter(self.dir_sampleResults+self.sampleData.name+'_reconstructed', intensity_dtype=np.float32, mz_dtype=np.float32, spec_type='profile', mode='processed')
                 _  = [writer.addSpectrum(self.sampleData.mzFinal, self.reconImages[:, coord[0], coord[1]], (coord[1]+1, coord[0]+1)) for coord in coordinates]
                 writer.close()
@@ -1097,20 +1170,18 @@ class Result:
             
             #If all channel evaluation or imzMLExportFlag, close all images file reference if applicable, remove all recon images from memory, purge/reset ray
             if self.sampleData.allChanEvalFlag or self.sampleData.imzMLExportFlag:
-                if not parallelization:
+                if parallelization and erdModel != 'GLANDS':
+                    _ = [ray.get(recon_Actor.closeAllImages.remote()) for recon_Actor in self.recon_Actors]
+                    self.recon_Actors.clear()
+                    del self.recon_Actors
+                    resetRay(numberCPUS)
+                else:
                     self.sampleData.allImagesFile.close()
                     del self.sampleData.allImages, self.sampleData.allImagesFile
                     if self.sampleData.sampleType == 'DESI':
                         self.sampleData.squareAllImagesFile.close()
                         del self.sampleData.squareAllImages, self.sampleData.squareAllImagesFile
-                else:
-                    _ = [ray.get(recon_Actor.closeAllImages.remote()) for recon_Actor in self.recon_Actors]
-                    self.recon_Actors.clear()
-                    del self.recon_Actors
-                    resetRay(numberCPUS) #adding this might help with the crash at 1138?
-                    #otherwise need to swap out starmap for the alternate solution used in v0.10.0...
-                    #nope, doesn't solve the problem...
-                
+        
         #If this is a simulation, not for training database generation, then summarize PSNR/SSIM scores across all measurement steps
         if self.sampleData.simulationFlag and not self.sampleData.datagenFlag:
             self.chanAvgPSNRList = [np.nanmean(sample.chanImagesPSNRList) for sample in self.samples]
@@ -1123,8 +1194,8 @@ class Result:
                 self.allAvgPSNRList = [np.nanmean(sample.allImagesPSNRList) for sample in self.samples]
                 self.allAvgSSIMList = [np.nanmean(sample.allImagesSSIMList) for sample in self.samples]
 
-        #If ERD and RD were computed (i.e., when not a training run) summarize ERD PSNR/SSIM scores
-        if self.sampleData.simulationFlag and not self.sampleData.trainFlag: 
+        #If ERD and RD were computed (i.e., when not a training run, nor GLANDS) summarize ERD PSNR/SSIM scores
+        if erdModel != 'GLANDS' and self.sampleData.simulationFlag and not self.sampleData.trainFlag: 
             self.ERDPSNRList = [sample.ERDPSNR for sample in self.samples]
             self.ERDSSIMList = [sample.ERDSSIM for sample in self.samples]
         
@@ -1134,17 +1205,23 @@ class Result:
             #generate visualizations if they were not created during operation
             if not self.sampleData.liveOutputFlag:
                 
-                #Resize RDs
-                for sample in self.samples: self.resizeRD(sample)
+                #For non-GLANDS models, resize RDs
+                if erdModel != 'GLANDS':
+                    for sample in self.samples: self.resizeRD(sample)
                 
-                if parallelization:
+                if parallelization: 
+                    
+                    #Temporarily need to turn off automatic garbage collection, which in parallel can generate exceptions for removal of figure weak references
+                    #matplotlib\cbook\__init__.py -> _remove_proxy -> del self.callbacks[signal][cid] -> KeyError: 'changed'
+                    #Exception ignored -> Python38\lib\weakref.py -> in _cb
+                    gc.disable()
                     
                     #Setup an actor to hold global sampling progress across multiple processes
                     samplingProgress_Actor = SamplingProgress_Actor.remote()
                     
                     #Setup visualization jobs and determine total amount of work that is going to be done
                     samples_id = ray.put(self.samples)
-                    futures = [visualizeStep_parhelper.remote(samples_id, indexes, self.sampleData, self.dir_progression, self.dir_chanProgressions, parallelization, samplingProgress_Actor) for indexes in np.array_split(np.arange(0, len(self.samples)), numberCPUS)]
+                    futures = [visualizeStep_parhelper.remote(samples_id, indexes, self.sampleData, self.dir_progression, self.dir_chanProgressions, samplingProgress_Actor) for indexes in np.array_split(np.arange(0, len(self.samples)), numberCPUS)]
                     maxProgress = len(self.samples)
                     
                     #Initialize a global progress bar and start parallel visualization operations
@@ -1161,18 +1238,22 @@ class Result:
                     pbar.close()
                     del samples_id
                     resetRay(numberCPUS)
+                    
+                    #Turn automatic garbage collection back on
+                    gc.enable()
+                    
                 else: 
                     _ = [visualizeStep(sample, self.sampleData, self.dir_progression, self.dir_chanProgressions) for sample in tqdm(self.samples, desc='Visualizing', leave=False, ascii=asciiFlag)]
 
             #Combine total progression and individual channel images into animations
-            dataFileNames = natsort.natsorted(glob.glob(self.dir_progression + 'progression_*.png'))
+            dataFileNames = natsort.natsorted(glob.glob(self.dir_progression + 'progression_*.tiff'))
             height, width, layers = cv2.imread(dataFileNames[0]).shape
             animation = cv2.VideoWriter(self.dir_videos + 'progression.avi', cv2.VideoWriter_fourcc(*'MJPG'), 1, (width, height))
             for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
             animation.release()
             animation = None
             for chanNum in tqdm(range(0, len(self.sampleData.chanValues)), desc='Channel Videos', leave = False, ascii=asciiFlag): 
-                dataFileNames = natsort.natsorted(glob.glob(self.dir_chanProgressions[chanNum] + 'progression_*.png'))
+                dataFileNames = natsort.natsorted(glob.glob(self.dir_chanProgressions[chanNum] + 'progression_*.tiff'))
                 height, width, layers = cv2.imread(dataFileNames[0]).shape
                 animation = cv2.VideoWriter(self.dir_videos + str(self.sampleData.chanValues[chanNum]) + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 1, (width, height))
                 for specFileName in dataFileNames: animation.write(cv2.imread(specFileName))
@@ -1180,7 +1261,7 @@ class Result:
                 animation = None
 
 #Visualize single sample progression step
-def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, parallelization=False, samplingProgress_Actor=None):
+def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions):
 
     #Turn percent measured into a string
     percMeasured = "{:.2f}".format(sample.percMeasured)
@@ -1189,6 +1270,7 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
     if sampleData.impFlag or sampleData.postFlag: knownGT, knownRD, knownERD = False, False, True
     elif sampleData.trainFlag: knownGT, knownRD, knownERD = True, True, False
     elif sampleData.simulationFlag: knownGT, knownRD, knownERD = True, True, True
+    if erdModel == 'GLANDS': knownRD = False
     
     #Turn ground-truth metrics into strings and set flag to indicate availability
     if knownGT:
@@ -1311,31 +1393,31 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
         #Save
         f.tight_layout()
         if not(sampleData.impFlag or sampleData.postFlag): f.subplots_adjust(top = 0.85)
-        saveLocation = dir_chanProgressions[chanNum] + 'progression_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) +'.png'
+        saveLocation = dir_chanProgressions[chanNum] + 'progression_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) +'.tiff'
         plt.savefig(saveLocation)
-        plt.close()
+        plt.close(f)
 
         #Do borderless saves for each channel image here; skip mask/progMap as they will be produced in the progression output
         if knownERD:
-            saveLocation = dir_chanProgressions[chanNum] + 'erd_original_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-            borderlessPlot(sample.ERDs[chanNum], saveLocation, aspect='auto', cmap='viridis', vmin=0)
+            saveLocation = dir_chanProgressions[chanNum] + 'erd_original_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.tiff'
+            visualizeBorderless(sample.ERDs[chanNum], saveLocation, cmap='viridis', vmin=0)
             
-            saveLocation = dir_chanProgressions[chanNum] + 'erd_processed_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-            borderlessPlot(np.nan_to_num(sample.processedERDs[chanNum], nan=0, posinf=0, neginf=0), saveLocation, aspect='auto', cmap='viridis', vmin=0)
+            saveLocation = dir_chanProgressions[chanNum] + 'erd_processed_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.tiff'
+            visualizeBorderless(np.nan_to_num(sample.processedERDs[chanNum], nan=0, posinf=0, neginf=0), saveLocation, cmap='viridis', vmin=0)
         
         if knownRD:
-            saveLocation = dir_chanProgressions[chanNum] + 'rd_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-            borderlessPlot(sample.RDs[chanNum], saveLocation, aspect='auto', cmap='viridis', vmin=0)
+            saveLocation = dir_chanProgressions[chanNum] + 'rd_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.tiff'
+            visualizeBorderless(sample.RDs[chanNum], saveLocation, cmap='viridis', vmin=0)
         
         if knownGT:
-            saveLocation = dir_chanProgressions[chanNum] + 'groundTruth_channel_' + chanLabel + '.png'
-            borderlessPlot(sampleData.chanImages[chanNum], saveLocation, cmap='hot', aspect='auto', vmin=chanMinValue, vmax=chanMaxValue)
+            saveLocation = dir_chanProgressions[chanNum] + 'groundTruth_channel_' + chanLabel + '.tiff'
+            visualizeBorderless(sampleData.chanImages[chanNum], saveLocation, cmap='hot', vmin=chanMinValue, vmax=chanMaxValue)
 
-        saveLocation = dir_chanProgressions[chanNum] + 'reconstruction_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        borderlessPlot(sample.chanReconImages[chanNum], saveLocation, cmap='hot', aspect='auto', vmin=chanMinValue, vmax=chanMaxValue)
+        saveLocation = dir_chanProgressions[chanNum] + 'reconstruction_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.tiff'
+        visualizeBorderless(sample.chanReconImages[chanNum], saveLocation, cmap='hot', vmin=chanMinValue, vmax=chanMaxValue)
         
-        saveLocation = dir_chanProgressions[chanNum] + 'measured_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        borderlessPlot(sample.chanImages[chanNum]*sample.mask, saveLocation, cmap='hot', aspect='auto', vmin=chanMinValue, vmax=chanMaxValue)
+        saveLocation = dir_chanProgressions[chanNum] + 'measured_channel_' + chanLabel + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.tiff'
+        visualizeBorderless(sample.chanImages[chanNum]*sample.mask, saveLocation, cmap='hot', vmin=chanMinValue, vmax=chanMaxValue)
         
     #For the overall progression, get min/max of the ground-truth sum image for visualization
     sumImageMinValue, sumImageMaxValue = np.min(sampleData.sumImage), np.max(sampleData.sumImage)
@@ -1417,52 +1499,51 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions, par
     #Save
     f.tight_layout()
     f.subplots_adjust(top = 0.85)
-    saveLocation = dir_progression + 'progression' + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '_avg.png'
+    saveLocation = dir_progression + 'progression' + '_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '_avg.tiff'
     plt.savefig(saveLocation)
-    plt.close()
+    plt.close(f)
 
     #Borderless saves
     if knownERD:
-        saveLocation = dir_progression + 'ERD_original_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        borderlessPlot(sample.ERD, saveLocation, aspect='auto', cmap='viridis', vmin=0)
+        saveLocation = dir_progression + 'ERD_original_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.tiff'
+        visualizeBorderless(sample.ERD, saveLocation, cmap='viridis', vmin=0)
         
-        saveLocation = dir_progression + 'ERD_processed_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        borderlessPlot(np.nan_to_num(sample.processedERD, nan=0, posinf=0, neginf=0), saveLocation, aspect='auto', cmap='viridis', vmin=0)
+        saveLocation = dir_progression + 'ERD_processed_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.tiff'
+        visualizeBorderless(np.nan_to_num(sample.processedERD, nan=0, posinf=0, neginf=0), saveLocation, cmap='viridis', vmin=0)
     
     if knownRD:
-        saveLocation = dir_progression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        borderlessPlot(sample.RD, saveLocation, aspect='auto', cmap='viridis', vmin=0)
+        saveLocation = dir_progression + 'RD_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.tiff'
+        visualizeBorderless(sample.RD, saveLocation, cmap='viridis', vmin=0)
         
     if knownGT:
-        saveLocation = dir_progression + 'groundTruth_sumImage_' + chanLabel + '.png'
-        borderlessPlot(sampleData.sumImage, saveLocation, cmap='hot', aspect='auto', vmin=sumImageMinValue, vmax=sumImageMaxValue)
+        saveLocation = dir_progression + 'groundTruth_sumImage_' + chanLabel + '.tiff'
+        visualizeBorderless(sampleData.sumImage, saveLocation, cmap='hot', vmin=sumImageMinValue, vmax=sumImageMaxValue)
     
-    saveLocation = dir_progression + 'reconstruction_sumImage' + '_iter_' + str(sample.iteration) +  '_perc_' + str(sample.percMeasured) + '.png'
-    borderlessPlot(sample.sumReconImage, saveLocation, cmap='hot', aspect='auto', vmin=sumImageMinValue, vmax=sumImageMaxValue)
+    saveLocation = dir_progression + 'reconstruction_sumImage' + '_iter_' + str(sample.iteration) +  '_perc_' + str(sample.percMeasured) + '.tiff'
+    visualizeBorderless(sample.sumReconImage, saveLocation, cmap='hot', vmin=sumImageMinValue, vmax=sumImageMaxValue)
     
-    saveLocation = dir_progression + 'measured_sumImage_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-    borderlessPlot(sample.sumImage*sample.mask, saveLocation, cmap='hot', aspect='auto', vmin=sumImageMinValue, vmax=sumImageMaxValue)
+    saveLocation = dir_progression + 'measured_sumImage_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.tiff'
+    visualizeBorderless(sample.sumImage*sample.mask, saveLocation, cmap='hot', vmin=sumImageMinValue, vmax=sumImageMaxValue)
     
-    saveLocation = dir_progression + 'mask_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-    borderlessPlot(sample.mask, saveLocation, cmap='gray', aspect='auto', vmin=0, vmax=1)
+    saveLocation = dir_progression + 'mask_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.tiff'
+    visualizeBorderless(sample.mask, saveLocation, cmap='gray', vmin=0, vmax=1)
     
     if len(sample.progMap.shape)>0:
-        saveLocation = dir_progression + 'progressionMap_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.png'
-        borderlessPlot(sample.progMap+0.5, saveLocation, cmap=cmapProgMap, aspect='auto', vmin=None, vmax=None, norm=normProgMap)
-    
-    if parallelization: _ = ray.get(samplingProgress_Actor.update.remote(1))
+        saveLocation = dir_progression + 'progressionMap_iter_' + str(sample.iteration) + '_perc_' + str(sample.percMeasured) + '.tiff'
+        visualizeBorderless(sample.progMap, saveLocation, cmap=cmapProgMap, vmin=None, vmax=np.nanmax(sample.progMap)+1)
 
 def runSampling(sampleData, cValue, model, percToScan, percToViz, lineVisitAll, dir_Results, tqdmHide, samplingProgress_Actor=None, percProgUpdate=None):
     
     #If in parallel, ignore warnings
-    if parallelization and not debugMode: 
+    if parallelization and not debugMode:
         warnings.filterwarnings("ignore")
         logging.root.setLevel(logging.ERROR)
-
+    
     #Make sure random selection is consistent
-    if consistentSeed: 
-        np.random.seed(0)
-        random.seed(0)
+    if manualSeedValue != -1:
+        torch.manual_seed(manualSeedValue)
+        np.random.seed(manualSeedValue)
+        random.seed(manualSeedValue)
     
     #If groupwise is active, specify how many points should be scanned each step
     if (sampleData.scanMethod == 'pointwise' or sampleData.scanMethod == 'random') and percToScan != None: sampleData.pointsToScan = int(np.ceil(((sampleData.stopPerc/100)*sampleData.area)/(sampleData.stopPerc/percToScan)))
@@ -1481,7 +1562,7 @@ def runSampling(sampleData, cValue, model, percToScan, percToViz, lineVisitAll, 
     completedRunFlag = False
     
     #Create a new result object to hold scanning progression
-    result = Result(sampleData, dir_Results, cValue)
+    result = Result(sampleData, dir_Results, cValue, model)
     
     #Scan initial sets
     for initialSet in sampleData.initialSets: sample.performMeasurements(sampleData, tempScanData, result, initialSet, model, cValue, False)
@@ -1668,100 +1749,19 @@ def computePolyFeatures(sampleData, tempScanData, reconImage):
     
     return polyFeatures
 
-#Prepare data for DLADS or GLANDS model input; if a channel number was given then prepare it on its own, otherwise create a batch for the whole sample
-def prepareInput(sample, sampleData, numChannel=None):
-    
+#Prepare data for DLADS/GLANDS model input
+def prepareInput(inputImages, squareMask, squareOpticalImage=None):
     inputStack = []
-    if numChannel != None:
-        
-        #Normalize/Standardize/Rescale input data as configured
-        inputReconImage = sample.squareChanReconImages[numChannel]
-        if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
-            minValue = np.min(inputReconImage)
-            tempA = (inputReconImage-minValue)
-            tempB = (np.max(inputReconImage)-minValue)
-            inputReconImage = np.divide(tempA, tempB, out=np.zeros_like(tempA), where=tempB!=0)
-        elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
-            tempA = (inputReconImage-np.mean(inputReconImage))
-            tempB = np.std(inputReconImage)
-            inputReconImage = np.divide(tempA, tempB, out=np.zeros_like(tempA), where=tempB!=0)
-        
-        #Add channels to the input stack
-        if 'opticalData' in inputChannels: inputStack.append(sampleData.squareOpticalImage)
-        if 'mask' in inputChannels: inputStack.append(sample.squareMask)
-        if 'reconData' in inputChannels: inputStack.append(inputReconImage*(1-sample.squareMask))
-        if 'measureData' in inputChannels: inputStack.append(inputReconImage*sample.squareMask)
-        return np.dstack(inputStack)
-    
-    else: 
-        
-        #Normalize/Standardize/Rescale input data as configured
-        inputReconImages = np.moveaxis(sample.squareChanReconImages, 0, -1)
-        if dataAdjust == 'rescale' and (erdModel=='DLADS' or erdModel=='GLANDS'):
-            minValues = np.min(inputReconImages, axis=(0,1))
-            tempA = (inputReconImages-minValues)
-            tempB = (np.max(inputReconImages, axis=(0,1))-minValues)
-            inputReconImages = np.divide(tempA, tempB, out=np.zeros_like(tempA), where=tempB!=0)
-        elif dataAdjust == 'standardize' and (erdModel=='DLADS' or erdModel=='GLANDS'):
-            tempA = (inputReconImages-np.mean(inputReconImages))
-            tempB = np.std(inputReconImages)
-            inputReconImages = np.divide(tempA, tempB, out=np.zeros_like(tempA), where=tempB!=0)
-        inputReconImages = np.moveaxis(inputReconImages, -1, 0)
-        
-        #Add channels to the input stack
-        if 'opticalData' in inputChannels: inputStack.append(np.repeat(np.expand_dims(sampleData.squareOpticalImage, 0), len(inputReconImages), axis=0))
-        if 'mask' in inputChannels: inputStack.append(np.repeat(np.expand_dims(sample.squareMask, 0), len(inputReconImages), axis=0))
-        if 'reconData' in inputChannels: inputStack.append(inputReconImages*(1-sample.squareMask))
-        if 'measureData' in inputChannels: inputStack.append(inputReconImages*sample.squareMask)
-        return np.stack(inputStack, axis=-1)
-        
-#Determine the Estimated Reduction in Distortion
-def computeERD(sample, sampleData, tempScanData, model):
-
-    #Compute the ERD with the prescribed model; if configured to, only use a single channel
-    if not chanSingle:
-        if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
-            for chanNum in range(0, len(sample.squareERDs)): sample.squareERDs[chanNum, tempScanData.squareUnMeasuredIdxs[:, 0], tempScanData.squareUnMeasuredIdxs[:, 1]] = ray.get(model.generateERD.remote(sample.polyFeatures[chanNum]))
-        elif erdModel == 'DLADS': 
-            
-            #First try inferencing all m/z channels at the same time 
-            if not sampleData.OOM_multipleChannels:
-                try: sample.squareERDs = ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample, sampleData)))).copy()
-                except: 
-                    sampleData.OOM_multipleChannels = True
-                    if (len(gpus) > 0): print('\nWarning - Could not inference ERD for all channels of sample '+sampleData.name+' simultaneously on system GPU; will try processing channels iteratively.')
-                    if (len(gpus) == 0): print('\nWarning - Could not inference ERD for all channels of sample '+sampleData.name+' simultaneously on system; will try processing channels iteratively.')
-            
-            #If multiple channels causes an OOM, then try running each channel through on its own
-            if sampleData.OOM_multipleChannels and not sampleData.OOM_singleChannel:
-                try: sample.squareERDs = np.asarray([ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample, sampleData, chanNum))))[0,:,:].copy() for chanNum in range(0, len(sample.squareERDs))])
-                except: sampleData.OOM_singleChannel = True
-            
-            #If an OOM occured for both mutiple and single channel inferencing, then exit; need to either restart program with no GPUs, or there isn't enough system RAM
-            if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(gpus) > 0): sys.exit('\nError - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on system GPU; please try disabling the GPU in the CONFIG.')
-            if sampleData.OOM_multipleChannels and sampleData.OOM_singleChannel and (len(gpus) == 0): sys.exit('\nError - Sample '+sampleData.name+' dimensions are too high for the ERD to be inferenced on this system by the loaded model.')
-            
+    if 'measureData' in inputChannels: inputStack.append(inputImages*squareMask)
+    if erdModel != 'GLANDS' and 'reconData' in inputChannels: inputStack.append(inputImages*(1-squareMask))
+    if len(inputImages.shape) >= 3:
+        if 'mask' in inputChannels: inputStack.append(np.repeat(np.expand_dims(squareMask, 0), len(inputImages), axis=0))
+        if 'opticalData' in inputChannels: inputStack.append(np.repeat(np.expand_dims(squareOpticalImage, 0), len(inputImages), axis=0))
     else:
-        if erdModel == 'SLADS-LS' or erdModel == 'SLADS-Net': 
-            ERDValues = ray.get(model.generateERD.remote(sample.polyFeatures[0]))
-            for chanNum in range(0, len(sample.squareERDs)): sample.squareERDs[chanNum, tempScanData.squareUnMeasuredIdxs[:, 0], tempScanData.squareUnMeasuredIdxs[:, 1]] = ERDValues
-        elif erdModel == 'DLADS': 
-            sample.squareERDs[0] = ray.get(model.generateERD.remote(makeCompatible(prepareInput(sample, sampleData, 0))))[0,:,:].copy()
-            for chanNum in range(1, len(sample.squareERDs)): sample.squareERDs[chanNum] = sample.squareERDs[0]
+        if 'mask' in inputChannels: inputStack.append(squareMask)
+        if 'opticalData' in inputChannels: inputStack.append(squareOpticalImage)
+    return np.moveaxis(np.stack(inputStack, axis=-1), -1, 1)
     
-    #Set any negative/nan/inf values to 0 and average across all channels
-    sample.squareERDs[sample.squareERDs<0] = 0
-    sample.squareERDs = np.nan_to_num(sample.squareERDs, nan=0, posinf=0, neginf=0)
-    sample.squareERD = np.mean(sample.squareERDs, axis=0)
-    
-    #Resize as needed according to sample type
-    if sampleData.sampleType == 'DESI':
-        sample.ERD = resize(sample.squareERD, tuple(sampleData.finalDim), order=0)
-        sample.ERDs = np.moveaxis(resize(np.moveaxis(sample.squareERDs , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)
-    else:
-        sample.ERD = sample.squareERD
-        sample.ERDs = sample.squareERDs
-
 #Determine which unmeasured points of a sample should be scanned given the current E/RD
 def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cValue, percToScan):
 
@@ -1771,31 +1771,27 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
     
     elif sampleData.scanMethod == 'pointwise':
     
-        #If performing a groupwise scan, use reconstruction as the measurement value, until reaching target number of points to scan
+        #If performing a groupwise scan
         if percToScan != None:
         
-            #Create a list to hold the chosen scanning locations
-            newIdxs = []
+            #SLADS/DLADS use reconstruction data for temporary measurement values, until specified number of locations have been found
+            if erdModel != 'GLANDS':
+                newIdxs = []
+                while True:
+                    newIdx = sample.unMeasuredIdxs[np.argmax(sample.processedERD[sample.unMeasuredIdxs[:,0], sample.unMeasuredIdxs[:,1]])]
+                    newIdxs.append(newIdx.tolist())
+                    sample.performMeasurements(sampleData, tempScanData, result, newIdx, model, cValue, True)
+                    if ((np.sum(sample.mask)-np.sum(result.lastMask)) >= sampleData.pointsToScan) or (sample.percMeasured >= sampleData.stopPerc) or (np.sum(sample.processedERD) == 0): break
+                newIdxs = np.asarray(newIdxs)
+                
+            #GLANDS chooses all the locations in a single step
+            else:
+                newIdxs = sample.unMeasuredIdxs[np.argsort(sample.processedERD[sample.unMeasuredIdxs[:,0], sample.unMeasuredIdxs[:,1]])[::-1]][:sampleData.pointsToScan].astype(int)
             
-            #Until the percToScan has been reached, substitute reconstruction values for actual measurements
-            while True:
-                
-                #Find next measurement location and store the chosen scanning location for later, actual measurement
-                newIdx = sample.unMeasuredIdxs[np.argmax(sample.processedERD[sample.unMeasuredIdxs[:,0], sample.unMeasuredIdxs[:,1]])]
-                newIdxs.append(newIdx.tolist())
-                
-                #Perform the measurement, using values from reconstruction 
-                sample.performMeasurements(sampleData, tempScanData, result, newIdx, model, cValue, True)
-                
-                #When enough new locations have been determined, break from loop
-                if (np.sum(sample.mask)-np.sum(result.lastMask)) >= sampleData.pointsToScan: break
-                
-            #Convert to array for indexing
-            newIdxs = np.asarray(newIdxs)
+        #Else, for scanning only a single location, identify the unmeasured location with the highest processedERD value
         else:
-            #Identify the unmeasured location with the highest processedERD value; return in a list to ensure it is iterable
             newIdxs = np.asarray([sample.unMeasuredIdxs[np.argmax(sample.processedERD[sample.unMeasuredIdxs[:,0], sample.unMeasuredIdxs[:,1]])].tolist()])
-            
+        
     elif sampleData.scanMethod == 'linewise':
         
         #If all locations on a chosen line should be scanned, select the line with maximum sum physical ERD
@@ -1804,30 +1800,28 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
             indexes = np.sort(np.argsort(sample.processedERD[lineToScanIdx])[::-1])
             newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
         
-        #If points on a chosen line should be chosen one-by-one, temporarily using reconstruction values for updating the ERD, selecting the line with maximum sum physical ERD
-        elif lineMethod == 'percLine' and linePointSelection == 'single': 
-            newIdxs = []
+        #If a group of locations should be chosen on a single line
+        elif lineMethod == 'percLine': 
+            
+            #Select line with maximum sum physical ERD
             lineToScanIdx = np.nanargmax(np.nansum(sample.processedERD, axis=1))
-            while True:
+            
+            #SLADS/DLADS use reconstruction data for temporary measurement values, until specified number of locations have been found
+            if erdModel != 'GLANDS':
+                newIdxs = []
+                while True:
+                    if (np.sum(sample.processedERD[lineToScanIdx]) <= 0) or (len(newIdxs) >= sampleData.pointsToScan[lineToScanIdx]): break
+                    newIdxs.append([lineToScanIdx, np.argmax(sample.processedERD[lineToScanIdx])])
+                    sample.performMeasurements(sampleData, tempScanData, result, np.asarray(newIdxs[-1]), model, cValue, True)
                 
-                #If there are no remaining points to scan on this line with physical ERD > 0 or enough new locations have been found, break from loop
-                if (np.sum(sample.processedERD[lineToScanIdx]) <= 0) or (len(newIdxs) >= sampleData.pointsToScan[lineToScanIdx]): break
+                #Convert to array for indexing, sorting columns according to physical scanning order
+                newIdxs = np.asarray(newIdxs)
+                newIdxs[:,1] = np.sort(newIdxs[:,1])
                 
-                #Identify the next scanning location and store it for later, actual measurement
-                newIdxs.append([lineToScanIdx, np.argmax(sample.processedERD[lineToScanIdx])])
-                
-                #Perform the measurement using values from reconstruction 
-                sample.performMeasurements(sampleData, tempScanData, result, np.asarray(newIdxs[-1]), model, cValue, True)
-                
-            #Convert to array for indexing, sorting columns according to physical scanning order
-            newIdxs = np.asarray(newIdxs)
-            newIdxs[:,1] = np.sort(newIdxs[:,1])
-        
-        #If locations on the line should be selected in one step/group, select that group on the line with maximum sum physical ERD
-        elif lineMethod == 'percLine' and linePointSelection == 'group':
-            lineToScanIdx = np.nanargmax(np.nansum(sample.processedERD, axis=1))
-            indexes = np.sort(np.argsort(sample.processedERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
-            newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
+            #GLANDS chooses all the locations in a single step
+            else:
+                indexes = np.sort(np.argsort(sample.processedERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
+                newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
         
         #If a segment of a line should be scanned using a given percentage, choose the line with maximum sum physical ERD
         elif lineMethod == 'segLine' and segLineMethod == 'minPerc': 
@@ -1865,55 +1859,13 @@ def findNeighbors(tempScanData):
     unNormNeighborWeights = 1.0/(tempScanData.neighborDistances**2.0)
     tempScanData.neighborWeights = unNormNeighborWeights/(np.sum(unNormNeighborWeights, axis=1))[:, np.newaxis]
 
-#Perform the reconstruction using IDW (inverse distance weighting); retrieve measured values, compute reconstruction values, and combine into a new image; if 3D do all channels at once
+#Perform the reconstruction using IDW (inverse distance weighting); if 3D compute all channels simultaneously
 def computeReconIDW(inputImage, tempScanData):
     reconImage = copy.deepcopy(inputImage)
     if len(tempScanData.squareUnMeasuredIdxs) > 0:
         if len(inputImage.shape) == 3: reconImage[:, tempScanData.squareUnMeasuredIdxs[:,0], tempScanData.squareUnMeasuredIdxs[:,1]] = np.sum(inputImage[:, tempScanData.squareMeasuredIdxs[:,0], tempScanData.squareMeasuredIdxs[:,1]][:, tempScanData.neighborIndices]*tempScanData.neighborWeights, axis=-1)
         else: reconImage[tempScanData.squareUnMeasuredIdxs[:,0], tempScanData.squareUnMeasuredIdxs[:,1]] = np.sum(inputImage[tempScanData.squareMeasuredIdxs[:,0], tempScanData.squareMeasuredIdxs[:,1]][tempScanData.neighborIndices]*tempScanData.neighborWeights, axis=1)
     return reconImage
-
-#Rescale spatial dimensions of tensor x to match to those of tensor y
-def customResize(x, y):
-    x = image_ops.resize_images_v2(x, array_ops.shape(y)[1:3], method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
-    nshape = tuple(y.shape.as_list())
-    x.set_shape((None, nshape[1], nshape[2], None))
-    return x
-    
-def downConv(numFilters, inputs):
-    return LeakyReLU(alpha=0.2)(Conv2D(numFilters, 3, padding='same')(LeakyReLU(alpha=0.2)(Conv2D(numFilters, 1, padding='same')(inputs))))
-
-def upConv(numFilters, inputs):
-    return Conv2D(numFilters, 3, activation='relu', padding='same')(Conv2D(numFilters, 1, activation='relu', padding='same')(inputs))
-
-def unet(numFilters, numChannels):
-    inputs = Input(shape=(None,None,numChannels), batch_size=None)
-    conv0 = downConv(numFilters, inputs)
-    conv1 = downConv(numFilters*2, MaxPool2D(pool_size=(2,2))(conv0))
-    conv2 = downConv(numFilters*4, MaxPool2D(pool_size=(2,2))(conv1))
-    conv3 = downConv(numFilters*8, MaxPool2D(pool_size=(2,2))(conv2))
-    conv4 = downConv(numFilters*16, MaxPool2D(pool_size=(2,2))(conv3))
-    up1 = Conv2D(numFilters*16, 2, activation='relu', padding='same')(customResize(conv4, conv3))
-    conv5 = upConv(numFilters*8, concatenate([conv3, up1]))
-    up2 = Conv2D(numFilters*8, 2, activation='relu', padding='same')(customResize(conv5, conv2))
-    conv6 = upConv(numFilters*4, concatenate([conv2, up2]))
-    up3 = Conv2D(numFilters*4, 2, activation='relu', padding='same')(customResize(conv6, conv1))
-    conv7 = upConv(numFilters*2, concatenate([conv1, up3]))
-    up4 = Conv2D(numFilters*2, 2, activation='relu', padding='same')(customResize(conv7, conv0))
-    conv8 = upConv(numFilters, concatenate([conv0, up4]))
-    outputs = Conv2D(1, 1, activation='relu', padding='same')(conv8)
-    return tf.keras.Model(inputs=inputs, outputs=outputs)
-
-#Convert image into TF model compatible shapes/tensors
-def makeCompatible(image):
-    
-    #Turn into an array before processings; will produce an error in the event of dimensional incompatability
-    image = np.asarray(image)
-
-    #Reshape for tensor transition, as needed by number of channels
-    if len(image.shape) > 3: return image
-    elif len(image.shape) > 2: return image.reshape((1,image.shape[0],image.shape[1],image.shape[2]))
-    else: return image.reshape((1,image.shape[0],image.shape[1],1))
 
 #Define process for converting input images into input samples
 def processImages(baseFolder, filenames, label):
@@ -1957,11 +1909,9 @@ def processImages(baseFolder, filenames, label):
 
 #Interpolate results to a given precision for averaging results
 def percResults(results, perc_testingResults, precision):
-
     percents = np.linspace(min(np.hstack(perc_testingResults)), max(np.hstack(perc_testingResults)), int((max(np.hstack(perc_testingResults)) - min(np.hstack(perc_testingResults))) / precision + 1))
     newResults = [np.interp(percents, perc_testingResults[resultNum], results[resultNum]) for resultNum in range(0, len(results))]
     averageResults = np.average(newResults, axis=0)
-    
     return percents, averageResults
 
 #Convert bytes into human readable format
@@ -1978,15 +1928,14 @@ def computeDifference(array1, array2):
 #Truncate a value to a given precision 
 def truncate(value, decimalPlaces=0): return np.trunc(value*10**decimalPlaces)/(10**decimalPlaces)
 
-def borderlessPlot(image, saveLocation, cmap='viridis', aspect='auto', vmin=None, vmax=None, norm=None):
-    f=plt.figure()
-    ax=f.add_subplot(1,1,1)
-    plt.axis('off')
-    plt.imshow(image, cmap=cmap, aspect=aspect, vmin=vmin, vmax=vmax, interpolation='none')
-    extent = ax.get_window_extent().transformed(f.dpi_scale_trans.inverted())
-    plt.savefig(saveLocation, bbox_inches=extent)
-    plt.close()
+#Visualize/save an image without borders/axes
+def visualizeBorderless(image, saveLocation, cmap='viridis', vmin=None, vmax=None):
+    if type(cmap) == str: cmap = plt.get_cmap(cmap)
+    if vmin==None: vmin=np.nanmin(image)
+    if vmax==None: vmax=np.nanmax(image)
+    Image.fromarray(np.uint8(cmap(((np.clip(image, vmin, vmax)-vmin)/(vmax-vmin)))*255)).save(saveLocation)
 
+#Visualize/save a simple data plot
 def basicPlot(xData, yData, saveLocation, xLabel='', yLabel=''):
     font = {'size' : 18}
     plt.rc('font', **font)
@@ -1996,6 +1945,4 @@ def basicPlot(xData, yData, saveLocation, xLabel='', yLabel=''):
     ax1.set_xlabel(xLabel)
     ax1.set_ylabel(yLabel)
     plt.savefig(saveLocation)
-    plt.close()
-
-
+    plt.close(f)

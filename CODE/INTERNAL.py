@@ -1,5 +1,5 @@
 #==================================================================
-#INTERNAL DIRECTORY SETUP
+#INTERNAL - DIRECTORY SETUP
 #==================================================================
 
 #Indicate and setup the destination folder for results of this configuration
@@ -12,6 +12,7 @@ modelName = 'model_'
 if erdModel == 'SLADS-LS': modelName += 'SLADS-LS_'
 elif erdModel == 'SLADS-Net': modelName += 'SLADS-Net_'
 elif erdModel == 'DLADS': modelName += 'DLADS_'
+elif erdModel == 'GLANDS': modelName += 'GLANDS_'
 if chanSingle: modelName += 'chanSingle_'
 else: modelName += 'chanMultiple_'
 if staticWindow: modelName += 'statWin_' + str(staticWindowSize) + '_'

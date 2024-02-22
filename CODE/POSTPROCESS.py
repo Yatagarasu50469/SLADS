@@ -1,16 +1,13 @@
 #==================================================================
-#POST-PROCESSING SPECIFIC METHOD AND CLASS DEFINITIONS
+#POST-PROCESS
 #==================================================================
 
 #Perform SLADS with external equipment
 def postprocess(sortedSampleFolders, optimalC, modelName):
 
-    #Setup a model only on a single GPU (if available), running once on for pre-compilation (otherwise affects reported timings)
-    if (erdModel == 'DLADS' or erdModel == 'GLANDS') and numGPUs > 0: 
-        model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName, 0)
-        _ = ray.get(model.generateERD.remote(np.empty((1,512,512,len(inputChannels)), dtype=np.float32)))
-    else: 
-        model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName)
+    #Setup a model only on a single GPU (if available)
+    if numGPUs > 0: model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName, gpus[0])
+    else: model = Model_Actor.remote(erdModel, dir_TrainingResults+modelName)
     
     #Load in data, creating corresponding sample and result objects
     sampleDataset = [SampleData(sampleFolder, 0, stopPerc, scanMethod, lineRevist, True, False, False, False, liveOutputFlag, False, True, False) for sampleFolder in tqdm(sortedSampleFolders, desc='Samples', leave=True, ascii=asciiFlag)]

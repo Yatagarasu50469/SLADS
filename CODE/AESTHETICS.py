@@ -22,7 +22,7 @@ def programTitle(versionNum, configFileName):
         programName = "Deep Learning Approach for Dynamic Sampling"
         headerWidth = 40
     elif erdModel == 'GLANDS': 
-        programName = "Generative Learning Adversarial Network for Dynamic Sampling"
+        programName = "Generative Learning Adversarial Networks for Dynamic Sampling"
         headerWidth = 50
     programName += " - v"+versionNum
     programNameOffset = (' ' * int((int(consoleColumns)-len(programName))//2))
@@ -84,62 +84,6 @@ elif systemOS == 'Windows':
     (bufx, bufy, curx, cury, wattr, left, top, right, bottom, maxx, maxy) = struct.unpack("hhhhHhhhhhh", csbi.raw)
     consoleRows = bottom-top
     consoleColumns = right-left
-        
-def customTFBar_initialize_progbar(self, hook, epoch, logs=None):
-        self.num_samples_seen = 0
-        self.steps_to_update = 0
-        self.steps_so_far = 0
-        self.logs = defaultdict(float)
-        self.num_epochs = self.params["epochs"]
-        self.mode = "steps"
-        self.total_steps = self.params["steps"]
-        if hook == "train_overall":
-            if self.show_overall_progress:
-                self.overall_progress_tqdm = self.tqdm(
-                    total=self.num_epochs,
-                    bar_format=self.overall_bar_format,
-                    leave=self.leave_overall_progress,
-                    dynamic_ncols=True,
-                    unit="epochs",
-                    ascii=asciiFlag
-                )
-        elif hook == "test":
-            if self.show_epoch_progress:
-                self.epoch_progress_tqdm = self.tqdm(
-                    total=self.total_steps,
-                    desc="Evaluating",
-                    bar_format=self.epoch_bar_format,
-                    leave=self.leave_epoch_progress,
-                    dynamic_ncols=True,
-                    unit=self.mode,
-                    ascii=asciiFlag
-                )
-        elif hook == "train_epoch":
-            if self.show_epoch_progress:
-                self.epoch_progress_tqdm = self.tqdm(
-                    total=self.total_steps,
-                    bar_format=self.epoch_bar_format,
-                    leave=self.leave_epoch_progress,
-                    dynamic_ncols=True,
-                    unit=self.mode,
-                    ascii=asciiFlag
-                )
-
-def customTFBar_on_epoch_end(self, epoch, logs={}):
-    self._clean_up_progbar("train_epoch", logs)
-    if self.show_overall_progress:
-        metric_value_pairs = []
-        for key, value in logs.items():
-            if key in ["batch", "size"]: continue
-            pair = self.metrics_format.format(name=key, value=value)
-            metric_value_pairs.append(pair)
-        metrics = self.metrics_separator.join(metric_value_pairs)
-        self.overall_progress_tqdm.desc = metrics
-        self.overall_progress_tqdm.update(1)
-
-#Replace tqdm progress bar definitions from tensorflow-addons with customized versions
-tfa.callbacks.TQDMProgressBar._initialize_progbar = customTFBar_initialize_progbar
-tfa.callbacks.TQDMProgressBar.on_epoch_end = customTFBar_on_epoch_end
 
 #Clear the screen and print out the program header
 os.system('cls' if os.name=='nt' else 'clear')

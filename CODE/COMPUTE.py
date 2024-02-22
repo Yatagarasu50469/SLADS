@@ -1,5 +1,5 @@
 #==================================================================
-#COMPUTE RESOURCE SPECIFICATION
+#COMPUTE
 #==================================================================
 
 #Reset ray memory and compute; shouldn't be needed but is since pools do not seem to close and free memory properly (set log_to_driver=False to stop all PID messages)
@@ -11,22 +11,21 @@ def resetRay(numberCPUS):
             ray.shutdown()
             rayUp = False
         except: 
-            print('\nWarning - Ray failed to shutdown correctly, if this message repeatedly appears sequentially, exit the program with CTL+C.')
+            print('\nWarning - Ray failed to shutdown correctly, if this message repeatedly appears sequentially, exit the program with CTL+c.')
     while not rayUp: 
         try: 
-            ray.init(num_cpus=numberCPUS, configure_logging=debugMode, logging_level=logging.ERROR, include_dashboard=False)
+            _ = ray.init(num_cpus=numberCPUS, logging_level=logging.root.level, runtime_env={"env_vars": environmentalVariables}, include_dashboard=False)
             rayUp = True
         except:
-            print('\nWarning - Ray failed to startup correctly, if this message repeatedly appears sequentially, exit the program with CTL+C.')
+            print('\nWarning - Ray failed to startup correctly, if this message repeatedly appears sequentially, exit the program with CTL+c.')
 
-#Limit GPU(s) if indicated
-if availableGPUs != 'None': os.environ["CUDA_VISIBLE_DEVICES"] = availableGPUs
-gpus = tf.config.list_physical_devices('GPU')
+#Store string of all system GPUs (Ray hides them)
+systemGPUs = ", ".join(map(str, [*range(torch.cuda.device_count())]))
+
+#Note GPUs available/specified
+if not torch.cuda.is_available(): gpus = []
+if (len(gpus) > 0) and (gpus[0] == -1): gpus = [*range(torch.cuda.device_count())]
 numGPUs = len(gpus)
-
-#For model inferencing with DLADS and GLANDS, assign 1 GPU per server/actor (so as to potentially allow for multiple), otherwise assign 0
-if (erdModel == 'DLADS' or erdModel == 'GLANDS') and numGPUs>0: modelGPUs = 1
-else: modelGPUs = 0
 
 #Detect logical and physical core counts, determining if hyperthreading is active
 logicalCountCPU = psutil.cpu_count(logical=True)
@@ -52,9 +51,3 @@ resetRay(numberCPUS)
 #A comment in alphatims code implies it doesn't appear to actually do anything for I/O operations
 #This was found to impact multiplierz which, disimilar to alphatims, uses the official Bruker SDK. 
 #alphatims.utils.set_threads(0)
-
-#Allow partial GPU memory allocation; allows better analysis of utilization
-for gpu in gpus: tf.config.experimental.set_memory_growth(gpu, True)
-
-#If the number of gpus to be used is greater than 1, then increase the configuration's batch size accordingly to accomodate the distribution strategy
-if len(gpus)>1: batchSize*=len(gpus)
