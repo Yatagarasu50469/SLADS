@@ -196,14 +196,15 @@ As more functionality is continually being added, minimum hardware specification
     aiorwlock          1.4.0
     colorama           0.4.6
     datetime           5.4
-	fastapi            0.109.2
+    fastapi            0.109.2
     glob2              0.7
     graphviz           0.20.1
-	grpcio             1.60.1
+    grpcio             1.60.1
     IPython            8.12.3
     joblib             1.3.2
     matplotlib         3.7.4
     multiprocess       0.70.15
+    multivolumefile    0.2.3
     natsort            8.4.0
     numba              0.58.1
     numpy              1.24.4
@@ -212,10 +213,11 @@ As more functionality is continually being added, minimum hardware specification
     pathlib            1.0.1
     pillow             10.2.0
     psutil             5.9.8
+    py7zr              0.20.8
     pydot              2.0.0
     pyimzml            1.5.3
-	pypiwin32          223
-	pydantic           2.6.1
+    pypiwin32          223
+    pydantic           2.6.1
     ray                2.9.2
     scikit-image       0.21.0
     scikit-learn       1.3.2
@@ -223,10 +225,10 @@ As more functionality is continually being added, minimum hardware specification
     sobol              0.9
     sobol-seq          0.2.0
     torch              2.1.2+cu118
-	torchaudio         2.1.2+cu118
-	torchvision        0.1.2
+    torchaudio         2.1.2+cu118
+    torchvision        0.1.2
     tqdm               4.66.1
-	typeguard          2.13.3
+    typeguard          2.13.3
 
 **MSI Compatability:** Using alphatims and the custom fork of multiplierz, the following MSI file formats are functional: Agilent .D (Windows-Only), Thermo .RAW, Bruker .tdf, and .imzML. The following MSI file formats supported by muliplierz have not been tested in this program: .wiff and .t2d
 
@@ -455,19 +457,19 @@ In the case that multiple configuration files are provided in the form of: CONFI
 
 **Note:** In order to use a trained model in a physical implementation, the files resultant from the training procedure must be located within './RESULTS/TRAIN/'.
 
-1  . Prior to engaging the physical equipment, run the program with the **impModel** variable enabled in the configuration file. A custom implementation input directory, to use instead of the default: './INPUT/IMP/', may be specified with the **impInputDir** variable, under section L1-1, during configuration. All other testing and training flags within in the configuration file, under section L0, should be disabled. 
+1. Prior to engaging the physical equipment, run the program with the **impModel** variable enabled in the configuration file. A custom implementation input directory, to use instead of the default: './INPUT/IMP/', may be specified with the **impInputDir** variable, under section L1-1, during configuration. All other testing and training flags within in the configuration file, under section L0, should be disabled. 
 
-2  . Initialize the program with 'python START.py' and place 'sampleInfo.txt' and 'channels.csv' (if not using a global 'channels.csv' file in the SLADS/DLADS root directory) into the implementation input directory. The 'sampleInfo.txt' and 'channels.csv' files should follow the format outlined in the CONFIGURATION section of the README documentation. 
+2. Initialize the program with 'python START.py' and place 'sampleInfo.txt' and 'channels.csv' (if not using a global 'channels.csv' file in the SLADS/DLADS root directory) into the implementation input directory. The 'sampleInfo.txt' and 'channels.csv' files should follow the format outlined in the CONFIGURATION section of the README documentation. 
 
-3  . Place a blank file named **LOCK** into the implementation input directory to signal the program that the 'sampleInfo.txt' and 'channels.csv' files have been placed. 
+3. Place a blank file named **LOCK** into the implementation input directory to signal the program that the 'sampleInfo.txt' and 'channels.csv' files have been placed. 
 
-2  . Creation of the **LOCK** file triggers the program to read in any data saved in the implementation input directory and produce a set of points (row number, and column positions in um) to physically scan. This data is saved in a file: **UNLOCK**. 
+2. Creation of the **LOCK** file triggers the program to read in any data saved in the implementation input directory and produce a set of points (row number, and column positions in um) to physically scan. This data is saved in a file: **UNLOCK**. 
 
-3  . **LOCK** will be automatically deleted to signal the equipment that **UNLOCK** now contains new measurement positions.
+3. **LOCK** will be automatically deleted to signal the equipment that **UNLOCK** now contains new measurement positions.
 
-4  . The program waits for **LOCK** to re-appear, which should be created after the requested data has been scanned into the implementation input directory. The data must follow the formatting specified in the TRAINING/TESTING PROCEDURE section of the README documentation. 
+4. The program waits for **LOCK** to re-appear, which should be created after the requested data has been scanned into the implementation input directory. The data must follow the formatting specified in the TRAINING/TESTING PROCEDURE section of the README documentation. 
 
-5  . When the termination criteria have been met, the program produces a file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. 
+5. When the termination criteria have been met, the program produces a file: **DONE**, instead of: **UNLOCK**, to signal the equipment that scanning has concluded. 
 
 ***
 # FAQ
