@@ -553,7 +553,7 @@ If the provided data is fairly homogeneous, with predominant value fluctuations 
 **Simulatated Acquisition of MALDI MSI with DLADS**  
 **Version(s):** v0.9.5  
 **Subject:** MALDI MSI  
-**Citation(s):** D. Helminiak, T. Boskamp, and D. H. Ye, ‘Multimodal Deep Learning Approach for Dynamic Sampling with Automatic Feature Selection in Matrix-Assisted Laser Desorption/Ionization Mass Spectrometry Imaging’, Electronic Imaging, vol. 36, pp. 1–6, Jan. 2024.  
+**Citation(s):** D. Helminiak, T. Boskamp, and D. H. Ye, “Multimodal Deep Learning Approach for Dynamic Sampling with Automatic Feature Selection in Matrix-Assisted Laser Desorption/Ionization Mass Spectrometry Imaging,” Electronic Imaging, vol. 36, no. 15. Society for Imaging Science & Technology, pp. 143-1-143–6, Jan. 21, 2024. doi: 10.2352/ei.2024.36.15.coimg-143.   
 **Available:** (https://library.imaging.org/admin/apis/public/api/ist/website/downloadArticle/ei/36/15/COIMG-143)
 
 **Updated Simulatated Acquisition of DESI MSI with DLADS**  
