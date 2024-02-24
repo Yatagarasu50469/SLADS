@@ -86,11 +86,12 @@ class Recon_Actor:
         #Compute IDW reconsturctions
         self.reconImages = np.array([computeReconIDW(self.reconImages[index], tempScanData) for index in range(0, len(self.indexes))], dtype=np.float32)
         
-        #Resize DESI data back to physical dimensions and copy back the origianl measured values to reconstructions
-        #h5py doesn't like fancy indexing that can be done with numpy, so using a multiplication for recombination of known values instead
+        #Resize DESI data back to physical dimensions and copy back the original measured values to reconstructions
+        #Note that multiplication/addition using mask runs, but doesn't work correctly! Not worth trying to diagnose at this time
         if self.sampleType == 'DESI': 
+            measuredIdxs = np.transpose(np.where(mask==1))
             self.reconImages = np.moveaxis(resize(np.moveaxis(self.reconImages, 0, -1), tuple(self.finalDim), order=0), -1, 0)
-            self.reconImages = (self.reconImages*mask) + self.allImages*(1-mask)
+            for measuredIdx in measuredIdxs: self.reconImages[:, measuredIdx[0], measuredIdx[1]] = self.allImages[:, measuredIdx[0], measuredIdx[1]]
     
     #Compute PSNR/SSIM for reconstructions
     def computeMetrics(self):

@@ -1052,10 +1052,12 @@ class Result:
                     self.reconImages = np.array([computeReconIDW(self.reconImages[index], tempScanData) for index in range(0, len(self.reconImages))], dtype=np.float32)
                 if self.sampleData.sampleType == 'DESI': self.reconImages = np.moveaxis(resize(np.moveaxis(self.reconImages, 0, -1), tuple(self.sampleData.finalDim), order=0), -1, 0)
                 
-                #Copy back the original measured values to the reconstructions
-                #h5py doesn't like fancy indexing that can be done with numpy, so using a multiplication for recombination of known values instead
+                #Resize DESI data back to physical dimensions and copy back the original measured values to reconstructions
+                #Note that multiplication/addition using mask runs, but doesn't work correctly! Not worth trying to diagnose at this time
                 if self.sampleData.sampleType == 'DESI': 
-                    self.reconImages = (self.reconImages*sample.mask) + self.sampleData.allImages*(1-sample.mask)
+                    self.reconImages = np.moveaxis(resize(np.moveaxis(self.reconImages, 0, -1), tuple(self.sampleData.finalDim), order=0), -1, 0)
+                    measuredIdxs = np.transpose(np.where(sample.mask==1))
+                    self.reconImages[:, measuredIdxs[:,0], measuredIdxs[:,1]] = self.sampleData.allImages[:, measuredIdxs[:,0], measuredIdxs[:,1]]
                 
                 if not lastReconOnly:
                     
