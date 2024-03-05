@@ -6,7 +6,7 @@
 # PROGRAM
 
     NAME:           SLADS/DLADS/GLANDS
-    MODIFIED:       22 February 2024
+    MODIFIED:       5 March 2024
     VERSION:        0.10.0
     LICENSE:        GNU General Public License v3.0
     DESCRIPTION:    Dynamic sampling algorithms with updated/developing implementations of:
