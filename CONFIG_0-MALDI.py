@@ -25,7 +25,7 @@ testingModel = True
 #Is this an implementation run
 impModel = False
 
-#Is post-processing to be performed
+#Is post-processing of existing scanned data to be performed
 postModel = False
 
 ##################################################################
@@ -46,11 +46,11 @@ parallelization = True
 #May decrease value to help reduce RAM pressure. 
 availableThreads = 0
 
-#Which GPU(s) devices should be used for training; (Default: [-1], any/all available; CPU only: [])
+#Which GPU(s) devices should be used (last specified used for training); (default: [-1], any/all available; CPU only: [])
 gpus = [-1]
 
-#Should training/validation data be entirely stored on GPU (default: True; improves training/validation performance, set to False if OOM occurs)
-#DLADS/GLANDS specific
+#Should training/validation data be entirely stored on GPU (default: True; improves training/validation efficiency, set to False if OOM occurs)
+#DLADS-PY, DLADS, and GLANDS specific
 storeOnDevice = True
 
 #RNG seed value to control run-to-run consistency, may slow performance (-1 to disable)
@@ -62,7 +62,7 @@ trainMaskFOVDilation = 3
 #If the FOV should be masked during non-training, specify a dilation kernel size (odd) for the mask (Disabled mask: None, applied without dilation: 0; DESI default: None; MALDI default: 0)
 otherMaskFOVDilation = 0
 
-#Should the percentage measured be relative to the FOV mask area (True) or the whole FOV area (False)
+#Should the percentage measured be relative to the FOV mask area (True) or the whole FOV area (False) (default: False)
 #Does not apply to training/validation generation; disabled automatically if dilation flags are set to None
 #If enabled, will cause complications in evaluation if some samples have masks and others do not
 percFOVMask = False
@@ -72,7 +72,9 @@ percFOVMask = False
 #TASK METHODS
 #==================================================================
 
-#Which model should be used for ERD generation (SLADS-LS, SLADS-Net, DLADS, GLANDS)
+#Which model should be used for ERD generation (SLADS-LS, SLADS-Net, DLADS-TF, DLADS-PY, DLADS, GLANDS)
+#SLADS-LS, SLADS-Net, DLADS-TF, and DLADS-PY are legacy methods only intended for simulated reference/benchmarking
+#GLANDS has not yet been included for release
 erdModel = 'DLADS'
 
 #Which scanning method shoud be used: pointwise or linewise
@@ -86,7 +88,11 @@ stopPerc = (1/3)*100
 imzMLExport = False
 
 #Should an evaluation of reconstructions be performed across all channels (MSI only; default: False)
-allChanEval = False
+allChanEval = True
+
+#Should input data be standardized for RDPP/ERD computations (default: True)
+#If this and the value of padInputData changes, then training data generation will need to be rerun
+standardizeInputData = True
 
 #==================================================================
 
@@ -104,7 +110,7 @@ impInputDir = None
 #If the measurement times listed in the acquired MSI files do not start with 0 being at the left-side of the FOV
 impOffset = True
 
-#Should output visualizations be generated during acquisition? Highly not recommended (expensive) nor regularly validated (default: False)
+#Should output visualizations be generated during acquisition; this is neither recommended (computationally expensive) nor regularly validated (default: False)
 liveOutputFlag = False
 
 #==================================================================
@@ -114,7 +120,7 @@ liveOutputFlag = False
 #POINTWISE OPTIONS
 #==================================================================
 
-#Percentage of points to initially acquire (random) during testing/implementation
+#Percentage of points to initially acquire (random) during testing/implementation (default: 1)
 initialPercToScan = 1
 
 #Percentage of points (group-based) to acquire each iteration during testing/implementation (default: None will scan only one location per iteration)
@@ -135,14 +141,14 @@ percToViz = 1
 #How should points be returned from a chosen line: (segLine; partial line segment) (percLine; top stopPerc% ERD locations) (none, full line)
 lineMethod = 'segLine'
 
-#If using a segLine, how should the start and end points be determined (minPerc, segment of stopPerc length) (default: 'otsu', foreground ERD)
+#If using a segLine, how should the start and end points be determined (minPerc, segment of stopPerc length) (default: 'otsu')
 segLineMethod = 'otsu'
 
 #Should lines be allowed to be revisited (default: False)
-#Note: This function only works for fully-acquired simulations and should be disabled for all other operations; will almost certainly corrupt data if used incorrectly
+#This function only works for fully-acquired simulations and should be disabled for all other operations; will almost certainly corrupt data if used incorrectly
 lineRevist = False
 
-#Should all lines be scanned/visited at least once
+#Should all lines be scanned/visited at least once (default: True)
 lineVisitAll = True
 
 #Specify what line positions (percent height) should be used for initial acquistion
@@ -155,30 +161,30 @@ startLinePositions = [0.25, 0.50, 0.75]
 #TRAINING DATA GENERATION (DLADS/SLADS SPECIFIC)
 #==================================================================
 
-#What percentage of points should be initially acquired (random) during training and c value optimization
+#What percentage of points should be initially acquired (random) during training and c value optimization (default: 1)
 initialPercToScanTrain = 1
 
-#Stopping percentage for number of acquired pixels for training and c value optimization; always out of total FOV
-stopPercTrain = 30
+#Stopping percentage for number of acquired pixels for training and c value optimization; always out of total FOV (default: 30)
+stopPercTrain = (1/3)*100
 
-#How many masks should be used for each percentage during training
+#How many masks should be used for each percentage during training (default: 1)
 numMasks = 1
 
 #Should visualizations of the training/validation samples be generated during database generation (default: False)
 visualizeTrainingData = False
 
-#If using IDW reconstruction, how many neighbors should be considered
+#If using IDW reconstruction, how many neighbors should be considered (default: 10)
 numNeighbors = 10
 
 #Possible c values for RD approximation
-cValues = [1, 2, 4, 8, 16, 32, 64, 128, 256]
+cValues = [1, 2, 4, 8, 16, 32]
 
-#When optimizing c, percentage of points (group-based) to acquire; otherwise set to None (default: 1)
+#When optimizing c, percentage of points (group-based) to acquire between steps (default: 1)
 #Temporarily sets the RD values in unmeasured locations, that would be impacted by selected scan positions, to zero
-#Note that using percToVizC is a more accurate, but expensive method
 percToScanC = 1
 
-#When optimizing c, percentage of points to acquire between visualizations; if all steps should be, then set to None (default: None)
+#When optimizing c, percentage of points to acquire between recorded metrics (default: None)
+#If metric should be considered at all measurement steps, or percToScanC != None, then set to None 
 percToVizC = None
 
 #==================================================================
@@ -188,42 +194,23 @@ percToVizC = None
 
 ##################################################################
 #PARAMETERS: L2
-#NEURAL NETWORK MODEL PARAMETERS (DLADS/GLANDS SPECIFIC)
+#MODEL TRAINING PARAMETERS (DLADS/GLANDS SPECIFIC)
 ##################################################################
 
-#Specify what input data constitutes a model (DLADS or GLANDS) input (Options: 'opticalData', 'mask', 'reconData', 'measureData')
-#reconData is only available for DLADS
-#DLADS default: ['mask', 'reconData', 'measureData']
+#==================================================================
+#PARAMETERS: L2-1
+#TRAINING DATA HANDLING
+#==================================================================
+
+#Specify what input data constitutes a model (DLADS or GLANDS) input (Options: 'opticalData', 'mask', 'reconData', 'measureData', 'combinedData')
+#DLADS default: ['mask',  'combinedData']
+#DLADS(-TF,-PY) default: ['mask', 'reconData', 'measureData']
 #GLANDS default: ['mask', 'measureData']
-inputChannels = ['opticalData', 'mask', 'reconData', 'measureData']
-
-#How many filters should be used at the top of the network
-numStartFilters = 64
-
-#Which optimizer should be used ('AdamW', 'Adam', 'Nadam', 'SGD' or 'RMSProp')
-optimizer = 'Nadam'
-
-#What should the learning rate of the model optimizer(s) be
-learningRate = 1e-5
-
-#Beta 1  parameter if applicable to the specified optimizer (default: 0.5)
-beta1 = 0.5
-
-#Beta 2  parameter if applicable to the specified optimizer (default: 0.5)
-beta2 = 0.999
+inputChannels = ['opticalData', 'mask', 'combinedData']
 
 #What percentage of the training data should be used for training (default: 0.8)
 #1.0 or using only one input sample will use training loss for early stopping criteria
 trainingSplit = 0.8
-
-#How many epochs should a model train for at maximum (default: 10000)
-numEpochs = 10000
-
-#How many epochs should the model training wait to see an improvement before terminating (default: 100)
-maxPatience = 100
-
-#How many epochs at minimum should be performed before starting to save the current best model and consider termination (default: 10)
-minimumEpochs = 10
 
 #Should the training data be augmented at the end of each epoch (default: True)
 augTrainData = True
@@ -231,7 +218,7 @@ augTrainData = True
 #Should visualizations of the training progression be generated (default: True)
 trainingProgressionVisuals = True
 
-#If visualizations of the training progression are to be generated, how often (epochs) should this occur (default: 10)
+#How often (epochs) should visualizations of the training progression be generated (default: 10)
 trainingVizSteps = 10
 
 #GLANDS ONLY: Training data batch size (default: 1)
@@ -239,6 +226,82 @@ batchsize_TRN = 1
 
 #GLANDS ONLY: Validation data batch size; (default: -1, sets as total length of validation set, set manually if OOM occurs)
 batchsize_VAL = -1
+
+#==================================================================
+
+#==================================================================
+#PARAMETERS: L2-2
+#ARCHITECTURE PARAMETERS
+#==================================================================
+
+#Should input data be padded for even dimensions throughout up and down sampling (default: True)
+#If this and the value of standardizeInputData changes, then training data generation will need to be rerun
+padInputData = True
+
+#Reference number of how many convolutional filters to use in building the model
+numStartFilters = 64
+
+#What initialization should be used: 'xavier_uniform', 'xavier_normal', 'kaiming_uniform', 'kaiming_normal' (default: 'xavier_uniform')
+initialization='xavier_uniform'
+
+#Activations for network sections (input, down, embedding down, upsampling, embedding up, final): 'leaky_relu', 'relu', 'prelu', 'linear'
+inAct, dnAct, upAct, fnAct = 'leaky_relu', 'leaky_relu', 'leaky_relu', 'relu'
+
+#Negative slope for any 'leaky_relu' or 'prelu' activations (default: 0.2)
+leakySlope = 0.2
+
+#Should bias be enabled in convolutional layers (default: True)
+useBias = True
+
+#Binomial blur padding model mode: 'reflection', 'zero', 'partialConvolution'
+blurPaddingMode = 'reflection'
+
+#Sigma for binomial filter applied during upsampling; 0 to disable (default: 3)
+sigmaUp = 3
+
+#Sigma for binomial filter applied during downsampling; 0 to disable (default: 1)
+sigmaDn = 1
+
+#Should instance normalization be used throughout the network (default: False)
+dataNormalize = False
+
+#==================================================================
+
+#==================================================================
+#PARAMETERS: L2-2
+#OPTIMIZATION PARAMETERS
+#==================================================================
+
+#==================================================================
+
+#Which optimizer should be used: 'AdamW', 'Adam', 'NAdam', 'RMSprop', or 'SGD' (default: 'AdamW')
+optimizer = 'AdamW'
+
+#What should the initial learning rate for the model optimizer(s) be (default: 1e-4)
+learningRate = 1e-4
+
+#How many epochs should the model training wait to see an improvement using the early stopping criteria (default: 100)
+maxPatience = 100
+
+#How many epochs should a model be allowed to train for (default: 1000)
+maxEpochs = 1000
+
+#If cosine annealing with warm restarts should be used (default: True)
+scheduler_CAWR = True
+
+#If using cosine annealing, what should the period be between resets (default: 1)
+schedPeriod = 1
+
+#If using cosine annealing, how should the period length be multiplied at each reset (default: 1)
+schedMult = 1
+
+#Across how many epochs across should two moving averages be considered for early stopping criteria (default: 0)
+#Historical loss = mean(losses[-sepEpochs*2:-sepEpochs]; Current loss = mean(losses[-sepEpochs:])
+#0 will trigger early stopping criteria relative to occurance of best loss
+sepEpochs = 0
+
+#How many epochs should a model be allowed to remain wholly stagnant for before training termination (default: 10)
+maxStagnation = 10
 
 #==================================================================
 
@@ -262,39 +325,48 @@ overrideResultsFolder = None
 #If existing allChanImages.hdf5 and squareAllImages.hdf5 files should be overwritten or should attempt to be loaded (default: False)
 overwriteAllChanFiles = False
 
-#Should static window be used in RD generation
+#Should static window be used in RD generation (default: False)
 staticWindow = False
 
-#If a static window is to be used, what size (symmetric) should it be (default: 15 for SLADS)
+#If a static window is to be used, what size (symmetric) should it be (default: 15)
 staticWindowSize = 15
 
-#If a dynamic window is to be used, what multiple of the sigma value should be used
+#If a dynamic window is to be used, what multiple of the sigma value should be used (default: 3)
 dynWindowSigMult = 3
 
-#Should only a single channel be used as the network input (MSI uses first channel in channels.csv local/global file, IMAGE uses first channel read)
-#SLADS/DLADS compatible only
+#Should only a single channel be used as the network input (default: False)
+#MSI uses first channel in channels.csv local/global file, IMAGE uses first channel read
 chanSingle = False
 
-#Distance to no longer consider surrounding features (disregard if using DLADS, 0.25 for SLADS(-Net))
+#Distance for SLADS to no longer consider surrounding features (default: 0.25)
 featDistCutoff = 0.25
 
-#Should existing results folders not be allowed to be overwritten?
+#Should existing results folders not be allowed to be overwritten? (default: False)
 preventResultsOverwrite = False
 
-#Define precision of the percentage averaging (as percentage is inconsistent between acquistion steps)
+#Define precision of the percentage averaging (as percentage is inconsistent between acquistion steps) (default: 0.001)
 precision = 0.001
 
-#Method overwrite file; will execute specified file to overwrite otherwise defined methods/parameters
+#Method overwrite file; will execute specified file to overwrite otherwise defined methods/parameters (default: None)
 overWriteFile = None
 
-#Should testing/simulation sample data object be saved; sometimes needed for post-processing and results writeup
+#Model overwrite file; will execute specified file to overwrite otherwise defined methods/parameters at model definition time (default: None)
+overWriteModelFile = None
+
+#Should testing/simulation sample data object be saved; sometimes needed for post-processing and results writeup (default: False)
 storeTestingSampleData = False
 
-#Should progress bars use ascii formatting
+#Should progress bars use ascii formatting (default: False)
 asciiFlag = False
 
 #If performing a benchmark, should processing be skipped (default: False)
 benchmarkNoProcessing = False
+
+#Should simulated sampling in testing be bypassed to work on OOM errors; relevant sections must have already been run successfully (default: False)
+bypassSampling = False
+
+#Should result objects generated in testing be kept (only needed if bypassSampling is to be used later) (default: False)
+keepResultData = False
 
 #Should the program save measured location information to disk after every iteration; intended for debugging (default: False)
 saveIterationFlag = False
@@ -322,9 +394,4 @@ mzAutoSelection = False
 #DEBUG/DEPRECATED - OPTIONS LIKELY TO BE REMOVED IN FUTURE
 ##################################################################
 
-#If all samples have FOV aligned optical image files, how should they be applied to the E/RD: 'directBias', 'secDerivBias' or None (default: None)
-#This parameter must be consistently applied for optimizing c value, training a model, and eventual testing/implementation
-applyOptical = None
-
 ##################################################################
-

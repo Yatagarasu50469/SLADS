@@ -16,10 +16,6 @@ def equipWait():
 
 #Perform SLADS with external equipment
 def performImplementation(optimalC, modelName):
-
-    #Setup a model only on a single GPU (if available), running once on for pre-compilation (otherwise affects reported timings)
-    if numGPUs > 0: model = Model_Actor.remote(erdModel, dir_TrainingResults, modelName, gpus[0])
-    else: model = Model_Actor.remote(erdModel, dir_TrainingResults, modelName)
     
     #Wait for equipment to initialize scan
     equipWait()
@@ -27,19 +23,20 @@ def performImplementation(optimalC, modelName):
     #Create a sample object and read the first sets of information
     sampleData = SampleData(dir_ImpDataFinal, initialPercToScan, stopPerc, scanMethod, lineRevist, False, False, False, False, liveOutputFlag, True, False, False, impSampleName)
 
+    #Setup a model
+    if numGPUs > 0: model = Model_Actor.remote(erdModel, dir_TrainingResults, modelName, gpus[0])
+    else: model = Model_Actor.remote(erdModel, dir_TrainingResults, modelName)
+
     #Run sampling
-    result = runSampling(sampleData, optimalC, model, percToScan, percToViz, lineVisitAll, dir_ImpResults, False)
+    result = runSampling(None, sampleData, optimalC, model, percToScan, percToViz, lineVisitAll, dir_ImpResults, False)
     
     #Indicate to equipment that the sample scan has concluded
     print('Writing DONE')
     with open(dir_ImpDataFinal + 'DONE', 'w') as filehandle: filehandle.writelines('')
     if os.path.isfile(dir_ImpDataFinal + 'LOCK'): os.remove(dir_ImpDataFinal + 'LOCK')
     
-    #Remove loaded model from memory, returning any allocated resources to Ray
-    del model
-    
     #Call for completion/printout
-    result.complete()
+    result.complete(sampleData)
 
     #Print out final results
     dataPrintout = [[]]

@@ -6,8 +6,8 @@
 # PROGRAM
 
     NAME:           SLADS/DLADS/GLANDS
-    MODIFIED:       5 March 2024
-    VERSION:        0.10.0
+    MODIFIED:       6 August 2024
+    VERSION:        0.10.1
     LICENSE:        GNU General Public License v3.0
     DESCRIPTION:    Dynamic sampling algorithms with updated/developing implementations of:
                        -SLADS       Supervised Learning Approach for Dynamic Sampling, using Least-Squares (LS) regression or a Multi-Layer Perceptron (MLP) neural Network (Net)
@@ -111,6 +111,9 @@
         |    |    |-------> UNLOCK
         |    |    |-------> LOCK
         |    |    |-------> DONE
+        |------->OTHER
+        |    |------->LOGO.PNG
+        |    |------->SOCIAL.PNG
         |------->RESULTS
         |    |------->IMP
         |    |    |------->SAMPLE_1
@@ -182,68 +185,81 @@
 ***
 # INSTALLATION
 
-The package versions do not necessarily need to match with those listed. However, should the program produce unexpected errors, installing a specific version of a package might be able to resolve the issue. Note that the multiplierz pacakage, must be installed from the provided link under the installation commands for some methods to work properly.
+**Note:** Throughout this document the '$ ' prefix is used to denote new lines and are not intended to be copied/executed!
 
-As more functionality is continually being added, minimum hardware specifications cannot be exactly ascertained, however validation of functionality is performed on systems containing 64+ GB DDR3/4/5 RAM, 32+ CPU threads at 3.0+ GHz, 1080Ti/2080Ti+/4090 GPUs, and 1TB+ SSD storage. While v0.8.9 and below have managed to utilize pre-trained models with only a dual core CPU, 8 GB DDR2, and no discrete GPU, this is not an advisable set of hardware for utilizing this program. 
+Follow the instructions provided in the pre-installation guide specific to your system's operating system followed by those in the **Main Installation** section. The package versions do not necessarily need to match with those listed. However, should the program produce unexpected errors, installing a specific version of a package might be able to resolve the issue. Note that the multiplierz pacakage, must be installed from the provided repository fork, as specified in the installation guide for some methods to work properly; see **FAQ** for further information. 
 
-**Windows - Software**  
+**Software/Package Combinations**  
 	
-    Python             3.8.10
-    pip                23.3.2
-
-**Windows - Python Packages**  
-
+    Python             3.11.8
+    pip                24.2
+	
     aiorwlock          1.4.0
+    antialiased-cnns   0.3
     colorama           0.4.6
-    datetime           5.4
-    fastapi            0.109.2
+    datetime           5.5
+    fastapi            0.108.0
     glob2              0.7
-    graphviz           0.20.1
-    grpcio             1.60.1
-    IPython            8.12.3
-    joblib             1.3.2
-    matplotlib         3.7.4
-    multiprocess       0.70.15
+    graphviz           0.20.3
+    ipython            8.26.0
+    joblib             1.4.2
+    matplotlib         3.9.1
+    multiplierz        2.2.2.dev1
+    multiprocess       0.70.16
     multivolumefile    0.2.3
     natsort            8.4.0
-    numba              0.58.1
-    numpy              1.24.4
-    opencv-python      4.9.0.80
-    pandas             2.0.3
+    numba              0.60.0
+    numpy              1.26.4
+    opencv-python      4.10.0.84
+    pandas             2.2.2
     pathlib            1.0.1
-    pillow             10.2.0
-    psutil             5.9.8
-    py7zr              0.20.8
-    pydot              2.0.0
-    pyimzml            1.5.3
-    pypiwin32          223
-    pydantic           2.6.1
-    ray                2.9.2
-    scikit-image       0.21.0
-    scikit-learn       1.3.2
-    scipy              1.10.1
+    pillow             10.4.0
+    psutil             6.0.0
+    py7zr              0.21.1
+    pydot              3.0.1
+    pyimzml            1.5.4
+    pypiwin32          306
+    ray                2.33.0
+    scikit-image       0.22.0
+    scikit-learn       1.5.1
+    scipy              1.14.0
     sobol              0.9
     sobol-seq          0.2.0
-    torch              2.1.2+cu118
-    torchaudio         2.1.2+cu118
-    torchvision        0.1.2
-    tqdm               4.66.1
-    typeguard          2.13.3
+    torch              2.2.2+cu121
+    torchaudio         2.2.2+cu121
+    torchvision        0.17.2+cu121
+    tqdm               4.66.4
+    typeguard          4.3.0
+	
+**Legacy DLADS-TF Model Variant Requirements**  
 
-**MSI Compatability:** Using alphatims and the custom fork of multiplierz, the following MSI file formats are functional: Agilent .D (Windows-Only), Thermo .RAW, Bruker .tdf, and .imzML. The following MSI file formats supported by muliplierz have not been tested in this program: .wiff and .t2d
+	Python             3.10.12
+	tensorflow         2.15.1
+    torch              2.1.1+cu121
+    torchaudio         2.1.1+cu121
+    torchvision        0.16.1+cu121
+	
+**Minimum Hardware Requirements:** As more functionality is continually being added, minimum hardware specifications cannot be exactly ascertained, however validation of functionality is performed on systems containing 64+ GB DDR3/4/5 RAM, 32+ CPU threads at 3.0+ GHz, 1080Ti/2080Ti+/4090 GPUs, and 1TB+ SSD storage. While v0.8.9 and below have managed to utilize pre-trained models with only a dual core CPU, 8 GB DDR2, and no discrete GPU, this is not an advisable set of hardware for utilizing this program. 
 
-**GPU/CUDA Acceleration:** Highly recommended. Note that there shouldn't be a need to manually install the CUDA toolkit, or cudnn as pytorch installation using pip should come include the neccessary files.
+**GPU/CUDA Acceleration:** Highly recommended. Note that there shouldn't be a need to manually install the CUDA toolkit, or cudnn as pytorch (and TensorFlow) installation using pip should come include the neccessary files. 
 
-## Windows Pre-Installation
+**MSI Compatability:** Using alphatims and the custom fork of multiplierz, the following MSI file formats are functional: Agilent .D (Native Windows only), Thermo .RAW, Bruker .tdf/.tsf, and .imzML. The following MSI file formats supported by muliplierz have not been tested in this program: .wiff and .t2d 
 
-If not already setup, install Python 3.8.10 (newer versions have not been tested for Windows) selecting the options to install for all users, and addding python.exe to PATH. For 64-bit systems: (https://www.python.org/ftp/python/3.8.10/python-3.8.10-amd64.exe) and those that are 32-bit: (https://www.python.org/ftp/python/3.8.10/python-3.8.10.exe)
+## Windows (Native) Pre-Installation
+
+If not already setup, install the latest Python v3.11 version (https://www.python.org/downloads/) selecting the options to install for all users, and addding python.exe to PATH. Operation using Python v3.12+ has not yet been validated.
 
 Enable ".Net Framework 3.5 (includes .NET 2.0 and 3.0)" under "Windows Features" (search for in the Windows Start Menu)
 
-Then install 2019 Visual Studio Build Tools, checking boxes for "Desktop development with C++" and "Universal Windows Platform development": (https://visualstudio.microsoft.com/vs/older-downloads/)
+Then install 2019 Visual Studio Build Tools, checking boxes for "Desktop development with C++" and "Universal Windows Platform development". 
+Last known working links for downloading:   (https://download.visualstudio.microsoft.com/download/pr/93f24e82-778c-46ae-92f9-8d3010ecd011/ce6d976f23a41678262845b1ca6c441be204abf196ed6f03768734c2426242f5/vs_BuildTools.exe)  
+(https://aka.ms/vs/16/release/vs_buildtools.exe)  
 
 Next install Visual Studio Community 2019, with the additional options: "Desktop development with C++" , "Universal Windows Platform development", and "Python development"
 Note: Any version more recent than 2019 will not be able to compile dependencies for reading MSI files with "multiplierz" package. 
+Last known working links for downloading:  
+(https://download.visualstudio.microsoft.com/download/pr/93f24e82-778c-46ae-92f9-8d3010ecd011/a5da04d78b1f94ab145a365733476df7a1ec6219fa17f09c7e2f3c7cd74d9c9e/vs_Community.exe)  
+(https://aka.ms/vs/16/release/vs_community.exe)  
 
 Install Git: (https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
 
@@ -255,14 +271,14 @@ For 64-bit Python, configure the build environment by entering the following lin
 The actual location of the specified file may vary depending on potential past Visual Studio installations. 
 
     $ SET DISTUTILS_USE_SDK=1
-    $ "C:  Program Files (x86)  Microsoft Visual Studio  2019  Community  VC  Auxiliary  Build  vcvarsall.bat" x64
+    $ "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
 	
 Open a command prompt (Not as an administrator!): 
 
 	$ python -m pip install --upgrade pip
-	$ pip3 install pywin32 opencv-python
+	$ pip3 install pywin32
 
-## Other Linux & Docker Pre-Installation
+## Docker Pre-Installation
 
 This program can also be installed in a Docker container (confirmed functional on CentOS 7/8). 
 OS-specific Docker installation instructions: (https://docs.docker.com/engine/install/) 
@@ -270,39 +286,39 @@ For GPU acceleration you will need to first install the NVIDIA container toolkit
 After installing/entering the Docker container, follow the Ubuntu Pre-Installation instructions.  
 
 The quick commands for initial container setup (shm-size should be set to 50% of available system RAM):
-	$ docker run --gpus all -it --shm-size=64gb --runtime=nvidia --name GLANDS nvcr.io/nvidia/pytorch:22.12-py3
-	$ pip3 uninstall -y -r <(pip freeze)
+    $ docker run --gpus all -it --shm-size=64gb --runtime=nvidia --name GLANDS nvcr.io/nvidia/pytorch:24.05-py3
+	$ rm -rf /usr/local/lib/python3.10/dist-packages/cv2
+    $ python -m pip install --upgrade pip
+    $ pip3 uninstall -y -r <(pip freeze)
 	
 Additional useful flags for a Docker container setup:
 
     '-v /mnt/Volume/:/workspace': Map mounted volume on host system to /workspace directory inside of the container; allows transmission of data between container and host
     '-p 8889:8888': Map port 8888 inside of the container to 8889 (change on a per-user basis) on the host network (in case of performing development with jupyter-notebook on systems with multiple users)
 
-## Ubuntu Pre-Installation
+## Ubuntu 20.04+ and WSL2 (Windows Subsystem for Linux) Pre-Installation
 
-Open a terminal window and perform the following operations, changing the versioning (formulated here for focal 20.04) as appropriate:
+Open a terminal window and perform the following operations: 
 	
-	$ wget -q https://packages.microsoft.com/config/ubuntu/20.04/packages-microsoft-prod.deb
-	$ sudo dpkg -i packages-microsoft-prod.deb
-	$ rm packages-microsoft-prod.deb
-	$ sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
-	$ echo "deb https://download.mono-project.com/repo/ubuntu stable-focal main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
-	$ sudo apt-get update
-	$ sudo apt-get install -y python3-pip 
+    $ sudo apt-get update -y 
+	$ sudo apt-get upgrade -y 
+    $ sudo apt-get install -y python3-pip build-essential software-properties-common ca-certificates gnupg libgl1-mesa-dev
 	$ python3 -m pip install --upgrade pip
-	$ sudo apt-get install -y wget git python3-opencv apt-transport-https clang libglib2.0-dev nuget gnupg ca-certificates dotnet-sdk-6.0 aspnetcore-runtime-6.0 mono-devel
-	$ pip3 install pythonnet
+    $ sudo gpg --homedir /tmp --no-default-keyring --keyring /usr/share/keyrings/mono-official-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
+    $ echo "deb [signed-by=/usr/share/keyrings/mono-official-archive-keyring.gpg] https://download.mono-project.com/repo/ubuntu stable-focal main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
+	$ sudo apt-get update -y
+	$ sudo apt-get install -y wget git apt-transport-https clang libglib2.0-dev nuget aspnetcore-runtime-8.0 dotnet-sdk-8.0 mono-complete 
+    $ pip3 install pythonnet
 
 ## Main Installation
 
-Open a terminal or command prompt (Not as an administrator!) and run the following (changing CUDA versioning as may be appropriate)
+Open a terminal or command prompt (**not as an administrator**) and run the commands shown below. If intending to use the legacy TensorFlow model variant ('DLADS-TF'), **do not run** the first line (that installs torch, torchvision, and torchaudio), but follow the relevant directions in the **FAQ** after completing the other instructions.
     
-	$ pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-    $ pip3 install datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve] scipy scikit-learn sobol sobol-seq natsort multiprocess scikit-image tqdm pydot graphviz aiorwlock pyimzml colorama typeguard py7zr multivolumefile
-	$ pip3 install git+https://github.com/Yatagarasu50469/alphatims.git@master
+	$ pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+    $ pip3 install opencv-python datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve]==2.33.0 scipy scikit-learn sobol sobol-seq natsort multiprocess scikit-image tqdm pydot graphviz aiorwlock pyimzml colorama typeguard py7zr multivolumefile alphatims
 	$ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
 
-If on Windows, open command prompt as an administrator and replace python3 with python below; the final printout may indicate actions relating to the MSI file format intended for use; follow through as neccessary. If on Ubuntu, this command will likely produce a warning that module 'ctypes' has no attribute 'windll'; this should be safe to ignore for use with XCalibur .RAW files.
+If on Windows, open command prompt **as an administrator** and replace python3 with python below; the final printout may indicate actions relating to the MSI file format intended for use; follow through as neccessary. If on Ubuntu, this command will produce a warning that module 'ctypes' has no attribute 'windll'; this should be safe to ignore for use with XCalibur .RAW files.
 	
 	$ python3 -c "from multiplierz.mzAPI.management import registerInterfaces; registerInterfaces()"
 
@@ -401,9 +417,9 @@ If a large number of new .png, .jpg, and/or .tiff images (extensions are case-se
     sampleName-numChan-#.extension
 
 ### RUN
-After configuration, to run the program perform the following command in the root directory:
+After configuration, to run the program perform the following command in the root directory (if on Windows, replace python3 with python):
 
-    $ python ./START.py
+    $ python3 ./START.py
 
 ### RESULTS
 All results will be placed in ./RESULTS/ as follows (presuming MSI data):
@@ -459,7 +475,7 @@ In the case that multiple configuration files are provided in the form of: CONFI
 
 1. Prior to engaging the physical equipment, run the program with the **impModel** variable enabled in the configuration file. A custom implementation input directory, to use instead of the default: './INPUT/IMP/', may be specified with the **impInputDir** variable, under section L1-1, during configuration. All other testing and training flags within in the configuration file, under section L0, should be disabled. 
 
-2. Initialize the program with 'python START.py' and place 'sampleInfo.txt' and 'channels.csv' (if not using a global 'channels.csv' file in the SLADS/DLADS root directory) into the implementation input directory. The 'sampleInfo.txt' and 'channels.csv' files should follow the format outlined in the CONFIGURATION section of the README documentation. 
+2. Initialize the program with 'python3 START.py' (if on Windows, replace python3 with python) and place 'sampleInfo.txt' and 'channels.csv' (if not using a global 'channels.csv' file in the SLADS/DLADS root directory) into the implementation input directory. The 'sampleInfo.txt' and 'channels.csv' files should follow the format outlined in the CONFIGURATION section of the README documentation. 
 
 3. Place a blank file named **LOCK** into the implementation input directory to signal the program that the 'sampleInfo.txt' and 'channels.csv' files have been placed. 
 
@@ -475,23 +491,73 @@ In the case that multiple configuration files are provided in the form of: CONFI
 # FAQ
 
 ### I read through the README thoroughly, but I'm still getting an error, am confused about how a feature should work, or would like a feature/option added
-Please check if it has already been addressed, or open an issue on the Github repository: (https://github.com/Yatagarasu50469/SLADS/issues).  
+Please check if it has already been addressed, or open an issue on the Github repository at https://github.com/Yatagarasu50469/SLADS/issues 
 
 At this time there is no legacy version support; it would be advisable to verify that the latest release is being used and installed packages match with those listed in the corresponding README. 
 
 ### Most of the code appears to focus on integration with MSI modalities, can it be used for others?
-Absolutely! Currently support is offered for regular images with single and multiple channels. If compatability with another file format is needed for your use case, please either open an issue in the repository, or feel free to fork this project and open a pull request with the added functionality.
+Absolutely! Currently support is offered for regular images with single and multiple channels. If compatability with another file format is needed for your use case, please either open an issue in the repository, or feel free to fork this project and open a pull request with the added functionality. 
 
 ### Can this program be run using MacOS?
-This is probably still possible (was confirmed to be functional at one point at/below v0.9.6 on a Hackintosh with an NVIDIA card), but verifiable, up-to-date installation instructions are not currently available.
+This is probably still possible to some extent (was confirmed to be functional at one point at/below v0.9.6 on a Hackintosh with an NVIDIA 1080Ti), but verifiable, up-to-date installation instructions are not currently available. 
 
 ### Why are Agilent .D files only supported on Windows?
-Multiplierz relies on vendor-provided, proprietary .dll files to read MSI data and are therefore subject to their limitations. 
+Multiplierz relies on vendor-provided, proprietary .dll files to read MSI data and are therefore subject to their limitations. Substantial efforts have been made to port those files into a Linux-compatible format, though without any success. 
+
+### Why is manual installation of the mutliplierz package needed?
+Compatibility support for Bruker .tsf MSI files is not currently available in the main package (Reference: https://github.com/BlaisProteomics/multiplierz/issues/10). Additionally, a required overhead bypass flag has not yet been validated (Reference: https://github.com/BlaisProteomics/multiplierz/issues/9)
 
 ### Why has the framework been switched to PyTorch?
-The short answer is that TensorFlow, as of v2.10.1, has completely dropped support for GPU acceleration on Windows. Agilent .D files can only be read/used with Windows. 
+The short answer is that TensorFlow, as of v2.10.1, has dropped support for GPU acceleration on Windows and Agilent .D files can only be read/used on native Windows. An older model variant (referenced as 'DLADS-TF' during configuration) has been included (principally for benchmarking and historical reference) and should be functional if a TensorFlow installation (lower than v2.16) is available/desirable. Theoretically, installation of TensorFlow v2.10.1 would enable the model to run with CUDA acceleration on native Windows, though issues with keras augmentation layers in that release would be expected to significantly hamper model training performance. This legacy model variant has been successfully installed and run in an Ubuntu 22.04 guest, on a Windows 11 host, through WSL2 (Windows Subsystem for Linux), using the directions below. 
+
+**Warning:** If the packages are installed out of order, or if previous packages, particularly dependencies/requirements/installationss of TensorFlow and PyTorch, were not fully/completely purged, then this process will likely fail to provide a working instance. 
+
+After following the instructions within the appropriate **Pre-Installation** and **Main Installation** sections (being sure **not** to install torch, torchvision, and torchaudio there) enter the instructions below into a terminal to enable NVIDIA GPU acceleration (if applicable/intended). TensorFlow v2.15.1 has been used, as 1) it preceeds the release/alterations made with/for Keras v3.0 (TensorFlow v2.16+), which breaks direct compatibility with the prior DLADS architecture code; and 2) its available binaries use similar third-party package versioning to PyTorch v2.1.1. This is likely to be the last compatible versioning to host both TensorFlow and PyTorch in the same Python environment, while using the same major release of CUDA (v12.2 and v12.2 respectively). More recent TensorFlow releases would be expected break ability to run PyTorch models and vice-versa. A Keras v3.0+ implementation, with swappable TensorFlow/PyTorch/Jax backends may be considered in future to potentially resolve this, but it is more likely that TensorFlow support/improvements will simply be dropped completely. 
+
+    #Confirm any expected GPUs are available
+    $ nvidia-smi
+    
+	#Install TensorFlow
+	$ pip3 install tensorflow[and-cuda]==2.15.1
+	
+	#Add paths to ~/.bashrc (Reference: https://github.com/tensorflow/tensorflow/issues/65035)
+	echo 'export ORIGINAL_LD_LIBRARY_PATH=$LD_LIBRARY_PATH' >> ~/.bashrc
+	echo 'CUDNN_DIR=$(dirname $(dirname $(python3 -c "import nvidia.cudnn; print(nvidia.cudnn.__file__)")))' >> ~/.bashrc
+	echo 'export LD_LIBRARY_PATH=$(find ${CUDNN_DIR}/*/lib/ -type d -printf "%p:")${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> ~/.bashrc
+	echo 'PTXAS_DIR=$(dirname $(dirname $(python3 -c "import nvidia.cuda_nvcc; print(nvidia.cuda_nvcc.__file__)")))' >> ~/.bashrc
+	echo 'export PATH=$(find ${PTXAS_DIR}/*/bin/ -type d -printf "%p:")${PATH:+:${PATH}}' >> ~/.bashrc
+	
+	#Reload bashrc
+    $ source ~/.bashrc
+	
+	#Verify GPUs are available, disregardinng complaints regarding NUMA support. 
+    $ python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+	
+	#Follow the instructions from the Main Installation section, though ignoring the whole line installing torch, then return here
+	$ pip3 install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url https://download.pytorch.org/whl/cu121
+
+###Running in WSL2 (Windows Subsystem for Linux), Ray crashes due to insufficient memory
+WSL2 is still a virutal machine and does not see/allocate all of available system memory (the current default is half). This may be increased manually and might be sufficient to allow the program to run. If memory limit is still exceeded, try decreasing the number of availableThreads in the configuration being run. Open a command prompt and enter the instruction below, choosing to create a new file if prompted. 
+
+	$ cd %UserProfile%
+	$ notepad.exe .wslconfig
+	
+	#Paste the following into the new notepad window, make changes as appropriate for your system, then save without an extension and exit
+	[wsl2]
+	memory=64GB
+	processors=8
+
+	#Back in command prompt, use the next instruction to remove the .txt extension from .wslconfig
+	$ ren .wslconfig.txt .wslconfig
+
+	#Open PowerShell as an administrator and run the following to reboot WSL2
+	$ wsl --shutdown
+	$ restart-service LxssManager
 
 ## Program Operation
+
+### Why aren't all of the system GPUs used during training?
+Distributed GPU training is not currently supported for DLADS and has been removed from DLADS-TF given a proclivity to yield inconsistent results. Multiple GPUs can be and are leveraged in simulated testing when more than a single sample is being evaluated. 
 
 ### Cannot load a known-supported MSI format or receiving a message ImportError: cannot import name 'Iterator' from 'collections'
 Most likely this is due to use of an older multiplierz installation. You will need to uninstall the existing multiplierz installation and re-download it from the forked repository, where a patches have since been applied. 
@@ -545,10 +611,21 @@ Double check that data augmentation is enabled, otherwise decrease the number of
 ### The resulting reconstructions for SLADS/DLADS are quite blurry
 If the provided data is fairly homogeneous, with predominant value fluctuations around structural edges, try decreasing the number of neighbors used in IDW reconstruction (numNeighbors) to as low as 1.
 
+### Encountering OOM errors during new code development
+Ray/Python pin objects in memory if any reference to them still exists; references (particularly to large objects) must be prevented or deleted. Admittedly, there's probably a better way of handling this, but the current coding practices for reducing memory overhead and OOM errors are as follows:
+1. Delete Ray references when they are no longer needed, then calling gc.collect()
+2. Reset Ray (resetRay(numberCPUS), which also has been set to call gc.collect() after major remote computations and results have been retrieved
+3. On returns from remote calls, copy the data to prevent reference storage
+   -if _ = ray.get() (i.e. returning a None object) -> No problem, a reference was not created
+   -if ray.get(), returns list/array -> use ray.get().copy()
+   -if ray.get(), returns something else -> use copy.deepcopy(ray.get())
+4. Delete large objects when they are no longer needed, then calling gc.collect()
+5. Call gc.collect() after major methods return to MAIN.py
+
 ***
 # PUBLICATIONS
 
-###  RESEARCH PRODUCED WITH THIS CODE
+### RESEARCH PRODUCED WITH THIS CODE
 
 **Simulatated Acquisition of MALDI MSI with DLADS**  
 **Version(s):** v0.9.5  
@@ -559,8 +636,8 @@ If the provided data is fairly homogeneous, with predominant value fluctuations 
 **Updated Simulatated Acquisition of DESI MSI with DLADS**  
 **Version(s):** v0.9.1  
 **Subject:** DESI MSI  
-**Citation(s):** D. Helminiak, H. Hu, J. Laskin, and D. H. Ye, “Deep Learning Approach for Dynamic Sampling for Multichannel Mass Spectrometry Imaging.” arXiv, 2022.  
-**Available:** (https://arxiv.org/abs/2210.13415)
+**Citation(s):** D. Helminiak, H. Hu, J. Laskin, D. Ye. “Deep Learning Approach for Dynamic Sparse Sampling for Multi-Channel Mass Spectrometry Imaging“, IEEE Transactions on Computational Imaging, 9, 250-259 (2023). DOI:10.1109/TCI.2023.3248947  
+**Available:** (https://ieeexplore.ieee.org/document/10052699), (https://arxiv.org/abs/2210.13415)   
 
 **Experimental DESI MSI Integration with DLADS**  
 **Version(s):** Experimental results were determined with v0.8.9, and simulation results with v0.9.1  
@@ -582,6 +659,12 @@ If the provided data is fairly homogeneous, with predominant value fluctuations 
 **Available:** (https://doi.org/10.2352/issn.2470-1173.2021.15.coimg-290)
 
 ### SIMILAR & PRECEEDING RESEARCH
+
+**Original SLADS-Net**  
+**Version(s):** (https://github.com/saugatkandel/fast_smart_scanning)  
+**Subject:** Scanning Electron Microscopy and Fast Autonomous Scanning Toolkit (FAST)
+**Citation(s):** Kandel, S., Zhou, T., Babu, A.V. et al. Demonstration of an AI-driven workflow for autonomous high-resolution scanning microscopy. Nat Commun 14, 5501 (2023). https://doi.org/10.1038/s41467-023-40339-1
+**Available:** (https://www.nature.com/articles/s41467-023-40339-1), (https://arxiv.org/pdf/2301.05286)
 
 **Original SLADS-Net**  
 **Version(s):** (https://github.com/cphatak/SLADS-Net), (https://github.com/anl-msd/SLADS-Net)  

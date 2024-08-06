@@ -13,20 +13,39 @@ environmentalVariables = {}
 #or :4096:8 (will increase library footprint in GPU memory by approximately 24MiB)."
 if manualSeedValue != -1: environmentalVariables["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
-#Disable HDF5 lock, allowing parallel access
+#Disable HDF5 lock, allowing parallel file access
 environmentalVariables["HDF5_USE_FILE_LOCKING"] = "FALSE"
 
 #Set matplotlib backend 
 environmentalVariables["MPLBACKEND"] = "agg"
 
+#Allocate memory for CUDA in an asynchronous manner when using TensorFlow; disable this line if GPU compute is < 6.1 (Maxwell and previous)
+if erdModel == 'DLADS-TF': environmentalVariables["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
+
+#Enable deterministic operations in TensorFlow as applicable
+if manualSeedValue != -1 and erdModel == 'DLADS-TF': environmentalVariables["TF_DETERMINISTIC_OPS"] = "1"
+
+#Increase memory usage threshold for Ray from the default 95%
+environmentalVariables["RAY_memory_usage_threshold"] = "0.99"
+
 #Disable Ray memory monitor as it will sometimes decide to kill processes with suprising/unexpected/unmanageable/untracable errors
-#Default appears to be killing jobs at 95% system memory capacity
 #environmentalVariables["RAY_DISABLE_MEMORY_MONITOR"] = "1"
 
-if not debugMode: 
+if debugMode: 
 
+    #Ray deduplicates logs by default; sometimes verbose output is needed in debug
+    environmentalVariables["RAY_DEDUP_LOGS"] = "0"
+    
+else:
+    
+    #Have TensorFlow only report errors ('3'), warnings ('2'), information ('1'), all ('0')
+    if erdModel == 'DLADS-TF': environmentalVariables['TF_CPP_MIN_LOG_LEVEL'] = '3'
+    
     #Stop Ray from crashing the program when errors occur (otherwise may crash despite being handled by try/catch!)
     environmentalVariables["RAY_IGNORE_UNHANDLED_ERRORS"] = "1"
+    
+    #Change Ray filter level
+    environmentalVariables["RAY_LOG_TO_DRIVER_EVENT_LEVEL"] = "ERROR"
 
     #Prevent Ray from printing spill logs
     environmentalVariables["RAY_verbose_spill_logs"] = "0"
@@ -43,8 +62,8 @@ for var, value in environmentalVariables.items(): os.environ[var] = value
 
 import alphatims
 import alphatims.bruker
-import colorama
 import contextlib
+import colorama
 import copy
 import cv2
 import datetime
@@ -80,15 +99,11 @@ import skimage
 import shutil
 import sklearn
 import time
-import torch
-import torch.nn.functional as functional
-import torchvision.transforms as transforms
 import warnings
 
 from bisect import bisect_left, bisect_right, bisect
 from collections import defaultdict
 from contextlib import nullcontext
-from contextlib import redirect_stdout
 from IPython import display
 from IPython.core.debugger import set_trace as Tracer
 from itertools import chain
@@ -121,34 +136,59 @@ from sklearn.utils import shuffle
 from skimage.util import view_as_windows as viewW
 from skimage import filters
 from skimage.filters import *
-from skimage.metrics import peak_signal_noise_ratio as compare_psnr
-from skimage.metrics import structural_similarity as compare_ssim
+from skimage.metrics import normalized_root_mse as compare_NRMSE
+from skimage.metrics import structural_similarity as compare_SSIM
 from skimage.transform import resize
 from sobol import *
-from torch import nn
-from torch import optim
-from torch.utils.data import Dataset, DataLoader
-from torchvision import datasets
-from torchvision.transforms import v2
+import sys
 from typeguard import typechecked
 from tqdm.auto import tqdm
+
+#Imports specific to the configured machine learning package 
+if erdModel == 'DLADS-TF':
+    import tensorflow as tf
+    from tensorflow import keras
+    from tensorflow.keras.layers import *
+    from tensorflow.keras.optimizers import *
+    from tensorflow.keras.utils import *
+    from tensorflow.python.ops import array_ops, image_ops
+    from tensorflow.keras.layers.experimental.preprocessing import PreprocessingLayer
+else: 
+    import torch
+    import torch.nn.functional as F
+    import torch.nn.parallel
+    import torchvision.transforms as transforms
+    from torch import nn
+    from torch import optim
+    from torch.utils.data import Dataset, DataLoader
+    from torchvision import datasets
+    from torchvision.transforms import v2
+    from torchvision.transforms.functional import InterpolationMode
+    
+#Additional external definitions to import through execution
+exec(open("./CODE/LOGGING.py", encoding='utf-8').read())
+if erdModel != 'DLADS-TF': exec(open("./CODE/PCONV2D.py", encoding='utf-8').read())
 
 #LIBRARY AND WARNING SETUP
 #==================================================================
 
+#Benchmarks algorithms and uses the fastest; only recommended if input sizes are consistent
+#if erdModel != 'DLADS-TF': torch.backends.cudnn.benchmark = True
+
+#Allow anomaly detection in training a PyTorch model; sometimes needed for debugging
+#if erdModel != 'DLADS-TF': torch.autograd.set_detect_anomaly(True)
+
+#Setup logging configuration
+setupLogging()
+
 #Change method of instantiation for COM objects
 sys.coinit_flags = 0 
-
-#Restrict logging/warning levels (disable for debug
-if not debugMode: 
-    warnings.filterwarnings("ignore")
-    logging.root.setLevel(logging.ERROR)
 
 #Turn off alphatims internal tqdm callback
 alphatims.utils.set_progress_callback(None)
 
 #Setup deterministic behavior for torch (this alone does not affect CUDA-specific operations)
-if manualSeedValue != -1: torch.use_deterministic_algorithms(True)
+if (manualSeedValue != -1) and (erdModel != 'DLADS-TF'): torch.use_deterministic_algorithms(True, warn_only=False)
 
 #OS SPECIFIC
 #==================================================================
@@ -162,3 +202,4 @@ if systemOS == 'Windows':
     import struct
 
 #==================================================================
+

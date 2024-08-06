@@ -4,20 +4,31 @@
 
 #Indicate and setup the destination folder for results of this configuration
 destResultsFolder = './RESULTS_'+os.path.splitext(os.path.basename(configFileName).split('_')[1])[0]
-if preventResultsOverwrite: sys.exit('\nError - The destination results folder already exists')
-elif os.path.exists(destResultsFolder): shutil.rmtree(destResultsFolder)
+
+#If the folder already exists, either remove it, or append a novel value to it
+if os.path.exists(destResultsFolder):
+    if not preventResultsOverwrite: 
+        shutil.rmtree(destResultsFolder)
+    else: 
+        destinationNameValue = 0
+        destResultsFolder_Base = copy.deepcopy(destResultsFolder)
+        while True:
+            destResultsFolder = destResultsFolder_Base + '_' + str(destinationNameValue)
+            if not os.path.exists(destResultsFolder): break
+            destinationNameValue += 1
 
 #Set a base model name for the specified configuration; must specify/append c value during run
 modelName = 'model_'
 if erdModel == 'SLADS-LS': modelName += 'SLADS-LS_'
 elif erdModel == 'SLADS-Net': modelName += 'SLADS-Net_'
 elif erdModel == 'DLADS': modelName += 'DLADS_'
+elif erdModel == 'DLADS-TF': modelName += 'DLADS_TF_'
+elif erdModel == 'DLADS-PY': modelName += 'DLADS_PY_'
 elif erdModel == 'GLANDS': modelName += 'GLANDS_'
 if chanSingle: modelName += 'chanSingle_'
 else: modelName += 'chanMultiple_'
 if staticWindow: modelName += 'statWin_' + str(staticWindowSize) + '_'
 if not staticWindow: modelName += 'dynWin_' + str(dynWindowSigMult) + '_'
-if applyOptical != None: modelName += 'opt_' + applyOptical + '_'
 
 #Data input directories
 dir_InputData = '.' + os.path.sep + 'INPUT' + os.path.sep
@@ -73,8 +84,16 @@ if trainingModel and loadTrainValDatasets:
 #Clear validation, testing, and implementation directories 
 if os.path.exists(dir_ValidationResults): shutil.rmtree(dir_ValidationResults)
 os.makedirs(dir_ValidationResults)
-if os.path.exists(dir_TestingResults): shutil.rmtree(dir_TestingResults)
-os.makedirs(dir_TestingResults)
+
+if not bypassSampling:
+    if os.path.exists(dir_TestingResults): shutil.rmtree(dir_TestingResults)
+    os.makedirs(dir_TestingResults)
+else: 
+    folderList = [folder.path for folder in os.scandir(dir_TestingResults) if folder.is_dir()]
+    for folder in folderList: shutil.rmtree(folder)
+    fileList = [file for file in glob.glob(dir_TestingResults+'*') if not file.endswith(".p")]
+    for file in fileList: os.remove(file)
+
 dir_ImpDataFinal = dir_ImpData + impSampleName + os.path.sep
 if os.path.exists(dir_ImpDataFinal): shutil.rmtree(dir_ImpDataFinal)
 os.makedirs(dir_ImpDataFinal)

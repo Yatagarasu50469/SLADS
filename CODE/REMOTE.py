@@ -7,24 +7,22 @@
 class Model_Actor:
     def __init__(self, erdModel, modelDirectory, modelName, gpuNum=-1):
         
-        if not debugMode: 
-            warnings.filterwarnings("ignore")
-            logging.root.setLevel(logging.ERROR)
-        
-        self.erdModel = erdModel
+        setupLogging()
         
         #Reload system GPU ids into environment (bypass Ray hiding them, which leads to the incorrect GPU selection)
         os.environ["CUDA_VISIBLE_DEVICES"] = systemGPUs
+        if gpuNum >=0: self.local_gpus = [gpuNum]
+        else: self.local_gpus = []
         
         #Load model
-        if self.erdModel == 'SLADS-LS' or self.erdModel == 'SLADS-Net': 
-            self.model = np.load(modelDirectory + modelName +'Model.npy', allow_pickle=True).item()
-        else: 
-            if gpuNum >=0: self.local_gpus = [gpuNum]
-            else: self.local_gpus = []
-            if self.erdModel == 'DLADS': self.model = DLADS(False, self.local_gpus, modelDirectory, modelName)
-            elif self.erdModel == 'GLANDS': sys.exit('\nError - GLANDS loading not yet defined')
-    
+        if 'SLADS' in erdModel: self.model = np.load(modelDirectory + modelName +'.npy', allow_pickle=True).item()
+        elif erdModel == 'DLADS': self.model = DLADS(False, self.local_gpus, modelDirectory, modelName)
+        elif erdModel == 'GLANDS': sys.exit('\nError - GLANDS loading not yet defined')
+        elif erdModel == 'DLADS-TF': self.model = DLADS_TF(False, self.local_gpus, modelDirectory, modelName)
+        elif erdModel == 'DLADS-PY': self.model = DLADS_PY(False, self.local_gpus, modelDirectory, modelName)
+        else: sys.exit('\nError - Specified model has not been defined.')
+        
+    #Preventing multiple concurrent calls, inference an input using the trained model
     def generate(self, input, reconOnly=False):
         return self.model.predict(input)
 
@@ -32,9 +30,7 @@ class Model_Actor:
 @ray.remote(num_cpus=0)
 class SamplingProgress_Actor:
     def __init__(self): 
-        if not debugMode: 
-            warnings.filterwarnings("ignore")
-            logging.root.setLevel(logging.ERROR)
+        setupLogging()
         self.current = 0.0
     def update(self, amount): self.current += amount
     def getCurrent(self): return self.current
@@ -45,21 +41,20 @@ class SamplingProgress_Actor:
 class Recon_Actor:
     
     #Set internal parameters for handling image reconst ruction process
-    def __init__(self, indexes, sampleType, squareDim, finalDim, allImagesMax, allImagesPath, squareAllImagesPath, squareOpticalImage, erdModel):
+    def __init__(self, indexes, sampleType, squareDim, finalDim, allImagesMin, allImagesMax, allImagesPath, squareAllImagesPath, squareOpticalImage, erdModel):
         
-        if not debugMode: 
-            warnings.filterwarnings("ignore")
-            logging.root.setLevel(logging.ERROR)
+        setupLogging()
         
         self.indexes = indexes
         self.sampleType = sampleType
         self.squareDim = squareDim
         self.finalDim = finalDim
-        self.allImagesMax = allImagesMax
+        self.allImagesMin = allImagesMin[self.indexes]
+        self.allImagesMax = allImagesMax[self.indexes]
         self.squareOpticalImage = squareOpticalImage
         self.erdModel = erdModel
         
-        if self.erdModel == 'GLANDS': sys.exit('Error - Parallelized recon actors are not supported for GLANDS model') 
+        if self.erdModel == 'GLANDS': sys.exit('\nError - Parallelized recon actors are not supported for GLANDS model.') 
         
         #Load in reference for all images file and setup for performing reconstructions
         self.allImagesFile = h5py.File(allImagesPath, 'r')
@@ -67,45 +62,39 @@ class Recon_Actor:
         if self.sampleType == 'DESI': 
             self.squareAllImagesFile = h5py.File(squareAllImagesPath, 'r')
             self.squareAllImages = self.squareAllImagesFile['squareAllImages'][self.indexes]
-        
-        #Might be able to close the h5 files here and not have to make a seperate call with closeAllImages to the actor???
-        #self.allImagesFile.close()
-        #del self.allImagesFile
-        #if self.sampleType == 'DESI':
-        #    self.squareAllImagesFile.close()
-        #    del self.squareAllImagesFile
     
-    #Apply mask to obtain sparse images, #Apply mask to the complete data to obtain sparse images; (needs to be float32 after the multiplication to prevent memory issues, mask must therefore be float32!)
-    def applyMask(self, squareMask): 
-            if self.sampleType == 'MALDI': self.reconImages = self.allImages*squareMask
-            elif self.sampleType == 'DESI': self.reconImages = self.squareAllImages*squareMask
-    
-    #Compute IDW reconstructions
-    def computeReconIDW(self, tempScanData, mask):
+    #Compute reconstructions
+    def computeRecon(self, tempScanData, squareMask, mask):
         
-        #Compute IDW reconsturctions
-        self.reconImages = np.array([computeReconIDW(self.reconImages[index], tempScanData) for index in range(0, len(self.indexes))], dtype=np.float32)
+        #Apply mask to the complete data to obtain sparse images; (needs to be float32 after the multiplication to prevent memory issues, mask must therefore be float32!)
+        if self.sampleType == 'MALDI': self.reconImages = self.allImages*squareMask
+        elif self.sampleType == 'DESI': self.reconImages = self.squareAllImages*squareMask
         
-        #Resize DESI data back to physical dimensions and copy back the original measured values to reconstructions
-        #Note that multiplication/addition using mask runs, but doesn't work correctly! Not worth trying to diagnose at this time
+        #Compute IDW reconstructions
+        for index in range(0, len(self.indexes)): self.reconImages[index] = computeReconIDW(self.reconImages[index], tempScanData)
+        
+        #Resize DESI data back to physical dimensions and copy back the original measured values to reconstructions; creating new holding array for resized results and looping is needed for memory efficiency
         if self.sampleType == 'DESI': 
-            measuredIdxs = np.transpose(np.where(mask==1))
-            self.reconImages = np.moveaxis(resize(np.moveaxis(self.reconImages, 0, -1), tuple(self.finalDim), order=0), -1, 0)
-            for measuredIdx in measuredIdxs: self.reconImages[:, measuredIdx[0], measuredIdx[1]] = self.allImages[:, measuredIdx[0], measuredIdx[1]]
-    
-    #Compute PSNR/SSIM for reconstructions
+            resizedReconImages = np.zeros((len(self.indexes), self.finalDim[0], self.finalDim[1]))
+            for index in range(0, len(self.indexes)): resizedReconImages[index] = resize(self.reconImages[index], tuple(self.finalDim), order=0)
+            self.reconImages = resizedReconImages
+            del resizedReconImages
+            self.reconImages = (self.reconImages*(1-mask)) + (self.allImages*mask)
+        
+    #Compute NRMSE/SSIM for reconstructions
     def computeMetrics(self):
-        self.imagesPSNRList, self.imagesSSIMList = [], []
+        self.imagesNRMSEList, self.imagesSSIMList = [], []
         for index in range(0, len(self.indexes)):
-            self.imagesPSNRList.append(compare_psnr(self.allImages[index], self.reconImages[index], data_range=self.allImagesMax[index]))
-            self.imagesSSIMList.append(compare_ssim(self.allImages[index], self.reconImages[index], data_range=self.allImagesMax[index]))
+            score_NRMSE, score_SSIM = compareImages(self.allImages[index], self.reconImages[index], self.allImagesMin[index], self.allImagesMax[index])
+            self.imagesNRMSEList.append(score_NRMSE)
+            self.imagesSSIMList.append(score_SSIM)
     
     #Return allImages already loaded; Warning: Performing any operations beyond just the return will induce significant copy overhead!
     def getAllImages(self):
         return self.allImages
     
-    def getPSNR(self):
-        return self.imagesPSNRList
+    def getNRMSE(self):
+        return self.imagesNRMSEList
     
     def getSSIM(self):
         return self.imagesSSIMList
@@ -114,35 +103,40 @@ class Recon_Actor:
     def getReconImages(self):
         return self.reconImages
     
-    #Close any open files
+    #Close any open filesy
     def closeAllImages(self):
         self.allImagesFile.close()
         del self.allImagesFile
         if self.sampleType == 'DESI':
             self.squareAllImagesFile.close()
             del self.squareAllImagesFile
+        _ = gc.collect()
 
 #Ray actor for holding MSI data in a shared memory location for parallel operations; do not allocate a dedicated CPU thread
 @ray.remote(num_cpus=0)
 class Reader_MSI_Actor:
     
     #Create buffers for holding all MSI images, the specified channel images, and the sum of all values
-    def __init__(self, sampleType, readAllMSI, mzNum, chanNum, yDim, xDim, allImagesPath, squareAllImagesPath, overwriteAllChanFiles):
+    def __init__(self, sampleType, readAllMSI, mzNum, chanNum, yDim, xDim, allImagesDataPath, allImagesPath, squareAllImagesPath, overwriteAllChanFiles):
         
-        if not debugMode: 
-            warnings.filterwarnings("ignore")
-            logging.root.setLevel(logging.ERROR)
-            
+        setupLogging()
+        
         self.readAllMSI = readAllMSI
         self.sampleType = sampleType
         self.yDim = yDim
         self.xDim = xDim
+        self.allImagesDataPath = allImagesDataPath
         self.allImagesPath = allImagesPath
         self.squareAllImagesPath = squareAllImagesPath
         self.overwriteAllChanFiles = overwriteAllChanFiles
-        if self.readAllMSI: 
-            if self.overwriteAllChanFiles: self.allImages = np.zeros((yDim, xDim, mzNum), dtype=np.float32)
-            else: self.allImages = h5py.File(allImagesPath, 'r')['allImages']
+        
+        if self.readAllMSI:
+            if self.overwriteAllChanFiles: 
+                self.allImages = np.zeros((yDim, xDim, mzNum), dtype=np.float32)
+            else:
+                self.allImagesMin = np.load(self.allImagesDataPath + 'allImagesMin.npy', allow_pickle=True)
+                self.allImagesMax = np.load(self.allImagesDataPath + 'allImagesMax.npy', allow_pickle=True)
+        
         self.sumImage = np.zeros((yDim, xDim), dtype=np.float32)
         self.chanImages = np.zeros((yDim, xDim, chanNum), dtype=np.float32)
         if sampleType == 'DESI': self.mzDataComplete, self.origTimesComplete, self.lineNumComplete, self.readScanFiles = [], [], [], []
@@ -169,10 +163,12 @@ class Reader_MSI_Actor:
                     self.lineNumComplete.append(lineNumTotal[indexNum])
                 elif self.overwriteAllChanFiles and self.readAllMSI: self.allImages[lineNumTotal[indexNum], :, :] = mzDataTotal[indexNum]
     
-    #Write data to a .hdf5 file at the prespecified location on disk and return the max value for each m/z; for DESI save square varations as well for later reconstructions
+    #Write data to a .hdf5 file at the prespecified location on disk and return the min/max values for each m/z; for DESI save square varations as well for later reconstructions
     def writeToDisk(self, squareDim):
         if self.overwriteAllChanFiles: 
-            allImagesMax = np.max(self.allImages, axis=(0,1))
+            self.allImagesMin, self.allImagesMax = np.min(self.allImages, axis=(0,1)), np.max(self.allImages, axis=(0,1))
+            np.save(self.allImagesDataPath + 'allImagesMin', self.allImagesMin)
+            np.save(self.allImagesDataPath + 'allImagesMax', self.allImagesMax)
             allImagesFile = h5py.File(self.allImagesPath, 'a')
             _ = allImagesFile.create_dataset(name='allImages', data=np.moveaxis(self.allImages, -1, 0), chunks=(1, self.yDim, self.xDim), dtype=np.float32)
             allImagesFile.close()
@@ -180,9 +176,7 @@ class Reader_MSI_Actor:
                 squareAllImagesFile = h5py.File(self.squareAllImagesPath, 'a')
                 _ = squareAllImagesFile.create_dataset(name='squareAllImages', data=np.moveaxis(resize(self.allImages, tuple(squareDim), order=0), -1, 0), chunks=(1, squareDim[0], squareDim[1]), dtype=np.float32)
                 squareAllImagesFile.close()
-        else:
-            allImagesMax = np.max(self.allImages, axis=(1,2))
-        return allImagesMax
+        return self.allImagesMin, self.allImagesMax
         
     #Return list of scan files that have already been read
     def getReadScanFiles(self):
@@ -225,21 +219,24 @@ class Reader_MSI_Actor:
 @ray.remote
 def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, indexData, mzOriginalIndices, mzRanges, sampleType, mzLowerBound, mzUpperBound, mzLowerIndex, mzPrecision, mzRound, mzInitialCount, mask, newTimes, finalDim, sampleWidth, scanRate, overwriteAllChanFiles, mzFinal=None, mzFinalGrid=None, chanValues=None, chanFinalGrid=None, impFlag=False, postFlag=False, impOffset=None, scanMethod=None, lineMethod=None, physicalLineNums=None, ignoreMissingLines=None, missingLines=None, unorderedNames=None):
     
-    if not debugMode: 
-        warnings.filterwarnings("ignore")
-        logging.root.setLevel(logging.ERROR)
+    setupLogging()
     alphatims.utils.set_progress_callback(None)
     
     mzDataTotal, chanDataTotal, sumDataTotal = [], [], []
     if sampleType == 'MALDI':
     
         #Load the single imzML file expected for MALDI
-        data = ImzMLParser(scanFileNames[0]) 
+        data = ImzMLParser(scanFileNames[0])
+        #data = ImzMLParser(scanFileNames[0], include_spectra_metadata=['MS:1000285'])
+        
+        #Extract measured TIC data
+        #dataTIC = data.spectrum_metadata_fields['MS:1000285']
         
         #Process each of the files assigned to this helper and transmit to shared memory actor
         for index in indexData:
             mzs, ints = data.getspectrum(index)
             sumDataTotal.append(np.sum(ints))
+            #sumDataTotal.append(dataTIC[index])
             filtIndexLow, filtIndexHigh = bisect_left(mzs, mzLowerBound), bisect_right(mzs, mzUpperBound)
             if overwriteAllChanFiles and readAllMSI: mzDataTotal.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
             chanDataTotal.append(np.asarray([np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]) for mzRange in mzRanges]))      
@@ -247,6 +244,7 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
 
         #Close the file
         del data
+        _ = gc.collect()
     
     elif sampleType == 'DESI':
         
@@ -273,7 +271,7 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                     data.format = 'Bruker'
             except: 
                 errorFlag = True
-                if not debugMode: print('\nWarning - Failed to load any data from file: ' + scanFileName + ' This file will be ignored this iteration.')
+                if debugMode: print('\nWarning - Failed to load any data from file: ' + scanFileName + ' This file will be ignored this iteration.')
             
             #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number minus 1
             if not errorFlag:
@@ -283,7 +281,7 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                         lineNum = physicalLineNums[fileNum+1]
                     except: 
                         errorFlag = True
-                        if not debugMode: print('\nWarning - Failed to find the physical line number for the file: ' + scanFileName + ' This file will be ignored this iteration.')
+                        if debugMode: print('\nWarning - Failed to find the physical line number for the file: ' + scanFileName + ' This file will be ignored this iteration.')
                 else: lineNum = fileNum
             
             #If error still has not occurred 
@@ -321,7 +319,7 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                 if data.format == 'Bruker': positions = range(1, len(origTimes)+1)
                 else: positions = range(data.scan_range()[0], data.scan_range()[1]+1)
                 
-                #Read in and process spectrum data for each position, storing for later analysis
+                #Read in and process spectrum data for each position, storing for later analysis; use 'profile' spectrum mode
                 for pos in positions:
                     if data.format == 'Bruker':
                         if not useAlphaTims: 
@@ -331,7 +329,9 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                             sortedIndices = np.argsort(mzs)
                             mzs, ints = mzs[sortedIndices], ints[sortedIndices]
                         sumImageLine.append(np.sum(ints))
-                    else: 
+                    elif data.format == 'Agilent': 
+                        mzs, ints = data.scan(pos, 'profile')
+                    elif data.format == 'raw': 
                         mzs, ints = data.scan(pos, False, True)
                     if overwriteAllChanFiles and readAllMSI: 
                         filtIndexLow, filtIndexHigh = bisect_left(mzs, mzLowerBound), bisect_right(mzs, mzUpperBound)
@@ -366,15 +366,27 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                 
                 #Close the file; (Do not use multiplierz function: data.close() - it's really slow and unclear why
                 del data
+                _ = gc.collect()
         
         #If there was new data read, transfer such to shared memory actor
-        if len(newReadScanFiles) > 0: _ = ray.get(allImagesActor.setValues.remote(indexData, mzDataTotal, chanDataTotal, sumDataTotal, origTimesTotal, np.array(lineNumTotal), newReadScanFiles, allDataInterpFailTotal))
+        if len(newReadScanFiles) > 0: 
+            _ = ray.get(allImagesActor.setValues.remote(indexData, mzDataTotal, chanDataTotal, sumDataTotal, origTimesTotal, np.array(lineNumTotal), newReadScanFiles, allDataInterpFailTotal))
+
+#If version >0.10.1, delete this comment block; left for documentation 
+#================================================================================================================================
+#Tracer()
+#Parallel visualization has a race condition producing an occasional exception
+#matplotlib\cbook\__init__.py -> _remove_proxy -> del self.callbacks[signal][cid] -> KeyError: 'changed'
+#Exception ignored -> Python311\lib\weakref.py -> in _cb
+#Tried temporarily redirecting output to prevent spurious output(s), but message still appears in console...
+#Think this results from matplotlib not being threadsafe
+#Might now be fixed having removed plt.close() statements
+#================================================================================================================================
 
 #Visualize sampling steps in parallel
 @ray.remote
 def visualizeStep_parhelper(samples, indexes, sampleData, dir_progression, dir_chanProgressions, samplingProgress_Actor):
-    if not debugMode: logging.root.setLevel(logging.ERROR)
-    
+    if not debugMode: setupLogging()
     for index in indexes: 
         visualizeStep(samples[index], sampleData, dir_progression, dir_chanProgressions)
         _ = ray.get(samplingProgress_Actor.update.remote(1))

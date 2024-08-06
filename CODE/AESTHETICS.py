@@ -18,12 +18,14 @@ def programTitle(versionNum, configFileName):
     elif erdModel == 'SLADS-Net': 
         programName = "Supervised Learning Approach for Dynamic Sampling with Neural Network"
         headerWidth = 76
-    elif erdModel == 'DLADS': 
+    elif 'DLADS' in erdModel: 
         programName = "Deep Learning Approach for Dynamic Sampling"
         headerWidth = 40
     elif erdModel == 'GLANDS': 
         programName = "Generative Learning Adversarial Networks for Dynamic Sampling"
         headerWidth = 50
+    else:
+        sys.exit('\nError - Unknown erdModel specified.')
     programName += " - v"+versionNum
     programNameOffset = (' ' * int((int(consoleColumns)-len(programName))//2))
     headerLineOffset = (' ' * int((int(consoleColumns)-headerWidth)//2))
@@ -49,7 +51,7 @@ def programTitle(versionNum, configFileName):
 "+headerLineOffset+"███████║███████╗██║  ██║██████╔╝███████║         ██║ ╚████║███████╗   ██║   \n\
 "+headerLineOffset+"╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ ╚══════╝         ╚═╝  ╚═══╝╚══════╝   ╚═╝   \n"
 
-    elif erdModel == 'DLADS': 
+    elif 'DLADS' in erdModel: 
         header = "\n\
 "+headerLineOffset+"██████╗ ██╗      █████╗ ██████╗ ███████╗\n\
 "+headerLineOffset+"██╔══██╗██║     ██╔══██╗██╔══██╗██╔════╝\n\

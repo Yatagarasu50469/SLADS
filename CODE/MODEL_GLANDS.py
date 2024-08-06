@@ -39,17 +39,24 @@ class Model_GLANDS_DIS(nn.Module):
         
     def forward(self):
         return 
-
+#Perform augmentation and setup for DLADS data processing
+class DataPreprocessing_DLADS(Dataset):
+    def __init__(self, inputs, labels, device, augmentFlag):
+        super().__init__()
+        self.noAugmentFlag = not augmentFlag
+        if augmentFlag: 
+            
+            
 #Perform augmentation and setup for GLANDS data processing
 class DataPreprocessing_GLANDS(Dataset):
     def __init__(self, inputs, labels, augmentFlag=False):
         super().__init__()
         if augmentFlag:
             self.transform = transforms.Compose([
-                v2.RandomResizedCrop(size=(64, 64), scale=(0.08, 1.0), ratio=(3.0/4.0, 4.0/3.0), antialias=True), #https://arxiv.org/pdf/1409.4842.pdf
-                v2.RandomHorizontalFlip(p=0.5),
+                v2.RandomHorizontalFlip(p=0.5), 
                 v2.RandomVerticalFlip(p=0.5),
-                v2.ToDtype(torch.float32, scale=False)
+                v2.RandomResizedCrop(size=(128, 128), scale=(0.01, 1.0), ratio=(1.0, 1.0), interpolation=InterpolationMode.NEAREST)
+                #v2.RandomCrop(size=(128, 128), pad_if_needed=True)
             ])
         else: 
             self.transform = transforms.Compose([
@@ -126,11 +133,11 @@ elif optimizer == 'RMSProp':
 
 #Training loop for GLANDS
 def train_GLANDS():
-    t0 = time.time()
+    t0 = time.perf_counter()
     
     #Perform training/validation processes here
     
-    t1 = time.time()
+    t1 = time.perf_counter()
     trainingTime = datetime.timedelta(seconds=(t1-t0))
     print('Model Training Time: ' + str(trainingTime))
     
@@ -146,11 +153,11 @@ def train_GLANDS():
     
 #Training loop for GLANDS
 def train_GLANDS():
-    t0 = time.time()
+    t0 = time.perf_counter()
     
     #Perform training/validation processes here
     
-    t1 = time.time()
+    t1 = time.perf_counter()
     trainingTime = datetime.timedelta(seconds=(t1-t0))
     print('Model Training Time: ' + str(trainingTime))
     
