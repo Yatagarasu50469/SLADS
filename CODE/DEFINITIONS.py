@@ -87,8 +87,8 @@ class SampleData:
             self.sampleType = sampleInfo[lineIndex].rstrip()
             lineIndex += 1
         except: 
-            self.sampleType = 'IMAGE'
-            
+            sys.exit('\nError - sampleInfo.txt was not found in the sample folder')
+        
         #Check if alphatims should be used instead of multiplierz
         if self.sampleType == 'DESI-ALPHA':
             self.sampleType = 'DESI'

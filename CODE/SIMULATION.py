@@ -138,7 +138,7 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         if erdModel != 'GLANDS': basicPlot(result.percsMeasured, result.ERD_SSIMList, result.dir_sampleResults+'SSIM_ERD'+'.tiff', xLabel=xLabel, yLabel='Average SSIM')
     
     #Delete pickled result and sampleData data from disk if they aren't needed for later bypassSampling configuration
-    if not keepSamplingResultBypassData: 
+    if not keepResultData: 
         for resultLocation in resultLocations: os.remove(resultLocation) 
         for sampleDataLocation in sampleDataLocations: os.remove(sampleDataLocation)  
         os.remove(dir_TestingResults + 'resultLocations.p')
