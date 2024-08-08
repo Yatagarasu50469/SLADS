@@ -7,7 +7,7 @@
 
 ## Current Development
 
-**0.10.1**  Replace PSNR with NRMSE, reduce RAM overhead, update DLADS, add new early stopping criteria  
+**0.10.1**  NRMSE replaces PSNR, reduce RAM overhead, DLADSv2, unify TIC loading, use DESI profile spectra
 **0.10.2**  Initial Generative Learning Adversarial Network for Dynamic Sampling (GLANDS) framework  
 **0.10.3**  Default configurations with overrides  
 
