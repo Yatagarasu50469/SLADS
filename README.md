@@ -6,7 +6,7 @@
 # PROGRAM
 
     NAME:           SLADS/DLADS/GLANDS
-    MODIFIED:       6 August 2024
+    MODIFIED:       7 August 2024
     VERSION:        0.10.1
     LICENSE:        GNU General Public License v3.0
     DESCRIPTION:    Dynamic sampling algorithms with updated/developing implementations of:
@@ -193,6 +193,7 @@ Follow the instructions provided in the pre-installation guide specific to your 
 	
     Python             3.11.8
     pip                24.2
+    NVIDIA Driver      560.70
 	
     aiorwlock          1.4.0
     antialiased-cnns   0.3
@@ -611,14 +612,17 @@ Double check that data augmentation is enabled, otherwise decrease the number of
 ### The resulting reconstructions for SLADS/DLADS are quite blurry
 If the provided data is fairly homogeneous, with predominant value fluctuations around structural edges, try decreasing the number of neighbors used in IDW reconstruction (numNeighbors) to as low as 1.
 
+### DESI data looks notably different between v0.9.2/v0.9.3/v0.10.1
+v0.9.2 and earlier used the multiplierz XIC method to extract intensities from MSI files, where v0.9.3 onwards utilize the multiplierz scan method instead. The returned values were close, but not exactly the same. Further, despite the code and documentation suggesting that the returned data was from a profile mode spectrum, both of these previous approaches instead returned centroid mode data. Lastly, until v0.10.1, the TIC or sumImageData was sometimes obtained using the XIC method, where most files simply took a summation over measured intensities (this is now the unified behavior for all MSI file types). 
+
 ### Encountering OOM errors during new code development
 Ray/Python pin objects in memory if any reference to them still exists; references (particularly to large objects) must be prevented or deleted. Admittedly, there's probably a better way of handling this, but the current coding practices for reducing memory overhead and OOM errors are as follows:
 1. Delete Ray references when they are no longer needed, then calling gc.collect()
 2. Reset Ray (resetRay(numberCPUS), which also has been set to call gc.collect() after major remote computations and results have been retrieved
-3. On returns from remote calls, copy the data to prevent reference storage
-   -if _ = ray.get() (i.e. returning a None object) -> No problem, a reference was not created
-   -if ray.get(), returns list/array -> use ray.get().copy()
-   -if ray.get(), returns something else -> use copy.deepcopy(ray.get())
+3. On returns from remote calls, copy the data to prevent reference storage  
+   -if _ = ray.get() (i.e. returning a None object) -> No problem, a reference was not created  
+   -if ray.get(), returns list/array -> use ray.get().copy()  
+   -if ray.get(), returns something else -> use copy.deepcopy(ray.get())  
 4. Delete large objects when they are no longer needed, then calling gc.collect()
 5. Call gc.collect() after major methods return to MAIN.py
 
@@ -634,7 +638,7 @@ Ray/Python pin objects in memory if any reference to them still exists; referenc
 **Available:** (https://library.imaging.org/admin/apis/public/api/ist/website/downloadArticle/ei/36/15/COIMG-143)
 
 **Updated Simulatated Acquisition of DESI MSI with DLADS**  
-**Version(s):** v0.9.1  
+**Version(s):** v0.9.2  
 **Subject:** DESI MSI  
 **Citation(s):** D. Helminiak, H. Hu, J. Laskin, D. Ye. “Deep Learning Approach for Dynamic Sparse Sampling for Multi-Channel Mass Spectrometry Imaging“, IEEE Transactions on Computational Imaging, 9, 250-259 (2023). DOI:10.1109/TCI.2023.3248947  
 **Available:** (https://ieeexplore.ieee.org/document/10052699), (https://arxiv.org/abs/2210.13415)   

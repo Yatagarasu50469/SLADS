@@ -503,12 +503,8 @@ class SampleData:
         elif self.sampleType == 'MALDI':
         
             #Establish file pointer for the single imzML file and verify it is readable
-            #try: data = ImzMLParser(scanFileNames[0], include_spectra_metadata=['MS:1000285'])
             try: data = ImzMLParser(scanFileNames[0])
             except: sys.exit('\nError - Unable to read file' + scanFileNames[0])
-            
-            #Extract measured TIC data
-            #dataTIC = data.spectrum_metadata_fields['MS:1000285']
             
             #Adjust stored coordinates to be zero-based
             coordinates = np.asarray(data.coordinates)-1
@@ -517,7 +513,6 @@ class SampleData:
             if not parallelization:
                 for i, (x, y, z) in tqdm(enumerate(coordinates), total = len(coordinates), desc='Reading', leave=False, disable=self.impFlag, ascii=asciiFlag):
                     mzs, ints = data.getspectrum(i)
-                    #self.sumImage[y, x] = dataTIC[i]
                     self.sumImage[y, x] = np.sum(ints)
                     if self.overwriteAllChanFiles and self.readAllMSI: 
                         filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
@@ -575,16 +570,14 @@ class SampleData:
                         #Add file name to those that will have been already scanned (when this process finishes)
                         self.readScanFiles.append(scanFileName)
                         
-                        #Extract original measurement times and setup/read TIC data as applicable
+                        #Extract original measurement times
                         if data.format == 'Bruker': 
-                            sumImageLine = []
                             if not self.useAlphaTims: origTimes = np.asarray(data.ms1_frames)[:,1]/60
                             else: origTimes = np.delete(data.rt_values, 0, axis = 0)/60
                         else: 
-                            imageData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
-                            origTimes, sumImageLine = imageData[:,0], imageData[:,1]
+                            origTimes = np.asarray(data.scan_info())[:,0].astype('float64')
                         
-                        #Force original times memory allocation to be contigous
+                        #Force original times memory allocation to be contiguous
                         origTimes = np.ascontiguousarray(origTimes)
                         
                         #Offset the original measurement times, such that the first position's time equals 0
@@ -601,6 +594,9 @@ class SampleData:
                         if data.format == 'Bruker': positions = range(1, len(origTimes)+1)
                         else: positions = range(data.scan_range()[0], data.scan_range()[1]+1)
                         
+                        #Create list for holding TIC data
+                        sumImageLine = []
+                        
                         #Read in and process spectrum data for each location; use 'profile' spectrum mode
                         for pos in positions:
                             if data.format == 'Bruker':
@@ -610,12 +606,14 @@ class SampleData:
                                     mzs, ints = data[pos]['mz_values'].values, data[pos]['corrected_intensity_values'].values
                                     sortedIndices = np.argsort(mzs)
                                     mzs, ints = mzs[sortedIndices], ints[sortedIndices]
-                                sumImageLine.append(np.sum(ints))
                             elif data.format == 'Agilent': 
                                 mzs, ints = data.scan(pos, 'profile')
                             elif data.format == 'raw': 
                                 mzs, ints = data.scan(pos, False, True)
-                                
+                            
+                            #Obtain TIC by intensity summation
+                            sumImageLine.append(np.sum(ints))
+                            
                             if self.overwriteAllChanFiles and self.readAllMSI: 
                                 filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
                                 mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices))

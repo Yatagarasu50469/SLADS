@@ -227,16 +227,11 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
     
         #Load the single imzML file expected for MALDI
         data = ImzMLParser(scanFileNames[0])
-        #data = ImzMLParser(scanFileNames[0], include_spectra_metadata=['MS:1000285'])
-        
-        #Extract measured TIC data
-        #dataTIC = data.spectrum_metadata_fields['MS:1000285']
         
         #Process each of the files assigned to this helper and transmit to shared memory actor
         for index in indexData:
             mzs, ints = data.getspectrum(index)
             sumDataTotal.append(np.sum(ints))
-            #sumDataTotal.append(dataTIC[index])
             filtIndexLow, filtIndexHigh = bisect_left(mzs, mzLowerBound), bisect_right(mzs, mzUpperBound)
             if overwriteAllChanFiles and readAllMSI: mzDataTotal.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
             chanDataTotal.append(np.asarray([np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]) for mzRange in mzRanges]))      
@@ -292,17 +287,15 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                 
                 #Add file name to those that will have been already scanned (when this process finishes)
                 newReadScanFiles.append(scanFileName)
-            
-                #Extract original measurement times and setup/read TIC data as applicable
+                
+                #Extract original measurement times
                 if data.format == 'Bruker': 
-                    sumImageLine = []
                     if not useAlphaTims: origTimes = np.asarray(data.ms1_frames)[:,1]/60
                     else: origTimes = np.delete(data.rt_values, 0, axis = 0)/60
                 else: 
-                    imageData = np.asarray(data.xic(data.time_range()[0], data.time_range()[1]))
-                    origTimes, sumImageLine = imageData[:,0], imageData[:,1]
+                    origTimes = np.asarray(data.scan_info())[:,0].astype('float64')
                 
-                #Force original times memory allocation to be contigous
+                #Force original times memory allocation to be contiguous
                 origTimes = np.ascontiguousarray(origTimes)
                 
                 #Offset the original measurement times, such that the first position's time equals 0
@@ -319,6 +312,9 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                 if data.format == 'Bruker': positions = range(1, len(origTimes)+1)
                 else: positions = range(data.scan_range()[0], data.scan_range()[1]+1)
                 
+                #Create list for holding TIC data
+                sumImageLine = []
+                
                 #Read in and process spectrum data for each position, storing for later analysis; use 'profile' spectrum mode
                 for pos in positions:
                     if data.format == 'Bruker':
@@ -328,11 +324,14 @@ def msi_parhelper(allImagesActor, useAlphaTims, readAllMSI, scanFileNames, index
                             mzs, ints = data[pos]['mz_values'].values, data[pos]['corrected_intensity_values'].values
                             sortedIndices = np.argsort(mzs)
                             mzs, ints = mzs[sortedIndices], ints[sortedIndices]
-                        sumImageLine.append(np.sum(ints))
                     elif data.format == 'Agilent': 
                         mzs, ints = data.scan(pos, 'profile')
                     elif data.format == 'raw': 
                         mzs, ints = data.scan(pos, False, True)
+                    
+                    #Obtain TIC by intensity summation
+                    sumImageLine.append(np.sum(ints))
+                    
                     if overwriteAllChanFiles and readAllMSI: 
                         filtIndexLow, filtIndexHigh = bisect_left(mzs, mzLowerBound), bisect_right(mzs, mzUpperBound)
                         mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], mzLowerIndex, mzPrecision, mzRound, mzInitialCount), mzOriginalIndices))
