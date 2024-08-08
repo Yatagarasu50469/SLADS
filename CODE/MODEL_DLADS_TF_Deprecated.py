@@ -5,15 +5,6 @@
 #
 #==================================================================
 
-#Random rotation transform using a discrete set of angles; enusres RandomCrop captures data (and doesn't add zeros) in original input FOV
-#Reference: https://stackoverflow.com/questions/66368576/is-there-a-way-to-build-a-keras-preprocessing-layer-that-randomly-rotates-at-spe
-class RandomDiscreteRotate(PreprocessingLayer):
-    def __init__(self): 
-        super().__init__()
-    def __call__(self, inputs): 
-        rots = tf.random.stateless_uniform((1,1), (manualSeedValue, manualSeedValue), 0, 4, dtype=tf.int32)[0,0]
-        return tf.image.rot90(inputs, k=rots)
-        
 #Perform identical data augmentation steps on an a set of inputs with num channels and an output with one channel
 class DataAugmentation(Layer):
     def __init__(self, numChannels=None):
@@ -21,7 +12,8 @@ class DataAugmentation(Layer):
         self.numChannels = numChannels
         self.augmentLayer = tf.keras.Sequential([
             RandomFlip('horizontal_and_vertical'),
-            RandomDiscreteRotate()
+            RandomRotation(factor = (-0.125, 0.125), fill_mode='constant', interpolation='nearest', fill_value=0.0),
+            RandomTranslation(height_factor=(-0.25, 0.25), width_factor=(-0.25, 0.25), fill_mode = 'constant', interpolation='nearest', fill_value=0.0)
         ])
         
     #Convert training/validation sample(s) in ragged tensors to regular tensors and perform augmentation; MUST set training=True for functionality

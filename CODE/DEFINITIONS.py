@@ -1877,7 +1877,7 @@ def processImages(baseFolder, filenames, label):
 
 #Compare label and recon images after min-max rescaling
 def compareImages(label, recon, minValue, maxValue):
-    score_NRMSE = np.nan_to_num(compare_NRMSE(label, recon, normalization='mean'), nan=0, posinf=0, neginf=0)
+    score_NRMSE = np.nan_to_num(compare_NRMSE(label, recon, normalization='min-max'), nan=0, posinf=0, neginf=0)
     score_SSIM = np.nan_to_num(compare_SSIM(label, recon, data_range=maxValue-minValue), nan=0, posinf=0, neginf=0)
     return score_NRMSE, score_SSIM
 
