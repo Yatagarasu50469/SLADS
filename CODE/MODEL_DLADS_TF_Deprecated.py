@@ -1,7 +1,17 @@
 #==================================================================
 #MODEL: DLADS-TF-Deprecated
-#v0.9.5 TensorFlow DLADS implementation - Please do not use unless you know what you are doing!
+#TensorFlow DLADS implementation, slightly modified from v0.9.5 - Please do not use unless you know what you are doing!
 #Need to set manualSeed to -1, as a deterministic implementation of ResizeNearestNeighborGrad is not available
+#
+#NOTE(S): DIFFERENCES WITH RESPECT TO ORIGINAL v0.9.5 IMPLEMENTATION
+#
+# 1) Training option to reshuffle_each_iteration has been enabled; this has increased regularization and results in smoother convergence.
+#
+# 2) Calling repeat on the training dataset before shuffle and batching has been disabled, thereby preventing data sample leakage between epochs. 
+#
+# 3) Calling repeat on the validation dataset has been disabled to prevent leaking of data samples between epochs. 
+#
+# 4) Shuffling has been disabled for the validation dataset, as without (3) this would not be expected to impact the results regardless. 
 #
 #==================================================================
 
@@ -178,7 +188,7 @@ class DLADS_TF:
                 vizSample = self.inputs_Viz[vizSampleNum]
                 squareERD = np.mean(self.model(vizSample, training=False)[:,:,:,0].numpy(), axis=0)
                 squareRD = self.labels_Viz[vizSampleNum]
-                ERD_NRMSE, ERD_SSIM = compareImages(squareRD, squareERD, np.min(squareRD), np.max(squareRD))
+                ERD_NRMSE, ERD_SSIM, ERD_PSNR = compareImages(squareRD, squareERD, np.min(squareRD), np.max(squareRD))
                 
                 ax = plt.subplot2grid((3,2), (vizSampleNum+1,0))
                 im = ax.imshow(squareRD, aspect='auto', interpolation='none')
@@ -188,7 +198,7 @@ class DLADS_TF:
                 
                 ax = plt.subplot2grid((3,2), (vizSampleNum+1,1))
                 im = ax.imshow(squareERD, aspect='auto', interpolation='none')
-                plotTitle = 'ERD\nNRMSE: ' + '{:.6f}'.format(round(ERD_NRMSE, 6)) + '; SSIM: ' + '{:.6f}'.format(round(ERD_SSIM, 6))
+                plotTitle = 'ERD - NRMSE: ' + '{:.6f}'.format(round(ERD_NRMSE, 6)) + '\nSSIM: ' + '{:.6f}'.format(round(ERD_SSIM, 6)) + '; PSNR: ' + '{:.6f}'.format(round(ERD_PSNR, 6))
                 ax.set_title(plotTitle, fontsize=15)
                 cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                 cbar.formatter.set_powerlimits((0, 0))

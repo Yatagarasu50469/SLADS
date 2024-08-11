@@ -43,10 +43,9 @@ parallelization = True
 #Recommend starting at half of the available system threads if using hyperthreading,
 #or 1-2 less than the number of system CPU cores if not using hyperthreading.
 #Adjust to where the CPU just below 100% usage during parallel operations 
-#May decrease value to help reduce RAM pressure. 
 availableThreads = 0
 
-#Which GPU(s) devices should be used (last specified used for training); (Default: [-1], any/all available; CPU only: [])
+#Which GPU(s) devices should be used (last specified used for training); (default: [-1], any/all available; CPU only: [])
 gpus = [-1]
 
 #Should training/validation data be entirely stored on GPU (default: True; improves training/validation efficiency, set to False if OOM occurs)
@@ -179,12 +178,12 @@ numNeighbors = 10
 #Possible c values for RD approximation
 cValues = [1, 2, 4, 8, 16, 32]
 
-#When optimizing c, percentage of points (group-based) to acquire between steps (default: 1)
+#When optimizing c, percentage of points (group-based) to acquire between steps; set as None to disable (default: 1)
 #Temporarily sets the RD values in unmeasured locations, that would be impacted by selected scan positions, to zero
 percToScanC = 1
 
-#When optimizing c, percentage of points to acquire between recorded metrics (default: None)
-#If metric should be considered at all measurement steps, or percToScanC != None, then set to None 
+#When optimizing c, percentage of points to acquire between recorded/tracked metrics (default: None)
+#Set as None to consider all measurement steps; if percToScanC = None, then to avoid OOM, recommend setting to 1
 percToVizC = None
 
 #==================================================================
@@ -241,7 +240,7 @@ padInputData = True
 #Reference number of how many convolutional filters to use in building the model
 numStartFilters = 64
 
-#What initialization should be used: 'xavier_uniform', 'xavier_normal', 'kaiming_uniform', 'kaiming_normal' (default: '')
+#What initialization should be used: 'xavier_uniform', 'xavier_normal', 'kaiming_uniform', 'kaiming_normal' (default: 'xavier_uniform')
 initialization='xavier_uniform'
 
 #Activations for network sections (input, down, embedding down, upsampling, embedding up, final): 'leaky_relu', 'relu', 'prelu', 'linear'

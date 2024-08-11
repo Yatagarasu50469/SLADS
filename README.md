@@ -6,7 +6,7 @@
 # PROGRAM
 
     NAME:           SLADS/DLADS/GLANDS
-    MODIFIED:       7 August 2024
+    MODIFIED:       10 August 2024
     VERSION:        0.10.1
     LICENSE:        GNU General Public License v3.0
     DESCRIPTION:    Dynamic sampling algorithms with updated/developing implementations of:
@@ -193,7 +193,7 @@ Follow the instructions provided in the pre-installation guide specific to your 
 	
     Python             3.11.8
     pip                24.2
-    NVIDIA Driver      560.70
+    NVIDIA Driver      560.81
 	
     aiorwlock          1.4.0
     antialiased-cnns   0.3
@@ -538,7 +538,7 @@ After following the instructions within the appropriate **Pre-Installation** and
 	$ pip3 install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url https://download.pytorch.org/whl/cu121
 
 ###Running in WSL2 (Windows Subsystem for Linux), Ray crashes due to insufficient memory
-WSL2 is still a virutal machine and does not see/allocate all of available system memory (the current default is half). This may be increased manually and might be sufficient to allow the program to run. If memory limit is still exceeded, try decreasing the number of availableThreads in the configuration being run. Open a command prompt and enter the instruction below, choosing to create a new file if prompted. 
+WSL2 is still a virutal machine and does not see/allocate all of available system memory (the current default is half). This may be increased manually and might be sufficient to allow the program to run. Open a command prompt and enter the instruction below, choosing to create a new file if prompted. 
 
 	$ cd %UserProfile%
 	$ notepad.exe .wslconfig
@@ -546,7 +546,7 @@ WSL2 is still a virutal machine and does not see/allocate all of available syste
 	#Paste the following into the new notepad window, make changes as appropriate for your system, then save without an extension and exit
 	[wsl2]
 	memory=64GB
-	processors=8
+	processors=32
 
 	#Back in command prompt, use the next instruction to remove the .txt extension from .wslconfig
 	$ ren .wslconfig.txt .wslconfig

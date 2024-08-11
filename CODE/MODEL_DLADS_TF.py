@@ -223,7 +223,7 @@ class DLADS_TF:
                 vizSample = self.inputs_Viz[vizSampleNum]
                 squareERD = np.mean(self.model(vizSample, training=False)[:,:,:,0].numpy(), axis=0)
                 squareRD = self.labels_Viz[vizSampleNum]
-                ERD_NRMSE, ERD_SSIM = compareImages(squareRD, squareERD, np.min(squareRD), np.max(squareRD))
+                ERD_NRMSE, ERD_SSIM, ERD_PSNR = compareImages(squareRD, squareERD, np.min(squareRD), np.max(squareRD))
                 
                 ax = plt.subplot2grid((3,2), (vizSampleNum+1,0))
                 im = ax.imshow(squareRD, aspect='auto', interpolation='none')
@@ -233,7 +233,7 @@ class DLADS_TF:
                 
                 ax = plt.subplot2grid((3,2), (vizSampleNum+1,1))
                 im = ax.imshow(squareERD, aspect='auto', interpolation='none')
-                plotTitle = 'ERD\nNRMSE: ' + '{:.6f}'.format(round(ERD_NRMSE, 6)) + '; SSIM: ' + '{:.6f}'.format(round(ERD_SSIM, 6))
+                plotTitle = 'ERD - NRMSE: ' + '{:.6f}'.format(round(ERD_NRMSE, 6)) + '\nSSIM: ' + '{:.6f}'.format(round(ERD_SSIM, 6)) + '; PSNR: ' + '{:.6f}'.format(round(ERD_PSNR, 6))
                 ax.set_title(plotTitle, fontsize=15)
                 cbar = f.colorbar(im, ax=ax, orientation='vertical', pad=0.01)
                 cbar.formatter.set_powerlimits((0, 0))

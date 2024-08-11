@@ -70,7 +70,10 @@ def optimizeC(sampleDataset):
             
             #Compute and save area under the NRMSE curve
             for result in tqdm(results[cNum], desc='Samples', leave=False, ascii=asciiFlag): result.complete(sampleDataset[result.sampleDataNum])
-            AUC = [np.trapz(result.chanAvgNRMSEList, result.percsMeasured) for result in results[cNum]]
+            if cOptMetric == 'NRMSE': AUC = [np.trapz(result.chanAvgNRMSEList, result.percsMeasured) for result in results[cNum]]
+            elif cOptMetric == 'SSIM': AUC = [np.trapz(result.chanAvgSSIMList, result.percsMeasured) for result in results[cNum]]
+            elif cOptMetric == 'PSNR': AUC = [np.trapz(result.chanAvgPSNRList, result.percsMeasured) for result in results[cNum]]
+            else: sys.exit('\nError - Specified cOptMetric has not been implemented, please adjust the configuration to use either PSNR or NRMSE.')
             areaUnderCurveList.append(np.mean(AUC))
             
             #Extract RD computation times
@@ -78,12 +81,16 @@ def optimizeC(sampleDataset):
             
             #Save information for output to file
             dataPrintout.append(['c Value', cValues[cNum]])
-            dataPrintout.append(['NRMSE Area Under Curve for Targeted Channels:', np.mean(AUC), '+/-', np.std(AUC)])
+            if cOptMetric == 'NRMSE': dataPrintout.append(['NRMSE Area Under Curve for Targeted Channels:', np.mean(AUC), '+/-', np.std(AUC)])
+            elif cOptMetric == 'SSIM':  dataPrintout.append(['SSIM Area Under Curve for Targeted Channels:', np.mean(AUC), '+/-', np.std(AUC)])
+            elif cOptMetric == 'PSNR': dataPrintout.append(['PSNR Area Under Curve for Targeted Channels:', np.mean(AUC), '+/-', np.std(AUC)])
             dataPrintout.append(['Average RD Compute Time (s)', np.mean(allRDTimes), '+/-', np.std(allRDTimes)])
             dataPrintout.append([])
             
             #Extract percentage results at the specified precision
-            percents, trainMetricAvg = percResults([result.chanAvgNRMSEList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
+            if cOptMetric == 'NRMSE': percents, trainMetricAvg = percResults([result.chanAvgNRMSEList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
+            elif cOptMetric == 'SSIM': percents, trainMetricAvg = percResults([result.chanAvgSSIMList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
+            elif cOptMetric == 'PSNR': percents, trainMetricAvg = percResults([result.chanAvgPSNRList for result in results[cNum]], [result.percsMeasured for result in results[cNum]], precision)
             
             #Visualize/save the averaged curve for the given c value
             np.savetxt(dir_TrainingResults+'optimizationCurve_c_' + str(cValues[cNum]) + '.csv', np.transpose([percents, trainMetricAvg]), delimiter=',')
@@ -91,10 +98,11 @@ def optimizeC(sampleDataset):
             plt.rc('font', **font)
             f = plt.figure(figsize=(15,8))
             ax1 = f.add_subplot(1,1,1)
-            #ax1.plot(results[cNum][0].percsMeasured, results[cNum][0].chanAvgNRMSEList, color='black')
             ax1.plot(percents, trainMetricAvg, color='black')
             ax1.set_xlabel('% Measured')
-            ax1.set_ylabel('Average Reconstruction NRMSE of Targeted Channels')
+            if cOptMetric == 'NRMSE': ax1.set_ylabel('Average Reconstruction NRMSE of Targeted Channels')
+            elif cOptMetric == 'SSIM': ax1.set_ylabel('Average Reconstruction SSIM of Targeted Channels')
+            elif cOptMetric == 'PSNR': ax1.set_ylabel('Average Reconstruction PSNR of Targeted Channels')
             ax1.set_title('Area Under Curve: ' + str(areaUnderCurveList[-1]), fontsize=15, fontweight='bold')
             plt.savefig(dir_TrainingResults + 'optimizationCurve_c_' + str(cValues[cNum]) + '.tiff')
             plt.close(f)
@@ -102,8 +110,11 @@ def optimizeC(sampleDataset):
         #Save the AUC scores and RD computation times
         pd.DataFrame(dataPrintout).to_csv(dir_TrainingResults + 'cValueOptimization.csv')
         
-        #Select the c value and corresponding model that minimizes the NRMSE across the samples' progression
-        bestCIndex = np.argmin(areaUnderCurveList)
+        #Select the c value and corresponding model that minimizes the target metric across the samples' progression
+        
+        if cOptMetric == 'NRMSE': bestCIndex = np.argmin(areaUnderCurveList)
+        elif cOptMetric == 'SSIM': bestCIndex = np.argmax(areaUnderCurveList)
+        elif cOptMetric == 'PSNR': bestCIndex = np.argmax(areaUnderCurveList)
         
         #Reset bestCFlag and datagenFlag back to False and True for each of the sampleData used
         for sampleNum in range(0, len(sampleDataset)): 

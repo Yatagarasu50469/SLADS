@@ -136,8 +136,9 @@ from sklearn.utils import shuffle
 from skimage.util import view_as_windows as viewW
 from skimage import filters
 from skimage.filters import *
-from skimage.metrics import normalized_root_mse as compare_NRMSE
+from skimage.metrics import mean_squared_error as compare_MSE
 from skimage.metrics import structural_similarity as compare_SSIM
+from skimage.metrics import peak_signal_noise_ratio as compare_PSNR
 from skimage.transform import resize
 from sobol import *
 import sys

@@ -83,11 +83,12 @@ class Recon_Actor:
         
     #Compute NRMSE/SSIM for reconstructions
     def computeMetrics(self):
-        self.imagesNRMSEList, self.imagesSSIMList = [], []
+        self.imagesNRMSEList, self.imagesSSIMList, self.imagesPSNRList = [], [], []
         for index in range(0, len(self.indexes)):
-            score_NRMSE, score_SSIM = compareImages(self.allImages[index], self.reconImages[index], self.allImagesMin[index], self.allImagesMax[index])
+            score_NRMSE, score_SSIM, score_PSNR = compareImages(self.allImages[index], self.reconImages[index], self.allImagesMin[index], self.allImagesMax[index])
             self.imagesNRMSEList.append(score_NRMSE)
             self.imagesSSIMList.append(score_SSIM)
+            self.imagesPSNRList.append(score_PSNR)
     
     #Return allImages already loaded; Warning: Performing any operations beyond just the return will induce significant copy overhead!
     def getAllImages(self):
@@ -98,6 +99,9 @@ class Recon_Actor:
     
     def getSSIM(self):
         return self.imagesSSIMList
+        
+    def getPSNR(self):
+        return self.imagesPSNRList
     
     #Obtain reconstructions; Warning: Performing any operations beyond just the return will induce significant copy overhead!
     def getReconImages(self):
