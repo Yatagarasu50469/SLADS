@@ -1,12 +1,12 @@
 <p align="center">
-  <img src='/CODE/OTHER/HEADER.PNG' height='500'>
+  <img src='/CODE/OTHER/HEADER.PNG' width='888' height='500'>
 </p>
 
 ***
 # PROGRAM
 
     NAME:           SLADS/DLADS/GLANDS
-    MODIFIED:       10 August 2024
+    MODIFIED:       15 August 2024
     VERSION:        0.10.1
     LICENSE:        GNU General Public License v3.0
     DESCRIPTION:    Dynamic sampling algorithms with updated/developing implementations of:
@@ -37,14 +37,21 @@
         |    |------->AESTHETICS.py
         |    |------->COMPUTE.py
         |    |------->DEFINITIONS.py
+        |    |------->DERIVED.py
         |    |------->EXPERIMENTAL.py
         |    |------->EXTERNAL.py
         |    |------->INTERNAL.py
+        |    |------->LOGGING.py
+        |    |------->MAIN.py
         |    |------->MODEL_DLADS.py
+        |    |------->MODEL_DLADS_PY.py
+        |    |------->MODEL_DLADS_TF.py
+        |    |------->MODEL_DLADS_TF_Deprecated.py		
         |    |------->MODEL_GLANDS.py
+        |    |------->MODEL_SLADS.py
+        |    |------->PCONV2D.py
         |    |------->POSTPROCESS.py
         |    |------->REMOTE.py
-        |    |------->RUN_CONFIG.py
         |    |------->SIMULATION.py
         |    |------->TRAINING.py
         |------->INPUT
@@ -53,60 +60,44 @@
         |    |    |    |------->sampleName.(png, tiff, jpg)
         |    |    |------->TEST
         |    |    |    |------->sampleName.(png, tiff, jpg)
-        |    |------->TRAIN
-        |    |    |------->SAMPLE_1
+        |    |------->TRAIN/TEST
+        |    |    |------->SAMPLE_DESI
         |    |    |    |------->sampleInfo.txt
         |    |    |    |------->channels.csv
-        |    |    |    |------->sampleName-line-0001.(d, RAW)
-        |    |    |    |------->sampleName-line-0002.(d, RAW)
+        |    |    |    |------->sampleName-line-0001.(D, RAW)
+        |    |    |    |------->sampleName-line-0002.(D, RAW)
         |    |    |    |------->...
-        |    |    |------->SAMPLE_2
+        |    |    |------->SAMPLE_MALDI
         |    |    |    |------->sampleInfo.txt
         |    |    |    |------->channels.csv
         |    |    |    |------->mask.csv
         |    |    |    |------->sampleName.imzML
         |    |    |    |------->sampleName.ibd
-        |    |    |------->SAMPLE_3
-        |    |    |    |------->sampleInfo.txt
-        |    |    |    |------->sampleName-chan-label.(png, tiff, jpg)
-        |    |------->TEST
-        |    |    |------->SAMPLE_4
-        |    |    |    |------->sampleInfo.txt
-        |    |    |    |------->channels.csv
-        |    |    |    |------->sampleName-line-0001.(d, RAW)
-        |    |    |    |------->sampleName-line-0002.(d, RAW)
-        |    |    |    |------->...
-        |    |    |------->SAMPLE_5
-        |    |    |    |------->sampleInfo.txt
-        |    |    |    |------->channels.csv
-        |    |    |    |------->mask.csv
-        |    |    |    |------->sampleName.imzML
-        |    |    |    |------->sampleName.ibd
-        |    |    |------->SAMPLE_6
+        |    |    |------->SAMPLE_IMAGE
         |    |    |    |------->sampleInfo.txt
         |    |    |    |------->sampleName-chan-label.(png, tiff, jpg)
         |    |------->POST
-        |    |    |------->SIMULATION_SAMPLE_1
+        |    |    |------->SIMULATION_SAMPLE_DESI
         |    |    |    |------->sampleInfo.txt
         |    |    |    |------->channels.csv
         |    |    |    |------->measuredMask.csv
-        |    |    |    |------->sampleName-line-0001.RAW
-        |    |    |    |------->sampleName-line-0002.RAW
+        |    |    |    |------->sampleName-line-0001.(D, RAW)
+        |    |    |    |------->sampleName-line-0002.(D, RAW)
         |    |    |    |------->...
-        |    |    |------->EXPERIMENTAL_SAMPLE_1
+        |    |    |------->EXPERIMENTAL_SAMPLE_DESI
         |    |    |    |------->sampleInfo.txt
         |    |    |    |------->channels.csv
         |    |    |    |------->measuredMask.csv
         |    |    |    |------->physicalLineNums.csv
-        |    |    |    |------->sampleName-line-0001.RAW
-        |    |    |    |------->sampleName-line-0002.RAW
+        |    |    |    |------->sampleName-line-0001.(D, RAW)
+        |    |    |    |------->sampleName-line-0002.(D, RAW)
         |    |    |    |------->...
         |    |------->IMP
         |    |    |------->sampleInfo.txt
         |    |    |------->channels.csv
         |    |    |------->physicalLineNums.csv
-        |    |    |------->sampleName-line-0001.RAW
-        |    |    |------->sampleName-line-0002.RAW
+        |    |    |------->sampleName-line-0001.(D, RAW)
+        |    |    |------->sampleName-line-0002.(D, RAW)
         |    |    |------->...
         |    |    |-------> UNLOCK
         |    |    |-------> LOCK
@@ -151,9 +142,9 @@
         |    |    |    |------->Videos
         |    |    |    |    |------->...
         |    |    |    |------->measuredMask.csv
-        |    |    |    |------->PSNR and SSIM Results (.csv and .tiff)
+        |    |    |    |------->NRMSE, PSNR, and SSIM Results (.csv and .tiff)
         |    |    |------->dataPrintout.csv
-        |    |    |------->PSNR and SSIM Results (.csv and .tiff)
+        |    |    |------->NRMSE, PSNR, and SSIM Results (.csv and .tiff)
         |    |------->VALIDATION
         |    |    |------->VALIDATION_SAMPLE_1
         |    |    |    |------->Channels
@@ -163,9 +154,9 @@
         |    |    |    |------->Videos
         |    |    |    |    |------->...
         |    |    |    |------->measuredMask.csv
-        |    |    |    |------->PSNR and SSIM Results (.csv and .tiff)
+        |    |    |    |------->NRMSE, PSNR, and SSIM Results (.csv and .tiff)
         |    |    |------->dataPrintout.csv
-        |    |    |------->PSNR and SSIM Results (.csv and .tiff)
+        |    |    |------->NRMSE, PSNR, and SSIM Results (.csv and .tiff)
         |    |------->TRAIN
         |    |    |------->Model Training Images
         |    |    |    |------->...
@@ -176,11 +167,13 @@
         |    |    |------->Validation Data Images
         |    |    |    |------->...
         |    |    |------->cValueOptimization.csv
-        |    |    |------->trainingHistory.csv
         |    |    |------->optimalC.npy
+        |    |    |------->optimizationCurve_c_cValue.(csv and tiff)
         |    |    |------->trainingDatabase.p
-        |    |    |------->trainingValidationSampleData.p
+        |    |    |------->trainingHistory.csv
+        |    |    |------->trainingTime.txt
         |    |    |------->trainingValidation_RDTimes.csv
+        |    |    |------->trainingValidationSampleData.p
         |    |    |------->validationDatabase.p
 ***
 # INSTALLATION
@@ -434,7 +427,8 @@ All results will be placed in ./RESULTS/ as follows (presuming MSI data):
         optimalC.npy: Determined optimal c value determined in training
         trainingDatabase.p: Database of training samples
         trainingValidationSampleData.p: Database of training and validation sample data
-        trainingValidation_RDTimes.csv: Summary of RD computation times for training and validation sample data
+        trainingTime.txt: Summary of available model training time statistics
+		trainingValidation_RDTimes.csv: Summary of RD computation times for training and validation sample data
         validationDatabase.p: Database of validation samples
         
     TEST: Testing results
@@ -445,15 +439,15 @@ All results will be placed in ./RESULTS/ as follows (presuming MSI data):
             physicalLineNums.csv: Mapping from sequential filename numbering to physical row number
             measuredMask.csv: Final measurement mask; 1 for measured, 0 for unmeasured
             dataPrintout.csv: Summary of final results
-            (PSNR/SSIM)_allAvg.(csv/png): Progressive averaged PSNR/SSIM for all reconstructions
-            (PSNR/SSIM)_chanAvg.(csv/png): Progressive averaged PSNR/SSIM for targeted channel reconstructions
-            (PSNR/SSIM)_ERD.(csv/png): Progressive averaged PSNR/SSIM for the ERD 
-            (PSNR/SSIM)_sumImage.(csv/png): Progressive averaged PSNR/SSIM for the ERD 
+            (NRMSE/PSNR/SSIM)_allAvg.(csv/png): Progressive averaged NRMSE/PSNR/SSIM for all reconstructions
+            (NRMSE/PSNR/SSIM)_chanAvg.(csv/png): Progressive averaged NRMSE/PSNR/SSIM for targeted channel reconstructions
+            (NRMSE/PSNR/SSIM)_ERD.(csv/png): Progressive averaged NRMSE/PSNR/SSIM for the ERD 
+            (NRMSE/PSNR/SSIM)_sumImage.(csv/png): Progressive averaged NRMSE/PSNR/SSIM for the ERD 
         dataPrintout.csv: Summary of final results, across all testing samples
-        (PSNR/SSIM)_allAvg.(csv/png): Progressive averaged PSNR/SSIM for all reconstructions, across all testing samples
-        (PSNR/SSIM)_chanAvg.(csv/png): Progressive averaged PSNR/SSIM for targeted channel reconstructions, across all testing samples
-        (PSNR/SSIM)_ERD.(csv/png): Progressive averaged PSNR/SSIM for the ERD, across all testing samples
-        (PSNR/SSIM)_sumImage.(csv/png): Progressive averaged PSNR/SSIM for the sum of all channel reconstructions, across all testing samples
+        (NRMSE/PSNR/SSIM)_allAvg.(csv/png): Progressive averaged NRMSE/PSNR/SSIM for all reconstructions, across all testing samples
+        (NRMSE/PSNR/SSIM)_chanAvg.(csv/png): Progressive averaged NRMSE/PSNR/SSIM for targeted channel reconstructions, across all testing samples
+        (NRMSE/PSNR/SSIM)_ERD.(csv/png): Progressive averaged NRMSE/PSNR/SSIM for the ERD, across all testing samples
+        (NRMSE/PSNR/SSIM)_sumImage.(csv/png): Progressive averaged NRMSE/PSNR/SSIM for the sum of all channel reconstructions, across all testing samples
 
     VALIDATION: Validation results
         Identical structure to TEST
@@ -506,10 +500,10 @@ This is probably still possible to some extent (was confirmed to be functional a
 Multiplierz relies on vendor-provided, proprietary .dll files to read MSI data and are therefore subject to their limitations. Substantial efforts have been made to port those files into a Linux-compatible format, though without any success. 
 
 ### Why is manual installation of the mutliplierz package needed?
-Compatibility support for Bruker .tsf MSI files is not currently available in the main package (Reference: https://github.com/BlaisProteomics/multiplierz/issues/10). Additionally, a required overhead bypass flag has not yet been validated (Reference: https://github.com/BlaisProteomics/multiplierz/issues/9)
+Compatibility support for Bruker .tsf MSI files is not currently available in the main package (Reference: https://github.com/BlaisProteomics/multiplierz/issues/10). Additionally, a required overhead bypass flag has not yet been validated as functional (Reference: https://github.com/BlaisProteomics/multiplierz/issues/9). 
 
 ### Why has the framework been switched to PyTorch?
-The short answer is that TensorFlow, as of v2.10.1, has dropped support for GPU acceleration on Windows and Agilent .D files can only be read/used on native Windows. An older model variant (referenced as 'DLADS-TF' during configuration) has been included (principally for benchmarking and historical reference) and should be functional if a TensorFlow installation (lower than v2.16) is available/desirable. Theoretically, installation of TensorFlow v2.10.1 would enable the model to run with CUDA acceleration on native Windows, though issues with keras augmentation layers in that release would be expected to significantly hamper model training performance. This legacy model variant has been successfully installed and run in an Ubuntu 22.04 guest, on a Windows 11 host, through WSL2 (Windows Subsystem for Linux), using the directions below. 
+The short answer is that TensorFlow, as of v2.10.1, has dropped support for GPU acceleration on Windows and Agilent .D files can only be read/used on native Windows. Older model variants (referenced as 'DLADS-TF' during configuration) have been included (principally for benchmarking and historical reference) and should be functional if a TensorFlow installation (lower than v2.16) is available/desirable. Theoretically, installation of TensorFlow v2.10.1 would enable the model to run with CUDA acceleration on native Windows, though issues with keras augmentation layers in that release would be expected to significantly hamper model training performance. Legacy model variants have been successfully installed and run in an Ubuntu 22.04 guest, on a Windows 11 host, through WSL2 (Windows Subsystem for Linux), using the directions below. 
 
 **Warning:** If the packages are installed out of order, or if previous packages, particularly dependencies/requirements/installationss of TensorFlow and PyTorch, were not fully/completely purged, then this process will likely fail to provide a working instance. 
 
@@ -558,10 +552,10 @@ WSL2 is still a virutal machine and does not see/allocate all of available syste
 ## Program Operation
 
 ### Why aren't all of the system GPUs used during training?
-Distributed GPU training is not currently supported for DLADS and has been removed from DLADS-TF given a proclivity to yield inconsistent results. Multiple GPUs can be and are leveraged in simulated testing when more than a single sample is being evaluated. 
+Distributed GPU training is not currently supported for DLADS and has been removed from DLADS-TF variants given a proclivity to yield inconsistent results. Multiple GPUs can be and are leveraged in simulated testing when more than a single sample is being evaluated. 
 
 ### Cannot load a known-supported MSI format or receiving a message ImportError: cannot import name 'Iterator' from 'collections'
-Most likely this is due to use of an older multiplierz installation. You will need to uninstall the existing multiplierz installation and re-download it from the forked repository, where a patches have since been applied. 
+Most likely this is due to use of an older multiplierz installation. You will need to uninstall the existing multiplierz installation and re-download it from the forked repository, where patches have since been applied. 
 
     $ pip3 uninstall multiplierz
     $ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
@@ -572,19 +566,6 @@ Presuming this error occurs on a Linux OS, increase the available shared memory 
 ### Why am I receiving a 'list index out of range' error from the 'readScanData' method
 Most likely this is due to filenames not matching the outlined naming convention.
 
-### Program produces confusing outputs that look like warnings or errors
-Some common outputs that can safely be ignored are produced from Ray during model deployment or from multiprocessing pools. These cannot currently be suppressed/disabled. Some examples, as shown below, can be safely ignored; if in doubt, please feel free to check if this has already been addressed within, or open an issue on, the Github repository's issue tab. 
-
-    $ INFO checkpoint_path.py:16 -- Using RayInternalKVStore for controller checkpoint and recovery.
-    $ INFO http_state.py:98 -- Starting HTTP proxy with name 'SERVE_CONTROLLER_ACTOR:ExQkiR:SERVE_PROXY_ACTOR ...
-    $ INFO api.py:475 -- Started Serve instance in namespace ...
-    $ INFO:     Started server process ...
-    $ INFO api.py:249 -- Updating deployment 'ModelServer'. component=serve deployment=ModelServer
-    $ INFO deployment_state.py:920 -- Adding 1 replicas to deployment 'ModelServer'. component=serve deployment=ModelServer
-    $ INFO api.py:261 -- Deployment 'ModelServer' is ready at ... component=serve deployment=ModelServer
-    $ core_worker_process.cc:348: The global worker has already been shutdown. This happens when the language frontend accesses the Ray's worker after it is shutdown. The process will exit
-    $ INFO deployment_state.py:940 -- Removing 1 replicas from deployment 'ModelServer'. component=serve deployment=ModelServer
-    
 ### Program seems very slow
 The most likely cause is from large sample dimensionality (i.e. both rows and columns are in excess of 100). It the computational platform appears to lock up, it is recommended to check either Task Manager (Windows) or htop (Ubuntu: sudo apt-get install htop) and verify there is both sufficient RAM and computational capabilities to utilize the selected model. DLADS is much more computationally intensive than SLADS-LS, but will try to offload work onto a discrete CUDA GPU if one is available. Warnings/Errors will be output if RAM limits are exceeded on either system or GPU. 
 
@@ -596,7 +577,7 @@ Verify that parallelism is enabled, as the program can perform some operations c
 Certain sections of the program are extremely compute/memory/storage instensive and are expected to freeze the graphical output of even upper-end hardware; to verify check Task Manager on Windows, htop on Linux-based platforms, and/or nvidia-smi output for utlization levels. 
 
 ### Error indicates that the GPU should be disabled, settting parallelism to False doesn't resolve this
-The parallelism flag in the configuration file does not control GPU usage, only CPU usage. In order to disable GPUs entirely, set availableGPUs = '-1'.
+The parallelism flag in the configuration file does not control GPU usage, only CPU usage. In order to disable GPUs entirely, set gpus = [].
 
 ### Generating training database with the erdModel set to GLANDS, neither SLADS nor DLADS models, can be trained
 Database generations with GLANDS is not backwards compatible with SLADS/DLADS operations, since SLADS/DLADS rely on a static pre-generated database of ground-truth RD maps and sparse-sampled reconstructions formed with IDW interpolation. GLANDS does not utilize/train with a ground-truth RD target, instead the architecture dynamically generates random sparse data during the training process. 
@@ -604,16 +585,16 @@ Database generations with GLANDS is not backwards compatible with SLADS/DLADS op
 ## Results
 
 ### Looking at the model training images for DLADS shows a lack of loss convergence
-Try disabling data augmentation, setting augTrainData to False, if this fixes the issue than likely the default parameters (specified in MODEL_DLADS.py under the DataPreprocessing_DLADS class), particularly if a random crop is being used, this may be too large/small to extract meaningful features. If this doesn't fix the issue, than try lowering the learning rate and/or increasing the number of start filters. Beyond those parameters, provided there are sufficient training samples, a change in the network architecture may be required.
+Try disabling data augmentation, setting augTrainData to False. If this doesn't fix the issue, than try lowering the learning rate and/or increasing numStartFilters. Beyond those parameters, provided there are sufficient training samples, a change in the network architecture may be required.
 
 ### Looking at the model training images for DLADS shows significant overfit
-Double check that data augmentation is enabled, otherwise decrease the number of start filters used for the model. If this still does not fix the issue, it may be desirable to use a less complex model than DLADS, such as the included SLADS-LS or SLADS-Net options.
+Double check that augTrainData is enabled, otherwise decrease numStartFilters. If this still does not fix the issue, it may be desirable to use a less complex model than DLADS, such as the included SLADS-LS or SLADS-Net options.
 
 ### The resulting reconstructions for SLADS/DLADS are quite blurry
 If the provided data is fairly homogeneous, with predominant value fluctuations around structural edges, try decreasing the number of neighbors used in IDW reconstruction (numNeighbors) to as low as 1.
 
 ### DESI data looks notably different between v0.9.2/v0.9.3/v0.10.1
-v0.9.2 and earlier used the multiplierz XIC method to extract intensities from MSI files, where v0.9.3 onwards utilize the multiplierz scan method instead. The returned values were close, but not exactly the same. Further, despite the code and documentation suggesting that the returned data was from a profile mode spectrum, both of these previous approaches instead returned centroid mode data. Lastly, until v0.10.1, the TIC or sumImageData was sometimes obtained using the XIC method, where most files simply took a summation over measured intensities (this is now the unified behavior for all MSI file types). 
+v0.9.2 and earlier used the multiplierz XIC method to extract intensities from MSI files, where v0.9.3 onwards utilize the multiplierz scan method instead. The returned values were close, but not exactly the same. Further, despite the code and documentation suggesting that the returned data was from a profile mode spectrum, both of these previous approaches instead returned centroid mode data (at least for XCalibur .RAW files). Lastly, until v0.10.1, the TIC or sumImageData was sometimes obtained using the XIC method, where for most files the program simply took a summation over measured intensities (this is now the unified behavior for all MSI file types). 
 
 ### Encountering OOM errors during new code development
 Ray/Python pin objects in memory if any reference to them still exists; references (particularly to large objects) must be prevented or deleted. Admittedly, there's probably a better way of handling this, but the current coding practices for reducing memory overhead and OOM errors are as follows:
@@ -630,6 +611,12 @@ Ray/Python pin objects in memory if any reference to them still exists; referenc
 # PUBLICATIONS
 
 ### RESEARCH PRODUCED WITH THIS CODE
+
+**DLADSv2: Improvements to a Deep Learning Approach for Dynamic Sampling in Mass Spectrometry Imaging Technologies**  
+**Version(s):** v0.10.1  
+**Subject:** MALDI and DESI MSI  
+**Citation(s):** TBD   
+**Available:** TBD  
 
 **Simulatated Acquisition of MALDI MSI with DLADS**  
 **Version(s):** v0.9.5  

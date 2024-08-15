@@ -85,13 +85,12 @@ if trainingModel and loadTrainValDatasets:
 if os.path.exists(dir_ValidationResults): shutil.rmtree(dir_ValidationResults)
 os.makedirs(dir_ValidationResults)
 
+#If not using bypassSampling, then clear results directory, otherwise clear the encapsulated files, without deleting the actual directories
 if not bypassSampling:
     if os.path.exists(dir_TestingResults): shutil.rmtree(dir_TestingResults)
     os.makedirs(dir_TestingResults)
 else: 
-    folderList = [folder.path for folder in os.scandir(dir_TestingResults) if folder.is_dir()]
-    for folder in folderList: shutil.rmtree(folder)
-    fileList = [file for file in glob.glob(dir_TestingResults+'*') if not file.endswith(".p")]
+    fileList = [file for file in glob.glob(dir_TestingResults+'**/*', recursive=True) if (not file.endswith(".p") and os.path.isfile(file))]
     for file in fileList: os.remove(file)
 
 dir_ImpDataFinal = dir_ImpData + impSampleName + os.path.sep

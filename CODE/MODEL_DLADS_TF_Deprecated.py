@@ -1,19 +1,26 @@
 #==================================================================
 #MODEL: DLADS-TF-Deprecated
-#TensorFlow DLADS implementation, slightly modified from v0.9.5 - Please do not use unless you know what you are doing!
-#Need to set manualSeed to -1, as a deterministic implementation of ResizeNearestNeighborGrad is not available
+#TensorFlow DLADS implementation, modified from v0.9.5 - Please do not use unless you know what you are doing.
+#Need to set manualSeed to -1 in configuration, as a deterministic implementation of ResizeNearestNeighborGrad is not available. 
 #
 #NOTE(S): DIFFERENCES WITH RESPECT TO ORIGINAL v0.9.5 IMPLEMENTATION
 #
-# 1) Training option to reshuffle_each_iteration has been enabled; this has increased regularization and results in smoother convergence.
+# 1) DLADS originally allowed training and validation data to be shuffled across epochs, this has now been prevented.
 #
-# 2) Calling repeat on the training dataset before shuffle and batching has been disabled, thereby preventing data sample leakage between epochs. 
+# 2) Training option to reshuffle_each_iteration has been enabled; this has increased regularization and results in smoother convergence.
 #
-# 3) Calling repeat on the validation dataset has been disabled to prevent leaking of data samples between epochs. 
-#
-# 4) Shuffling has been disabled for the validation dataset, as without (3) this would not be expected to impact the results regardless. 
+# 3) Augmentation now only uses random rotations in 90 degree increments and horizonal/vertical flips.
 #
 #==================================================================
+
+#Random rotation transform using a discrete set of angles; enusres RandomCrop captures data (and doesn't add zeros) in original input FOV
+#Reference: https://stackoverflow.com/questions/66368576/is-there-a-way-to-build-a-keras-preprocessing-layer-that-randomly-rotates-at-spe
+class RandomDiscreteRotate(PreprocessingLayer):
+    def __init__(self): 
+        super().__init__()
+    def __call__(self, inputs): 
+        rots = tf.random.stateless_uniform((1,1), (manualSeedValue, manualSeedValue), 0, 4, dtype=tf.int32)[0,0]
+        return tf.image.rot90(inputs, k=rots)
 
 #Perform identical data augmentation steps on an a set of inputs with num channels and an output with one channel
 class DataAugmentation(Layer):
@@ -22,8 +29,7 @@ class DataAugmentation(Layer):
         self.numChannels = numChannels
         self.augmentLayer = tf.keras.Sequential([
             RandomFlip('horizontal_and_vertical'),
-            RandomRotation(factor = (-0.125, 0.125), fill_mode='constant', interpolation='nearest', fill_value=0.0),
-            RandomTranslation(height_factor=(-0.25, 0.25), width_factor=(-0.25, 0.25), fill_mode = 'constant', interpolation='nearest', fill_value=0.0)
+            RandomDiscreteRotate()
         ])
         
     #Convert training/validation sample(s) in ragged tensors to regular tensors and perform augmentation; MUST set training=True for functionality
@@ -265,8 +271,7 @@ class DLADS_TF:
                 #Compute losses over the training dataset
                 self.loss_TRN.append(np.mean([self.computeLoss(data, label, True) for data, label in tqdm(self.trainData, total=self.numTRN, desc='TRN', leave=False, ascii=asciiFlag)]))
                 
-                #Enabling repeat() before shuffle() and using an iterator and the get_next() loop below can be used to replicate the inter-epoch data bleeding 
-                #that was previously the standard process in prior versions. This has been disabled in the interest of maximizing similarity to MODEL_DLADS_TF.py. 
+                #Enabling repeat() before shuffle() and using an iterator and the get_next() loop below can be used to replicate the inter-epoch data bleeding behavior from prior versions
                 #losses = []
                 #for _ in tqdm(range(self.numTRN), total=self.numTRN, desc='TRN', leave=False, ascii=asciiFlag):
                 #    data, label = iterator_TRN.get_next()

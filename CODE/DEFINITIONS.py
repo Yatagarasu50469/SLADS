@@ -960,6 +960,8 @@ class Result:
         self.avgTimeComputeRecon = 0
         self.avgTimeFileLoad = 0
         self.avgTimeComputeIter = 0
+        self.numParallelReconSplits = 1
+        self.warningOOM = False
         
         #If there is to be a results directory, then ensure it is setup
         if self.dir_Results != None:
@@ -1057,8 +1059,23 @@ class Result:
             #If operating in parallel, utilize actors created in the complete() method, or at initialization for live simulation; for serial, could vectorize, but extremely RAM intensive and usable batch size is system specific
             #Consider adding a batch option for GLANDS as parallelized reconsturciton is not an option
             if parallelization and erdModel != 'GLANDS':
-                tempScanData_id, squareMask_id, mask_id = ray.put(tempScanData), ray.put(sample.squareMask), ray.put(sample.mask)
-                _ = ray.get([recon_Actor.computeRecon.remote(tempScanData_id, squareMask_id, mask_id) for recon_Actor in self.recon_Actors])
+                
+                #If encountering an OOM, increasingly halve the number of allowable simultaneous computations; fallback solution/approach has not been fully tested
+                #Must re-initialize ray, actors, and any objects expected to be in shared memory
+                while (True):
+                    try: 
+                        tempScanData_id, squareMask_id, mask_id = ray.put(tempScanData), ray.put(sample.squareMask), ray.put(sample.mask)
+                        for recon_Actors_Split in np.array_split(np.array(self.recon_Actors), self.numParallelReconSplits):
+                            _ = ray.get([recon_Actor.computeRecon.remote(tempScanData_id, squareMask_id, mask_id) for recon_Actor in recon_Actors_Split])
+                        break
+                    except: 
+                        self.warningOOM = True
+                        self.numParallelReconSplits += 1
+                        if self.numParallelReconSplits > len(self.recon_Actors): sys.exit('\nError - Reconstruction of all channels has failed, please try running with parallelization disabled.')
+                        self.recon_Actors.clear()
+                        del self.recon_Actors
+                        resetRay(numberCPUS)
+                        self.recon_Actors = [Recon_Actor.remote(indexes, sampleData.sampleType, sampleData.squareDim, sampleData.finalDim, sampleData.allImagesMin, sampleData.allImagesMax, sampleData.allImagesPath, sampleData.squareAllImagesPath, sampleData.squareOpticalImage, erdModel) for indexes in np.array_split(np.arange(0, len(sampleData.mzFinal)), numberCPUS)]
                 _ = ray.get([recon_Actor.computeMetrics.remote() for recon_Actor in self.recon_Actors])
                 if not lastReconOnly:
                     sample.allImagesNRMSEList = np.concatenate([ray.get(recon_Actor.getNRMSE.remote()).copy() for recon_Actor in self.recon_Actors])
@@ -1156,7 +1173,6 @@ class Result:
         
             #If all channel reconstructions are needed, then setup actors if in parallel, or load data into main memory
             #For GLANDS will have to do reconstructions and evaluations outside of the actor...
-            #Tracer()
             if sampleData.allChanEvalFlag or (sampleData.imzMLExportFlag and not sampleData.trainFlag):
                 if parallelization and erdModel != 'GLANDS':
                     self.recon_Actors = [Recon_Actor.remote(indexes, sampleData.sampleType, sampleData.squareDim, sampleData.finalDim, sampleData.allImagesMin, sampleData.allImagesMax, sampleData.allImagesPath, sampleData.squareAllImagesPath, sampleData.squareOpticalImage, erdModel) for indexes in np.array_split(np.arange(0, len(sampleData.mzFinal)), numberCPUS)]
@@ -1259,7 +1275,7 @@ class Result:
                     pbar = tqdm(total=maxProgress, desc = 'Visualizing', leave=False, ascii=asciiFlag)
                     pbar.n = 0
                     pbar.refresh()
-                                        
+                    
                     while len(futures):
                         _, futures = ray.wait(futures)
                         pbar.n = np.clip(round(copy.deepcopy(ray.get(samplingProgress_Actor.getCurrent.remote())),0), 0, maxProgress)
@@ -1668,14 +1684,6 @@ def runSampling(sampleDataNum, sampleData, cValue, model, percToScan, percToViz,
             pbar.n = np.clip(round(sample.percMeasured,2), 0, sampleData.stopPerc)
             pbar.refresh()
     
-    #If multiple samples are being sampled and then processed (as done in simulation), then pickle result to reduce RAM overhead
-    #if pickleTestResult: 
-    #    resultLocation = dir_TestingResults + sampleData.name + '_result.p'
-    #    with open(resultLocation, mode='wb') as file: cloudpickle.dump(result, file)
-    #
-    #    #resultLocation = dir_TestingResults + sampleData.name + '_result.p'
-    #    #pickle.dump(result, open(resultLocation, 'wb'))
-    #    return resultLocation
     return result
 
 #Compute approximated Reduction in Distortion (RD) values
@@ -1872,7 +1880,7 @@ def processImages(baseFolder, filenames, label):
                 print('\nError - Skipping file: '+filename+' as image contains more than 3 channels, which is not currently supported.')
                 break
             
-            #Setup a destination folder for the new smaple, overwriting existing matches
+            #Setup a destination folder for the new sample, overwriting existing matches
             destinationFolder = baseFolder+basename+os.path.sep
             if os.path.exists(destinationFolder): shutil.rmtree(destinationFolder)
             os.makedirs(destinationFolder)

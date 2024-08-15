@@ -72,6 +72,7 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
     else:
         sampleDataLocations = pickle.load(open(dir_TestingResults + 'sampleDataLocations.p', "rb" ))
         resultLocations = pickle.load(open(dir_TestingResults + 'resultLocations.p', "rb" ))
+        numJobs = len(resultLocations)
     
     #Perform completion/visualization routines
     chanAvgNRMSE_Results, allAvgNRMSE_Results, sumImageNRMSE_Results, ERD_NRMSE_Results = [], [], [], []
@@ -83,6 +84,8 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
     xLabel = '% Measured'
     #elif scanMethod == 'linewise': xLabel = '% Lines Measured'
     
+    
+    warningOOM = False
     for index in tqdm(range(0, len(resultLocations)), desc='Processing', position=0, leave=True, ascii=asciiFlag):
     
         #Load pickled result and sampleData from disk
@@ -91,6 +94,9 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
     
         #Export metrics and perform final analysis for the result
         result.complete(sampleData)
+        
+        #Check to see if OOM occurred
+        if result.warningOOM: warningOOM = True
         
         #Add individual results to rolling lists for averaging
         timeResults.append(result.finalTime)
@@ -150,6 +156,9 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         basicPlot(result.percsMeasured, result.sumImagePSNRList, result.dir_sampleResults+'PSNR_sumImage'+'.tiff', xLabel=xLabel, yLabel='Average PSNR')
         if erdModel != 'GLANDS': basicPlot(result.percsMeasured, result.ERD_PSNRList, result.dir_sampleResults+'PSNR_ERD'+'.tiff', xLabel=xLabel, yLabel='Average PSNR')
     
+    #If an OOM occurred, then notify the user
+    if allChanEval and warningOOM: print('\nWarning - Fallback was used for allChanEval reconstructions; insufficient RAM was available for simultaneous operations on all workers.')
+
     #Delete pickled result and sampleData data from disk if they aren't needed for later bypassSampling configuration
     if not keepResultData: 
         for resultLocation in resultLocations: os.remove(resultLocation) 

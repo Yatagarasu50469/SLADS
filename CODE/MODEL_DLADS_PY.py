@@ -3,24 +3,20 @@
 #
 #PyTorch equivalent implementation to MODEL_DLADS_TF.py
 #
-#NOTE(S): DIFFERENCES WITH RESPECT TO ORIGINAL DLADS IMPLEMENTATION
+#NOTE(S): DIFFERENCES WITH RESPECT TO DLADS_TF_Deprecated.py
 #
-# 1) DLADS was originally implemented using nearest neighbor upsampling followed by a convolution layer
-#    PyTorch has a deterministic nearest upsampling, but TensorFlow does not.
-#    Coincidently, where TensorFlow does have a deterministic bilinear upsampling, PyTorch does not.
+# DLADS was originally implemented using nearest neighbor upsampling followed by a convolution layer
+# PyTorch has a deterministic nearest upsampling, but TensorFlow does not.
+# Coincidently, where TensorFlow does have a deterministic bilinear upsampling, PyTorch does not.
 #
-#    An equivalent bilinear method was created for PyTorch for deterministic comparison. 
-#    However, this implementation could not be optimized sufficiently for comparable performance.
+# An equivalent bilinear method was created for PyTorch for deterministic comparison. 
+# However, this implementation could not be optimized sufficiently for comparable performance.
 #
-#    Another deterministic alternative in PyTorch is to use exact nearest-neighbor sampling with a subsequent binomial filter. 
-#    To match with bilinear upsampling behavior this requires even spatial dimensionality at all layers of depth.
-#    Therefore, zero padding has been added at the top of the network, proportional to the input data dimensionality. 
-#    There should be an incidental benefit in reduction of shifting artifacts during the downsampling process.
-#    The padding has been done in both TensorFlow and PyTorch models to employ identical NN architectures.
-#
-# 2) Augmentation now only uses random rotations in 90 degree increments and horizonal/vertical flips.
-#
-# 3) DLADS originally allowed training data to be shuffled across epochs, this has now been prevented.
+# Another deterministic alternative in PyTorch is to use exact nearest-neighbor sampling with a subsequent binomial filter. 
+# To match with bilinear upsampling behavior this requires even spatial dimensionality at all layers of depth.
+# Therefore, zero padding has been added at the top of the network, proportional to the input data dimensionality. 
+# There should be an incidental benefit in reduction of shifting artifacts during the downsampling process.
+# The padding has been done in both TensorFlow and PyTorch models to employ identical NN architectures.
 #
 #==================================================================
 
