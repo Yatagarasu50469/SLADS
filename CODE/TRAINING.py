@@ -236,6 +236,11 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
     #Verify that there is some data allocated for training
     if erdModel != 'GLANDS' and len(trainingDatabase) == 0: sys.exit('\nError - No training data available.')
     elif len(trainingSampleData) == 0: sys.exit('\nError - No training data available.')
+    
+    #Delete any existing models from the training directory
+    for file in [file for file in glob.glob(dir_TrainingData+'*') if 'model_' in file]: 
+        if os.path.isfile(file): os.remove(file)
+        else: shutil.rmtree(file)
 
     #If consistency in the random generator is desired for comparisons, then reset seed
     resetRandom()

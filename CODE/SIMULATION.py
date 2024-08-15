@@ -228,11 +228,11 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         lastSumImageNRMSE = [sumImageNRMSE_Results[i][-1] for i in range(0, numJobs)]
         if erdModel != 'GLANDS': lastERD_NRMSE = [ERD_NRMSE_Results[i][-1] for i in range(0, numJobs)]
         lastChanAvgSSIM = [chanAvgSSIM_Results[i][-1] for i in range(0, numJobs)]
-        if allChanEval: lastAllAvgSSIM = [chanAvgSSIM_Results[i][-1] for i in range(0, numJobs)]
+        if allChanEval: lastAllAvgSSIM = [allAvgSSIM_Results_mean[i][-1] for i in range(0, numJobs)]
         lastSumImageSSIM = [sumImageSSIM_Results[i][-1] for i in range(0, numJobs)]
         if erdModel != 'GLANDS': lastERD_SSIM = [ERD_SSIM_Results[i][-1] for i in range(0, numJobs)]
         lastChanAvgPSNR = [chanAvgPSNR_Results[i][-1] for i in range(0, numJobs)]
-        if allChanEval: lastAllAvgPSNR = [chanAvgPSNR_Results[i][-1] for i in range(0, numJobs)]
+        if allChanEval: lastAllAvgPSNR = [allAvgPSNR_Results_mean[i][-1] for i in range(0, numJobs)]
         lastSumImagePSNR = [sumImagePSNR_Results[i][-1] for i in range(0, numJobs)]
         if erdModel != 'GLANDS': lastERD_PSNR = [ERD_PSNR_Results[i][-1] for i in range(0, numJobs)]
         
