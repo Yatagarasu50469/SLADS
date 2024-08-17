@@ -524,7 +524,6 @@ class DLADS:
         pd.DataFrame(history.T, columns=['Epoch','Loss_TRN', 'Loss_VAL']).to_csv(dir_TrainingResults+'trainingHistory.csv', index=False)
         
     def predict(self, input):
-        Tracer()
         if len(input.shape) == 3: input = np.expand_dims(input, 0)
         input = torch.from_numpy(input).float()
         input = input.to(self.device)
