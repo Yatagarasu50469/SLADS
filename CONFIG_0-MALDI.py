@@ -186,6 +186,15 @@ percToScanC = 1
 #Set as None to consider all measurement steps; if percToScanC = None, then to avoid OOM, recommend setting to 1
 percToVizC = None
 
+#When generating training and validation data, what scanning method should be used: 'random', 'pointwise', 'linewise' (default: 'random')
+scanMethodTV = 'random'
+
+#Percentage of points (group-based) to acquire each iteration during training/validation data generation (default: None will scan only one location per iteration)
+percToScanTV = 1
+
+#Percentage of points to acquire between visualizations (checkpoints); if all steps should be, then set to None (pointwise default: 1; linewise default: None)
+percToVizTV = None
+
 #==================================================================
 
 ##################################################################

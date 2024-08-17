@@ -237,8 +237,15 @@ class Model_DLADS(nn.Module):
 class DLADS:
     def __init__(self, trainFlag, local_gpus, modelDirectory=None, modelName=None):
         
-        #Create model
+        #Specify batch sizes
+        self.batchsize_TRN, self.batchsize_VAL = 1, 1
+        
+        #Configure CPU/GPU computation environment
+        self.device = torch.device(f"cuda:{local_gpus[-1]}" if len(local_gpus) > 0 else "cpu")
+        
+        #Create model, sending it to the specified computation enviornment if training
         self.model = Model_DLADS(numStartFilters, len(inputChannels))
+        if trainFlag: self.model.to(self.device)
         
         #If not training, load parameters (before potential parallelization on multiple GPUs) and setup for inferencing
         if not trainFlag: 
@@ -246,14 +253,9 @@ class DLADS:
             with multivolumefile.open(modelPath + os.path.sep + modelName + '.7z', mode='rb') as modelArchive:
                 with py7zr.SevenZipFile(modelArchive, 'r') as archive:
                     archive.extract(modelDirectory)
-            _ = self.model.load_state_dict(torch.load(modelPath + '.pt'), map_location=self.device)
+            _ = self.model.load_state_dict(torch.load(modelPath + '.pt', map_location=self.device))
             _ = self.model.train(False)
             os.remove(modelPath + '.pt')
-        
-        #Configure CPU/GPU computation environment; allocate model location and batch sizes accordingly
-        self.device = torch.device(f"cuda:{local_gpus[-1]}" if len(local_gpus) > 0 else "cpu")
-        self.model.to(self.device)
-        self.batchsize_TRN, self.batchsize_VAL = 1, 1
         
         #Upcoming compile function might improve speed even further; not currently working 2.2.0
         #https://github.com/pytorch/pytorch/pull/119750
