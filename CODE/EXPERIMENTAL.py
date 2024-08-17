@@ -26,6 +26,7 @@ def performImplementation(optimalC, modelName):
     #Setup a model
     if numGPUs > 0: model = Model_Actor.remote(erdModel, dir_TrainingResults, modelName, gpus[0])
     else: model = Model_Actor.remote(erdModel, dir_TrainingResults, modelName)
+    _ = ray.get(model.setup.remote())
 
     #Run sampling
     result = runSampling(None, sampleData, optimalC, model, percToScan, percToViz, lineVisitAll, dir_ImpResults, False)

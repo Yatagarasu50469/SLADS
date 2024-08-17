@@ -18,11 +18,15 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         #Ray sends warning as error message regarding size; temporarily redirect output during model loading to prevent spurious output(s); https://github.com/ray-project/ray/issues/43264
         with suppressSTD() if not debugMode else nullcontext():
             
-            #Setup a model for each GPU available (provided there is a job for it)
+            #Create a model for each GPU available (provided there is a job for it)
             numJobs = len(sortedSampleFolders)
-            if numGPUs > 0: models = [Model_Actor.remote(erdModel, dir_TrainingResults, modelName, gpus[gpuNum]) for gpuNum in range(0, np.clip(numGPUs, 0, numJobs))]
+            if numGPUs > 0: 
+                models = [Model_Actor.remote(erdModel, dir_TrainingResults, modelName, gpus[gpuNum]) for gpuNum in range(0, np.clip(numGPUs, 0, numJobs))]
             else: models = [Model_Actor.remote(erdModel, dir_TrainingResults, modelName)]
             numModels = len(models)
+            
+            #Setup model on each GPU sequentially (prevents potential file conflicts)
+            for model in models: _ = ray.get(model.setup.remote())
         
         #Run algorithm for each of the samples, in parallel if possible, timing and storing metric progression for each; (1 less CPU in pool for model server deployment)
         if parallelization and numJobs>1: 
@@ -83,7 +87,6 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
     #Set the quantity measured metric for labeling the x axes
     xLabel = '% Measured'
     #elif scanMethod == 'linewise': xLabel = '% Lines Measured'
-    
     
     warningOOM = False
     for index in tqdm(range(0, len(resultLocations)), desc='Processing', position=0, leave=True, ascii=asciiFlag):
@@ -156,16 +159,6 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         basicPlot(result.percsMeasured, result.sumImagePSNRList, result.dir_sampleResults+'PSNR_sumImage'+'.tiff', xLabel=xLabel, yLabel='Average PSNR')
         if erdModel != 'GLANDS': basicPlot(result.percsMeasured, result.ERD_PSNRList, result.dir_sampleResults+'PSNR_ERD'+'.tiff', xLabel=xLabel, yLabel='Average PSNR')
     
-    #If an OOM occurred, then notify the user
-    if allChanEval and warningOOM: print('\nWarning - Fallback was used for allChanEval reconstructions; insufficient RAM was available for simultaneous operations on all workers.')
-
-    #Delete pickled result and sampleData data from disk if they aren't needed for later bypassSampling configuration
-    if not keepResultData: 
-        for resultLocation in resultLocations: os.remove(resultLocation) 
-        for sampleDataLocation in sampleDataLocations: os.remove(sampleDataLocation)  
-        os.remove(dir_TestingResults + 'resultLocations.p')
-        os.remove(dir_TestingResults + 'sampleDataLocations.p')
-    
     #If performing a benchmark where processing is not needed and was not performed
     if not benchmarkNoProcessing:
     
@@ -228,11 +221,11 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         lastSumImageNRMSE = [sumImageNRMSE_Results[i][-1] for i in range(0, numJobs)]
         if erdModel != 'GLANDS': lastERD_NRMSE = [ERD_NRMSE_Results[i][-1] for i in range(0, numJobs)]
         lastChanAvgSSIM = [chanAvgSSIM_Results[i][-1] for i in range(0, numJobs)]
-        if allChanEval: lastAllAvgSSIM = [allAvgSSIM_Results_mean[i][-1] for i in range(0, numJobs)]
+        if allChanEval: lastAllAvgSSIM = [allAvgSSIM_Results[i][-1] for i in range(0, numJobs)]
         lastSumImageSSIM = [sumImageSSIM_Results[i][-1] for i in range(0, numJobs)]
         if erdModel != 'GLANDS': lastERD_SSIM = [ERD_SSIM_Results[i][-1] for i in range(0, numJobs)]
         lastChanAvgPSNR = [chanAvgPSNR_Results[i][-1] for i in range(0, numJobs)]
-        if allChanEval: lastAllAvgPSNR = [allAvgPSNR_Results_mean[i][-1] for i in range(0, numJobs)]
+        if allChanEval: lastAllAvgPSNR = [allAvgPSNR_Results[i][-1] for i in range(0, numJobs)]
         lastSumImagePSNR = [sumImagePSNR_Results[i][-1] for i in range(0, numJobs)]
         if erdModel != 'GLANDS': lastERD_PSNR = [ERD_PSNR_Results[i][-1] for i in range(0, numJobs)]
         
@@ -278,4 +271,15 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
     if erdModel != 'GLANDS': dataPrintout.append(['ERD Compute Time (s):', np.mean(allAvgTimesComputeERD)])
     dataPrintout.append(['Targeted Compute Time (s):', np.mean(allAvgTimesComputeIter)])
     pd.DataFrame(dataPrintout).to_csv(dir_Results + 'dataPrintout.csv', index=False)
+    
+    #If an OOM occurred, then notify the user before exiting
+    if allChanEval and warningOOM: print('\nWarning - Fallback was used for allChanEval reconstructions; insufficient RAM was available for simultaneous operations on all workers.')
+
+    #Delete pickled result and sampleData data from disk if they aren't needed for later bypassSampling configuration
+    if not keepResultData: 
+        for resultLocation in resultLocations: os.remove(resultLocation) 
+        for sampleDataLocation in sampleDataLocations: os.remove(sampleDataLocation)  
+        os.remove(dir_TestingResults + 'resultLocations.p')
+        os.remove(dir_TestingResults + 'sampleDataLocations.p')
+    
     

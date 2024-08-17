@@ -8,6 +8,7 @@ def postprocess(sortedSampleFolders, optimalC, modelName):
     #Setup a model only on a single GPU (if available)
     if numGPUs > 0: model = Model_Actor.remote(erdModel, dir_TrainingResults, modelName, gpus[0])
     else: model = Model_Actor.remote(erdModel, dir_TrainingResults, modelName)
+    _ = ray.get(model.setup.remote())
     
     for sampleFolder in tqdm(sortedSampleFolders, desc='Samples', leave=True, ascii=asciiFlag):
         

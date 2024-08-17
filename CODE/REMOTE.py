@@ -9,19 +9,25 @@ class Model_Actor:
         
         setupLogging()
         
+        #Store local variables
+        self.erdModel = erdModel
+        self.modelDirectory = modelDirectory
+        self.modelName = modelName
+        
         #Reload system GPU ids into environment (bypass Ray hiding them, which leads to the incorrect GPU selection)
         os.environ["CUDA_VISIBLE_DEVICES"] = systemGPUs
         if gpuNum >=0: self.local_gpus = [gpuNum]
         else: self.local_gpus = []
         
-        #Load model
-        if 'SLADS' in erdModel: self.model = np.load(modelDirectory + modelName +'.npy', allow_pickle=True).item()
-        elif erdModel == 'DLADS': self.model = DLADS(False, self.local_gpus, modelDirectory, modelName)
-        elif erdModel == 'GLANDS': sys.exit('\nError - GLANDS loading not yet defined')
-        elif erdModel == 'DLADS-TF': self.model = DLADS_TF(False, self.local_gpus, modelDirectory, modelName)
-        elif erdModel == 'DLADS-PY': self.model = DLADS_PY(False, self.local_gpus, modelDirectory, modelName)
+    #Must perform model loading/setup in sequence to avoid potential file conflicts (extracting model archive) when creating multiple actors
+    def setup(self):
+        if 'SLADS' in self.erdModel: self.model = np.load(self.modelDirectory + self.modelName +'.npy', allow_pickle=True).item()
+        elif self.erdModel == 'DLADS': self.model = DLADS(False, self.local_gpus, self.modelDirectory, self.modelName)
+        elif self.erdModel == 'GLANDS': sys.exit('\nError - GLANDS loading not yet defined')
+        elif self.erdModel == 'DLADS-TF': self.model = DLADS_TF(False, self.local_gpus, self.modelDirectory, self.modelName)
+        elif self.erdModel == 'DLADS-PY': self.model = DLADS_PY(False, self.local_gpus, self.modelDirectory, self.modelName)
         else: sys.exit('\nError - Specified model has not been defined.')
-        
+    
     #Preventing multiple concurrent calls, inference an input using the trained model
     def generate(self, input, reconOnly=False):
         return self.model.predict(input)
