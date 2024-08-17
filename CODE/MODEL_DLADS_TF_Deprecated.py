@@ -120,12 +120,13 @@ class DLADS_TF:
             #Create training and validation datasets compatible with tensorflow models
             inputs_TRN, labels_TRN = [], []
             for sample in tqdm(trainingDatabase, desc = 'Training Data Setup', leave=True, ascii=asciiFlag):
-                inputStack = tf.convert_to_tensor(prepareInput(sample.squareChanReconImages, sample.squareMask, trainingSampleData[sample.sampleDataIndex].squareOpticalImage).astype(np.float32))
-                for chanNum in range(0, len(sample.squareRDs)):
-                    input = inputStack[chanNum]
-                    label = tf.convert_to_tensor(np.expand_dims(sample.squareRDs[chanNum], -1).astype(np.float32))
-                    inputs_TRN.append(input)
-                    labels_TRN.append(label)
+                if sample.squareRD.sum() > 0:
+                    inputStack = tf.convert_to_tensor(prepareInput(sample.squareChanReconImages, sample.squareMask, trainingSampleData[sample.sampleDataIndex].squareOpticalImage).astype(np.float32))
+                    for chanNum in range(0, len(sample.squareRDs)):
+                        input = inputStack[chanNum]
+                        label = tf.convert_to_tensor(np.expand_dims(sample.squareRDs[chanNum], -1).astype(np.float32))
+                        inputs_TRN.append(input)
+                        labels_TRN.append(label)
             trainCount = len(inputs_TRN)
             self.numTRN = trainCount//self.batchsize_TRN
             self.trainData = tf.data.Dataset.from_tensor_slices((tf.ragged.stack(inputs_TRN), tf.ragged.stack(labels_TRN)))
@@ -136,20 +137,39 @@ class DLADS_TF:
                 vizSamples = None
             else:
                 self.valFlag = True
-                vizSampleIndices = [0, len(np.arange(initialPercToScanTrain, stopPercTrain))]
+                
+                #Find the index of the first sample with maximum percent measured
+                lastPercMeasured, lastSampleVizIndex  = 0, 0
+                for i, sample in enumerate(validationDatabase):
+                    if (sample.percMeasured < lastPercMeasured) or (i == len(validationDatabase)-1): 
+                        lastSampleVizIndex = i-1
+                        break
+                    else: 
+                        lastPercMeasured = sample.percMeasured
+                
+                #Move back through the validation sample stack until finding a sample with non-zero RD
+                while (True):
+                    if (validationDatabase[lastSampleVizIndex].squareRD.sum() > 0) or (lastSampleVizIndex == 0): break
+                    else: lastSampleVizIndex -= 1
+                
+                #Store indicies of validation sample data to visualize during training
+                vizSampleIndices = [0]
+                if lastSampleVizIndex != 0: vizSampleIndices.append(lastSampleVizIndex)
+                
                 self.numViz = len(vizSampleIndices)
                 inputs_VAL, labels_VAL = [], []
                 self.inputs_Viz, self.labels_Viz = [], []
                 for i, sample in enumerate(tqdm(validationDatabase, desc = 'Validation Data Setup', leave=True, ascii=asciiFlag)):
-                    inputStack = tf.convert_to_tensor(prepareInput(sample.squareChanReconImages, sample.squareMask, validationSampleData[sample.sampleDataIndex].squareOpticalImage).astype(np.float32))
-                    if i in vizSampleIndices:
-                        self.inputs_Viz.append(tf.convert_to_tensor(inputStack))
-                        self.labels_Viz.append(sample.squareRD)
-                    for chanNum in range(0, len(sample.squareRDs)):
-                        input = inputStack[chanNum]
-                        label = tf.convert_to_tensor(np.expand_dims(sample.squareRDs[chanNum], -1).astype(np.float32))
-                        inputs_VAL.append(input)
-                        labels_VAL.append(label)
+                    if sample.squareRD.sum() > 0:
+                        inputStack = tf.convert_to_tensor(prepareInput(sample.squareChanReconImages, sample.squareMask, validationSampleData[sample.sampleDataIndex].squareOpticalImage).astype(np.float32))
+                        if i in vizSampleIndices:
+                            self.inputs_Viz.append(tf.convert_to_tensor(inputStack))
+                            self.labels_Viz.append(sample.squareRD)
+                        for chanNum in range(0, len(sample.squareRDs)):
+                            input = inputStack[chanNum]
+                            label = tf.convert_to_tensor(np.expand_dims(sample.squareRDs[chanNum], -1).astype(np.float32))
+                            inputs_VAL.append(input)
+                            labels_VAL.append(label)
                 valCount = len(inputs_VAL)
                 self.numVAL = valCount//self.batchsize_VAL
                 self.valData = tf.data.Dataset.from_tensor_slices((tf.ragged.stack(inputs_VAL), tf.ragged.stack(labels_VAL)))

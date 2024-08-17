@@ -146,22 +146,31 @@ class Conv_SC_DLADS(nn.Module):
         
 #Processing convolutional block for DLADS
 class Conv_CB_DLADS(nn.Module):
-    def __init__(self, numIn, numOut, non_linearity):
+    def __init__(self, numIn, numOut, non_linearity, gateSkips):
         super().__init__()
-        self.conv0 = Conv_SC_DLADS(numIn, numOut, 1, 'same', non_linearity)
+        self.gateSkips = gateSkips
+        self.gate0 = Conv_SC_DLADS(numIn, numOut, 1, 'same', non_linearity)
         self.conv1 = Conv_SC_DLADS(numOut, numOut, 3, 'same', non_linearity)
-        self.conv2 = Conv_SC_DLADS(numOut, numOut, 3, 'same', non_linearity)
+        self.gate2 = Conv_SC_DLADS(numOut, numOut, 1, 'same', non_linearity)
+        self.conv3 = Conv_SC_DLADS(numOut, numOut, 3, 'same', non_linearity)
+        if self.gateSkips: self.gate4 = Conv_SC_DLADS(numIn+numOut*4, numOut, 1, 'same', non_linearity)
+        else: self.gate4 = Conv_SC_DLADS(numIn+numOut*2, numOut, 1, 'same', non_linearity)
 
     def forward(self, data):
-        return self.conv2(self.conv1(self.conv0(data)))
-    
+        gate0 = self.gate0(data)
+        data1 = self.conv1(gate0)
+        gate2 = self.gate2(data1)
+        data3 = self.conv3(gate2)
+        if self.gateSkips: return self.gate4(torch.cat([data, gate0, data1, gate2, data3], 1))
+        else: return self.gate4(torch.cat([data, data1, data3], 1))
+
 #Input convolutional block for DLADS
 class Conv_IN_DLADS(nn.Module):
     def __init__(self, numIn, numOut):
         super().__init__()
         if standardizeInputData: self.std = CustomInstanceNorm()
         else: self.std = lambda inputs:inputs
-        self.conv0 = Conv_CB_DLADS(numIn, numOut, inAct)
+        self.conv0 = Conv_CB_DLADS(numIn, numOut, inAct, False)
         
     def forward(self, data):
         data = self.std(data)
@@ -173,7 +182,7 @@ class Conv_DN_DLADS(nn.Module):
         super().__init__()
         if sigmaDn == 0: self.down0 = nn.MaxPool2d(kernel_size=2, stride=2)
         else: self.down0 = nn.Sequential(*[nn.MaxPool2d(kernel_size=2, stride=1), Conv_BF_DLADS(numIn, 2, sigmaDn)])
-        self.conv0 = Conv_CB_DLADS(numIn, numOut, dnAct)
+        self.conv0 = Conv_CB_DLADS(numIn, numOut, dnAct, False)
     
     def forward(self, data):
         return self.conv0(self.down0(data))
@@ -183,13 +192,13 @@ class Conv_UP_DLADS(nn.Module):
     def __init__(self, numIn, numOut):
         super().__init__()
         if sigmaUp == 0: self.blur = lambda inputs:inputs
-        else: self.blur = Conv_BF_DLADS(numIn, 1, sigmaUp)
+        else: self.blur = Conv_BF_DLADS(numOut, 1, sigmaUp)
         self.conv0 = Conv_SC_DLADS(numIn, numOut, 2, 'same', upAct)
-        self.conv1 = Conv_CB_DLADS(numOut*2, numOut, upAct)
+        self.conv1 = Conv_CB_DLADS(numOut*2, numOut, upAct, True)
         
     def forward(self, data, skip):
-        data = self.blur(F.interpolate(data, size=skip.shape[2:], mode='nearest-exact'))
-        data = self.conv0(data)
+        data = F.interpolate(data, size=skip.shape[2:], mode='nearest-exact')
+        data = self.blur(self.conv0(data))
         return self.conv1(torch.cat([data, skip], 1))
 
 #Output convolutional block for DLADS
@@ -206,8 +215,8 @@ class Model_DLADS(nn.Module):
     def __init__(self, numFilt, numChan):
         super().__init__()
         self.convIn0 = Conv_IN_DLADS(numChan, numFilt)
-        self.convDn0 = Conv_DN_DLADS(numFilt, numFilt)
         self.convDn1 = Conv_DN_DLADS(numFilt, numFilt)
+        self.convDn2 = Conv_DN_DLADS(numFilt, numFilt)
         self.convUp1 = Conv_UP_DLADS(numFilt, numFilt)
         self.convUp0 = Conv_UP_DLADS(numFilt, numFilt)
         self.convFn0 = Conv_FN_DLADS(numFilt, 1)
@@ -217,8 +226,8 @@ class Model_DLADS(nn.Module):
             padHeight, padWidth = (-(-data.shape[-2]//16)*16)-data.shape[-2], (-(-data.shape[-1]//16)*16)-data.shape[-1]
             data = F.pad(data, (padWidth, 0, padHeight, 0), mode='constant')
         convIn0 = self.convIn0(data)
-        convDn1 = self.convDn0(convIn0)
-        convDn2 = self.convDn1(convDn1)
+        convDn1 = self.convDn1(convIn0)
+        convDn2 = self.convDn2(convDn1)
         convUp1 = self.convUp1(convDn2, convDn1)
         convUp0 = self.convUp0(convUp1, convIn0)
         convFn0 = self.convFn0(convUp0)
@@ -377,9 +386,9 @@ class DLADS:
         #Move data to device if not already there
         if not storeOnDevice: data, label = data.to(self.device), label.to(self.device)
         
-        #Compute loss
+        #Compute mse loss
         pred = self.model(data)
-        loss = torch.mean(torch.abs(label-pred))
+        loss = self.lossFunction(pred, label)
         
         #If network returned all 0s, then can use this line to enter model (in combination with other relevent commented line); useful for debugging
         #if torch.sum(pred).item() == 0: self.model(data, True)
@@ -402,10 +411,11 @@ class DLADS:
         
     def train(self):
         
-        #Setup initial learning rate, optimizer, and scheduler
+        #Setup initial learning rate, optimizer, scheduler, and loss function
         self.learningRate = copy.deepcopy(learningRate)
         self.setOptimizer()
         if scheduler_CAWR: self.scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(self.opt, schedPeriod, T_mult=schedMult)
+        self.lossFunction = nn.MSELoss()
         
         #Setup storage for losses/events
         self.loss_TRN, self.loss_VAL, self.meanLoss_HST, self.meanLoss_CUR = [], [], [], []

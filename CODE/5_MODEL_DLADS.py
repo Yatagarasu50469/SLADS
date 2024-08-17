@@ -245,7 +245,7 @@ class DLADS:
             with multivolumefile.open(modelPath + os.path.sep + modelName + '.7z', mode='rb') as modelArchive:
                 with py7zr.SevenZipFile(modelArchive, 'r') as archive:
                     archive.extract(modelDirectory)
-            _ = self.model.load_state_dict(torch.load(modelPath + '.pt'))
+            _ = self.model.load_state_dict(torch.load(modelPath + '.pt'), map_location=self.device)
             _ = self.model.train(False)
             os.remove(modelPath + '.pt')
         
@@ -263,12 +263,13 @@ class DLADS:
         #Extract and prepare training data
         inputs_TRN, labels_TRN = [], []
         for sample in tqdm(trainingDatabase, desc = 'Training Data Setup', leave=True, ascii=asciiFlag):
-            inputStack = prepareInput(sample.squareChanReconImages, sample.squareMask, trainingSampleData[sample.sampleDataIndex].squareOpticalImage)
-            for chanNum in range(0, len(sample.squareRDs)):
-                input = inputStack[chanNum]
-                label = np.expand_dims(sample.squareRDs[chanNum], 0)
-                inputs_TRN.append(input)
-                labels_TRN.append(label)
+            if sample.squareRD.sum() > 0:
+                inputStack = prepareInput(sample.squareChanReconImages, sample.squareMask, trainingSampleData[sample.sampleDataIndex].squareOpticalImage)
+                for chanNum in range(0, len(sample.squareRDs)):
+                    input = inputStack[chanNum]
+                    label = np.expand_dims(sample.squareRDs[chanNum], 0)
+                    inputs_TRN.append(input)
+                    labels_TRN.append(label)
         data_TRN = DataPreprocessing_DLADS(inputs_TRN, labels_TRN, self.device, augTrainData)
         self.dataloader_TRN = DataLoader(data_TRN, batch_size=self.batchsize_TRN, num_workers=0, shuffle=True)
         self.numTRN = len(self.dataloader_TRN)
@@ -279,21 +280,40 @@ class DLADS:
             vizSamples = None
         else:
             self.valFlag = True
-            vizSampleIndices = [0, len(np.arange(initialPercToScanTrain, stopPercTrain))]
+            
+            #Find the index of the first sample with maximum percent measured
+            lastPercMeasured, lastSampleVizIndex  = 0, 0
+            for i, sample in enumerate(validationDatabase):
+                if (sample.percMeasured < lastPercMeasured) or (i == len(validationDatabase)-1): 
+                    lastSampleVizIndex = i-1
+                    break
+                else: 
+                    lastPercMeasured = sample.percMeasured
+            
+            #Move back through the validation sample stack until finding a sample with non-zero RD
+            while (True):
+                if (validationDatabase[lastSampleVizIndex].squareRD.sum() > 0) or (lastSampleVizIndex == 0): break
+                else: lastSampleVizIndex -= 1
+            
+            #Store indicies of validation sample data to visualize during training
+            vizSampleIndices = [0]
+            if lastSampleVizIndex != 0: vizSampleIndices.append(lastSampleVizIndex)
+            
             self.numViz = len(vizSampleIndices)
             inputs_VAL, labels_VAL = [], []
             self.inputs_Viz, self.labels_Viz = [], []
             for i, sample in enumerate(tqdm(validationDatabase, desc = 'Validation Data Setup', leave=True, ascii=asciiFlag)):
-                inputStack = prepareInput(sample.squareChanReconImages, sample.squareMask, validationSampleData[sample.sampleDataIndex].squareOpticalImage)
-                if i in vizSampleIndices:
-                    if storeOnDevice: self.inputs_Viz.append(torch.from_numpy(inputStack).float().to(self.device))
-                    else: self.inputs_Viz.append(torch.from_numpy(inputStack).float())
-                    self.labels_Viz.append(sample.squareRD)
-                for chanNum in range(0, len(sample.squareRDs)):
-                    input = inputStack[chanNum]
-                    label = np.expand_dims(sample.squareRDs[chanNum], 0)
-                    inputs_VAL.append(input)
-                    labels_VAL.append(label)
+                if sample.squareRD.sum() > 0:
+                    inputStack = prepareInput(sample.squareChanReconImages, sample.squareMask, validationSampleData[sample.sampleDataIndex].squareOpticalImage)
+                    if i in vizSampleIndices:
+                        if storeOnDevice: self.inputs_Viz.append(torch.from_numpy(inputStack).float().to(self.device))
+                        else: self.inputs_Viz.append(torch.from_numpy(inputStack).float())
+                        self.labels_Viz.append(sample.squareRD)
+                    for chanNum in range(0, len(sample.squareRDs)):
+                        input = inputStack[chanNum]
+                        label = np.expand_dims(sample.squareRDs[chanNum], 0)
+                        inputs_VAL.append(input)
+                        labels_VAL.append(label)
             data_VAL = DataPreprocessing_DLADS(inputs_VAL, labels_VAL, self.device, False)
             self.dataloader_VAL = DataLoader(data_VAL, batch_size=self.batchsize_VAL, num_workers=0, shuffle=False)
             self.numVAL = len(self.dataloader_VAL)
