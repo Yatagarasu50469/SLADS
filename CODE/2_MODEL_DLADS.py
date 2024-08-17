@@ -236,19 +236,21 @@ class DLADS:
         #Configure CPU/GPU computation environment
         self.device = torch.device(f"cuda:{local_gpus[-1]}" if len(local_gpus) > 0 else "cpu")
         
-        #Create model, sending it to the specified computation enviornment if training
+        #Create model
         self.model = Model_DLADS(numStartFilters, len(inputChannels))
-        if trainFlag: self.model.to(self.device)
         
-        #If not training, load parameters (before potential parallelization on multiple GPUs) and setup for inferencing
+        #If not training, load parameters and setup for inferencing
         if not trainFlag: 
             modelPath = modelDirectory + modelName
             with multivolumefile.open(modelPath + os.path.sep + modelName + '.7z', mode='rb') as modelArchive:
                 with py7zr.SevenZipFile(modelArchive, 'r') as archive:
                     archive.extract(modelDirectory)
-            _ = self.model.load_state_dict(torch.load(modelPath + '.pt', map_location=self.device))
+            _ = self.model.load_state_dict(torch.load(modelPath + '.pt', map_location='cpu'))
             _ = self.model.train(False)
             os.remove(modelPath + '.pt')
+        
+        #Place model into the specified computation enviornment
+        self.model.to(self.device)
         
         #Upcoming compile function might improve speed even further; not currently working 2.2.0
         #https://github.com/pytorch/pytorch/pull/119750
