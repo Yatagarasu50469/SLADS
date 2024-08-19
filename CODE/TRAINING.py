@@ -164,11 +164,11 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
             
             #Make a copy of the sampleData with a new initial measurement mask
             sampleData = copy.deepcopy(trainingValidationSampleData[sampleDataNum])
-            sampleData.generateInitialSets('random')
-
+            sampleData.generateInitialSets(scanMethodTV)
+            
             #Store training/validation sampleData index to identify the corresponding reference during training procedure
             sampleDataIndexList.append(sampleDataIndex)
-
+            
             #Change location and a boolean flag for results/visuals depending on if sample belongs to training or validation sets
             trainSampleBoolList.append(trainSampleBool)
             if trainSampleBool: saveLocation = trainSaveLocations[maskNum]
@@ -176,10 +176,10 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
             
             #If parallel, then add job to list, otherwise just run and collect the result
             if parallelization: 
-                futures.append((sampleDataNum, sampleData, optimalC, False, 1, None, lineVisitAll, saveLocation, True, samplingProgress_Actor, 0.01))
+                futures.append((sampleDataNum, sampleData, optimalC, False, percToScanTV, percToVizTV, lineVisitAll, saveLocation, True, samplingProgress_Actor, 0.01))
                 maxProgress+=sampleData.stopPerc
             else: 
-                results.append(runSampling(sampleDataNum, sampleData, optimalC, False, 1, None, lineVisitAll, saveLocation, False))
+                results.append(runSampling(sampleDataNum, sampleData, optimalC, False, percToScanTV, percToVizTV, lineVisitAll, saveLocation, False))
     
     #If parallel, initialize a global progress bar, start jobs, and wait for results, regularly updating progress bar
     if parallelization: 

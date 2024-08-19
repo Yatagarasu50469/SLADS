@@ -91,10 +91,10 @@ class Recon_Actor:
     def computeMetrics(self):
         self.imagesNRMSEList, self.imagesSSIMList, self.imagesPSNRList = [], [], []
         for index in range(0, len(self.indexes)):
-            score_NRMSE, score_SSIM, score_PSNR = compareImages(self.allImages[index], self.reconImages[index], self.allImagesMin[index], self.allImagesMax[index])
-            self.imagesNRMSEList.append(score_NRMSE)
-            self.imagesSSIMList.append(score_SSIM)
+            score_PSNR, score_SSIM, score_NRMSE  = compareImages(self.allImages[index], self.reconImages[index], self.allImagesMin[index], self.allImagesMax[index])
             self.imagesPSNRList.append(score_PSNR)
+            self.imagesSSIMList.append(score_SSIM)
+            self.imagesNRMSEList.append(score_NRMSE)
     
     #Return allImages already loaded; Warning: Performing any operations beyond just the return will induce significant copy overhead!
     def getAllImages(self):

@@ -41,13 +41,24 @@ class DataPreprocessing_DLADS(Dataset):
 
 #Compute RDPPs, standardizing input data as done in model inferencing (must use torch as numpy arithmetic optimization yields slightly different values)
 def computeRDPPs(labels, recons):
-    if standardizeInputData: 
-        recons, labels = torch.from_numpy(recons).float(), torch.from_numpy(labels).float()
-        if padInputData: paddedRecons = F.pad(recons.float(), ((-(-recons.shape[-1]//16)*16)-recons.shape[-1], 0, (-(-recons.shape[-2]//16)*16)-recons.shape[-2], 0), mode='constant')
+    recons, labels = torch.from_numpy(recons).float(), torch.from_numpy(labels).float()
+    if processInputData != 'None':
+        
+        if padInputData: paddedRecons = F.pad(recons, ((-(-recons.shape[-1]//16)*16)-recons.shape[-1], 0, (-(-recons.shape[-2]//16)*16)-recons.shape[-2], 0), mode='constant')
         else: paddedRecons = recons
-        meanValue, stdValue = torch.mean(paddedRecons, axis=(-1, -2), keepdims=True), torch.std(paddedRecons, dim=(-1, -2), correction=0, keepdims=True)
-        recons, labels = torch.nan_to_num((recons-meanValue)/stdValue).numpy(), torch.nan_to_num((labels-meanValue)/stdValue).numpy()
-    return abs(labels-recons)
+        
+        if processInputData == 'standardize': 
+            meanValue, stdValue = torch.mean(paddedRecons, axis=(-1, -2), keepdims=True), torch.std(paddedRecons, dim=(-1, -2), correction=0, keepdims=True)
+            recons, labels = torch.nan_to_num((recons-meanValue)/stdValue), torch.nan_to_num((labels-meanValue)/stdValue)
+        elif processInputData == 'normalize': 
+            minValue = torch.min(paddedRecons, axis=(-1, -2), keepdims=True), 
+            diffValue = torch.max(paddedRecons, dim=(-1, -2), keepdims=True) - minValue
+            recons_new, labels_new = torch.nan_to_num((recons-minValue)/diffValue), torch.nan_to_num((labels-minValue)/diffValue)
+            Tracer()
+        else: 
+            sys.exit('\nError - Specified processInputData method was not supported.')
+        
+    return abs(labels.numpy()-recons.numpy())
 
 #Prepare data for DLADS/GLANDS model input
 def prepareInput(reconImages, squareMask, squareOpticalImage=None):
@@ -138,11 +149,11 @@ class Conv_SC_DLADS(nn.Module):
         else: sys.exit('\nError - Unexpected initialization method specified.')
         
         #Setup normalization layers/parameters
-        if dataNormalize: self.std = nn.InstanceNorm2d(out_channels, affine=True) #default eps=1e-5 seems strangely high...
-        else: self.std = lambda inputs:inputs
+        if dataNormalize: self.preprocess = nn.InstanceNorm2d(out_channels, affine=True) #default eps=1e-5 seems strangely high...
+        else: self.preprocess = lambda inputs:inputs
         
     def forward(self, data):
-        return self.std(self.act(self.conv(data)))
+        return self.preprocess(self.act(self.conv(data)))
         
 #Processing convolutional block for DLADS
 class Conv_CB_DLADS(nn.Module):
@@ -168,12 +179,12 @@ class Conv_CB_DLADS(nn.Module):
 class Conv_IN_DLADS(nn.Module):
     def __init__(self, numIn, numOut):
         super().__init__()
-        if standardizeInputData: self.std = CustomInstanceNorm()
-        else: self.std = lambda inputs:inputs
+        if processInputData ==  'standardize': self.preprocess = CustomInstanceNorm()
+        else: self.preprocess = lambda inputs:inputs
         self.conv0 = Conv_CB_DLADS(numIn, numOut, inAct, False)
         
     def forward(self, data):
-        data = self.std(data)
+        data = self.preprocess(data)
         return self.conv0(data)
         
 #Downsampling convolutional block for DLADS
@@ -351,7 +362,7 @@ class DLADS:
                 
                 squareRD = self.labels_Viz[vizSampleNum]
                 with torch.inference_mode(): squareERD = torch.mean(self.model(input), 0).detach().cpu().numpy()[0]
-                ERD_NRMSE, ERD_SSIM, ERD_PSNR = compareImages(squareRD, squareERD, np.min(squareRD), np.max(squareRD))
+                ERD_PSNR, ERD_SSIM, ERD_NRMSE = compareImages(squareRD, squareERD, np.min(squareRD), np.max(squareRD))
                 
                 ax = plt.subplot2grid((3,2), (vizSampleNum+1,0))
                 im = ax.imshow(squareRD, aspect='auto', interpolation='none')

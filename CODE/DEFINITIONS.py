@@ -1047,11 +1047,11 @@ class Result:
         if not lastReconOnly:
             sample.chanImagesNRMSEList, sample.chanImagesSSIMList, sample.chanImagesPSNRList = [], [], []
             for index in range(0, len(sampleData.chanImages)): 
-                score_NRMSE, score_SSIM, score_PSNR = compareImages(sampleData.chanImages[index], sample.chanReconImages[index], sampleData.chanImagesMin[index], sampleData.chanImagesMax[index])
+                score_PSNR, score_SSIM, score_NRMSE = compareImages(sampleData.chanImages[index], sample.chanReconImages[index], sampleData.chanImagesMin[index], sampleData.chanImagesMax[index])
                 sample.chanImagesNRMSEList.append(score_NRMSE)
                 sample.chanImagesSSIMList.append(score_SSIM)
                 sample.chanImagesPSNRList.append(score_PSNR)
-            sample.sumImageNRMSE, sample.sumImageSSIM, sample.sumImagePSNR = compareImages(sampleData.sumImage, sample.sumReconImage, np.min(sampleData.sumImage), np.max(sampleData.sumImage))
+            sample.sumImagePSNR, sample.sumImageSSIM, sample.sumImageNRMSE = compareImages(sampleData.sumImage, sample.sumReconImage, np.min(sampleData.sumImage), np.max(sampleData.sumImage))
         
         #MSI specific; if enabled then perform and evaluate reconstructions over the whole spectrum for the data known at the given measurement step
         if (sampleData.allChanEvalFlag or lastReconOnly) and sampleData.dataMSI:
@@ -1108,10 +1108,10 @@ class Result:
                 if not lastReconOnly:
                     sample.allImagesNRMSEList, sample.allImagesSSIMList, sample.allImagesPSNRList = [], [], []
                     for index in range(0, len(sampleData.allImages)):
-                        score_NRMSE, score_SSIM, score_PSNR = compareImages(sampleData.allImages[index], self.reconImages[index], sampleData.allImagesMin[index], sampleData.allImagesMax[index])
-                        sample.allImagesNRMSEList.append(score_NRMSE)
-                        sample.allImagesSSIMList.append(score_SSIM)
+                        score_PSNR, score_SSIM, score_NRMSE = compareImages(sampleData.allImages[index], self.reconImages[index], sampleData.allImagesMin[index], sampleData.allImagesMax[index])
                         sample.allImagesPSNRList.append(score_PSNR)
+                        sample.allImagesSSIMList.append(score_SSIM)
+                        sample.allImagesNRMSEList.append(score_NRMSE)
         
         #Otherwise assume all images results are the same as for targeted channels; i.e. all channels were targeted
         elif not lastReconOnly:
@@ -1133,8 +1133,15 @@ class Result:
                     sample.RDPPs = computeRDPPs(sampleData.squareChanImages, sample.squareChanReconImages)
                     computeRD(sample, sampleData, tempScanData, self.cValue, [])
                 
-                #Determine NRMSE/SSIM/PSNR between averaged RD and ERD
-                sample.ERD_NRMSE, sample.ERD_SSIM, sample.ERD_PSNR = compareImages(sample.squareRD, sample.squareERD, np.min(sample.squareRD), np.max(sample.squareRD))
+                #Determine NRMSE/SSIM/PSNR between RD and ERD for each channel, averaging the results, also compute for global RD and ERD used for selection
+                sample.chanERD_PSNR, sample.chanERD_SSIM, sample.chanERD_NRMSE = [], [], []
+                for index in range(0, len(sample.squareRDs)):
+                    score_PSNR, score_SSIM, score_NRMSE = compareImages(sample.squareRDs[index], sample.squareERDs[index], np.min(sample.squareRDs[index]), np.max(sample.squareRDs[index]))
+                    sample.chanERD_PSNR.append(score_PSNR)
+                    sample.chanERD_SSIM.append(score_SSIM)
+                    sample.chanERD_NRMSE.append(score_NRMSE)
+                sample.avgChanERD_PSNR, sample.avgChanERD_SSIM, sample.avgChanERD_NRMSE = np.mean(sample.chanERD_PSNR), np.mean(sample.chanERD_SSIM), np.mean(sample.chanERD_NRMSE)
+                sample.avgERD_PSNR, sample.avgERD_SSIM, sample.avgERD_NRMSE = compareImages(sample.squareRD, sample.squareERD, np.min(sample.squareRD), np.max(sample.squareRD))
                 
                 #Resize RD(s) for final visualizations; has to be done here for live output case, but in complete() method otherwise
                 if sampleData.liveOutputFlag: self.resizeRD(sample, sampleData)
@@ -1232,24 +1239,28 @@ class Result:
         
         #If this is a simulation, not for training database generation, then summarize NRMSE/SSIM/PSNR scores across all measurement steps
         if sampleData.simulationFlag and not sampleData.datagenFlag:
-            self.chanAvgNRMSEList = [np.nanmean(sample.chanImagesNRMSEList) for sample in self.samples]
-            self.chanAvgSSIMList = [np.nanmean(sample.chanImagesSSIMList) for sample in self.samples]
             self.chanAvgPSNRList = [np.nanmean(sample.chanImagesPSNRList) for sample in self.samples]
-            self.sumImageNRMSEList = [sample.sumImageNRMSE for sample in self.samples]
-            self.sumImageSSIMList = [sample.sumImageSSIM for sample in self.samples]
+            self.chanAvgSSIMList = [np.nanmean(sample.chanImagesSSIMList) for sample in self.samples]
+            self.chanAvgNRMSEList = [np.nanmean(sample.chanImagesNRMSEList) for sample in self.samples]
             self.sumImagePSNRList = [sample.sumImagePSNR for sample in self.samples]
+            self.sumImageSSIMList = [sample.sumImageSSIM for sample in self.samples]
+            self.sumImageNRMSEList = [sample.sumImageNRMSE for sample in self.samples]
             
             #Compute all channel results if applicable
             if sampleData.allChanEvalFlag and sampleData.dataMSI:
-                self.allAvgNRMSEList = [np.nanmean(sample.allImagesNRMSEList) for sample in self.samples]
-                self.allAvgSSIMList = [np.nanmean(sample.allImagesSSIMList) for sample in self.samples]
                 self.allAvgPSNRList = [np.nanmean(sample.allImagesPSNRList) for sample in self.samples]
+                self.allAvgSSIMList = [np.nanmean(sample.allImagesSSIMList) for sample in self.samples]
+                self.allAvgNRMSEList = [np.nanmean(sample.allImagesNRMSEList) for sample in self.samples]
+
         
         #If ERD and RD were computed (i.e., when not a training run, nor GLANDS) summarize ERD NRMSE/SSIM/PSNR scores
         if erdModel != 'GLANDS' and sampleData.simulationFlag and not sampleData.trainFlag: 
-            self.ERD_NRMSEList = [sample.ERD_NRMSE for sample in self.samples]
-            self.ERD_SSIMList = [sample.ERD_SSIM for sample in self.samples]
-            self.ERD_PSNRList = [sample.ERD_PSNR for sample in self.samples]
+            self.avgChanERD_PSNRList = [sample.avgChanERD_PSNR for sample in self.samples]
+            self.avgChanERD_SSIMList = [sample.avgChanERD_SSIM for sample in self.samples]
+            self.avgChanERD_NRMSEList = [sample.avgChanERD_NRMSE for sample in self.samples]
+            self.avgERD_PSNRList = [sample.avgERD_PSNR for sample in self.samples]
+            self.avgERD_SSIMList = [sample.avgERD_SSIM for sample in self.samples]
+            self.avgERD_NRMSEList = [sample.avgERD_NRMSE for sample in self.samples]
         
         #Do not generate visuals for c value optimization or in training if visualizeTrainingData disabled
         if not sampleData.bestCFlag and ((sampleData.datagenFlag and visualizeTrainingData) or not sampleData.datagenFlag): 
@@ -1319,34 +1330,36 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions):
     #Turn ground-truth metrics into strings and set flag to indicate availability
     if knownGT:
         if not sampleData.datagenFlag:
-            sumImageNRMSE = "{:.6f}".format(round(sample.sumImageNRMSE, 6))
-            sumImageSSIM = "{:.6f}".format(round(sample.sumImageSSIM, 6))
             sumImagePSNR = "{:.6f}".format(round(sample.sumImagePSNR, 6))
-            chanImageAvgNRMSE = "{:.6f}".format(round(np.nanmean(sample.chanImagesNRMSEList), 6))
-            chanImageAvgSSIM = "{:.6f}".format(round(np.nanmean(sample.chanImagesSSIMList), 6))
+            sumImageSSIM = "{:.6f}".format(round(sample.sumImageSSIM, 6))
+            sumImageNRMSE = "{:.6f}".format(round(sample.sumImageNRMSE, 6))
             chanImageAvgPSNR = "{:.6f}".format(round(np.nanmean(sample.chanImagesPSNRList), 6))
+            chanImageAvgSSIM = "{:.6f}".format(round(np.nanmean(sample.chanImagesSSIMList), 6))
+            chanImageAvgNRMSE = "{:.6f}".format(round(np.nanmean(sample.chanImagesNRMSEList), 6))
         else:
-            sumImageNRMSE = "N/A"
-            sumImageSSIM = "N/A"
-            sumImagePSNR = "N/A"
-            chanImageAvgNRMSE = "N/A"
-            chanImageAvgSSIM = "N/A"
-            chanImageAvgPSNR = "N/A"
+            sumImagePSNR, sumImageSSIM, sumImageNRMSE = "N/A", "N/A", "N/A"
+            chanImageAvgPSNR, chanImageAvgSSIM, chanImageAvgNRMSE = "N/A", "N/A", "N/A"
+        
         if sampleData.allChanEvalFlag and not sampleData.datagenFlag and sampleData.dataMSI: 
-            allImageAvgNRMSE = "{:.6f}".format(round(np.nanmean(sample.allImagesNRMSEList), 6))
-            allImageAvgSSIM = "{:.6f}".format(round(np.nanmean(sample.allImagesSSIMList), 6))
             allImageAvgPSNR = "{:.6f}".format(round(np.nanmean(sample.allImagesPSNRList), 6))
+            allImageAvgSSIM = "{:.6f}".format(round(np.nanmean(sample.allImagesSSIMList), 6))
+            allImageAvgNRMSE = "{:.6f}".format(round(np.nanmean(sample.allImagesNRMSEList), 6))
         else: 
-            allImageAvgNRMSE = "N/A"
-            allImageAvgSSIM = "N/A"
-            allImageAvgPSNR = "N/A"
+            allImageAvgPSNR, allImageAvgSSIM, allImageAvgNRMSE = "N/A", "N/A", "N/A"
     
     #Turn RD metrics into strings and set flag to indicate availability
     if knownRD and knownERD:
-        ERD_NRMSE = "{:.6f}".format(round(sample.ERD_NRMSE, 6))
-        ERD_SSIM = "{:.6f}".format(round(sample.ERD_SSIM, 6))
-        ERD_PSNR = "{:.6f}".format(round(sample.ERD_PSNR, 6))
-    
+        avgChanERD_PSNR = "{:.6f}".format(round(sample.avgChanERD_PSNR, 6))
+        avgChanERD_SSIM = "{:.6f}".format(round(sample.avgChanERD_SSIM, 6))
+        avgChanERD_NRMSE = "{:.6f}".format(round(sample.avgChanERD_NRMSE, 6))
+        
+        avgERD_PSNR = "{:.6f}".format(round(sample.avgERD_PSNR, 6))
+        avgERD_SSIM = "{:.6f}".format(round(sample.avgERD_SSIM, 6))
+        avgERD_NRMSE = "{:.6f}".format(round(sample.avgERD_NRMSE, 6))
+    else: 
+        avgChanERD_PSNR, avgChanERD_SSIM, avgChanERD_NRMSE = "N/A", "N/A", "N/A"
+        avgERD_PSNR, avgERD_SSIM, avgERD_NRMSE = "N/A", "N/A", "N/A"
+        
     #Setup measurement progression image variables if needed
     if len(sample.progMap.shape)>0:
         progMapValues = np.unique(sample.progMap[~np.isnan(sample.progMap)]).astype(int)
@@ -1366,13 +1379,15 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions):
         chanLabel = str(sampleData.chanValues[chanNum])
         if knownGT:
             if not sampleData.datagenFlag:
-                chanImagesNRMSE = "{:.6f}".format(round(sample.chanImagesNRMSEList[chanNum], 6))
-                chanImagesSSIM = "{:.6f}".format(round(sample.chanImagesSSIMList[chanNum], 6))
                 chanImagesPSNR = "{:.6f}".format(round(sample.chanImagesPSNRList[chanNum], 6))
+                chanImagesSSIM = "{:.6f}".format(round(sample.chanImagesSSIMList[chanNum], 6))
+                chanImagesNRMSE = "{:.6f}".format(round(sample.chanImagesNRMSEList[chanNum], 6))
+                chanERDPSNR = "{:.6f}".format(round(sample.chanERD_PSNR[chanNum], 6))
+                chanERDSSIM = "{:.6f}".format(round(sample.chanERD_SSIM[chanNum], 6))
+                chanERDNRMSE = "{:.6f}".format(round(sample.chanERD_NRMSE[chanNum], 6))
             else: 
-                chanImagesNRMSE = "N/A"
-                chanImagesSSIM = "N/A"
-                chanImagesPSNR = "N/A"
+                chanImagesPSNR, chanImagesSSIM, chanImagesNRMSE, = "N/A", "N/A", "N/A"
+                chanERDPSNR, chanERDSSIM, chanERDNRMSE = "N/A", "N/A", "N/A"
         
         #Create a new figure
         if sampleData.impFlag or sampleData.postFlag: f = plt.figure(figsize=(30,5))
@@ -1381,9 +1396,13 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions):
         #Generate and apply a plot title, with metrics if applicable
         plotTitle = r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Channel:\ }$" + chanLabel + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured
         if knownGT:
-            plotTitle += '\n' + r"$\bf{NRMSE\ -\ All\ Channel\ Avg:\ }$" + allImageAvgNRMSE + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgNRMSE + r"$\bf{\ \ Targeted\ Channel:\ }$" + chanImagesNRMSE
-            plotTitle += '\n' + r"$\bf{\ \ SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel:\ }$" + chanImagesSSIM
-            plotTitle += '\n' + r"$\bf{\ \ PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel:\ }$" + chanImagesPSNR
+            plotTitle += '\n' + r"$\bf{\ PSNR\ -\ Reconstruction:\ }$" + chanImageAvgPSNR
+            if knownRD and knownERD: plotTitle += r"$\bf{\ \ ERD:\ }$" + chanERDPSNR
+            plotTitle += '\n' + r"$\bf{\ SSIM\ -\ Reconstruction:\ }$" + chanImageAvgSSIM
+            if knownRD and knownERD: plotTitle += r"$\bf{\ \ ERD:\ }$" + chanERDSSIM
+            plotTitle += '\n' + r"$\bf{NRMSE\ -\ Reconstruction:\ }$" + chanImagesNRMSE
+            if knownRD and knownERD: plotTitle += r"$\bf{\ \ ERD:\ }$" + chanERDNRMSE
+            
         plt.suptitle(plotTitle)
         
         if sampleData.impFlag or sampleData.postFlag: ax = plt.subplot2grid((1,5), (0,3))
@@ -1492,12 +1511,12 @@ def visualizeStep(sample, sampleData, dir_progression, dir_chanProgressions):
     #Generate and apply a plot title, with metrics if applicable
     plotTitle = r"$\bf{Sample:\ }$" + sampleData.name + r"$\bf{\ \ Percent\ Sampled:\ }$" + percMeasured
     if knownGT:
-        plotTitle += '\n' + r"$\bf{NRMSE\ -\ All\ Channel\ Avg:\ }$" + allImageAvgNRMSE + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgNRMSE + r"$\bf{\ \ Sum\ Image: }$" + sumImageNRMSE
-        if knownRD and knownERD: plotTitle += r"$\bf{\ \ Avg\ ERD:\ }$" + ERD_NRMSE 
-        plotTitle += '\n' + r"$\bf{\ \ SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM
-        if knownRD and knownERD: plotTitle += r"$\bf{\ \ Avg\ ERD:\ }$" + ERD_SSIM
         plotTitle += '\n' + r"$\bf{\ \ PSNR\ -\ All\ Channel\ Avg:\ }$" + allImageAvgPSNR + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgPSNR + r"$\bf{\ \ Sum\ Image: }$" + sumImagePSNR
-        if knownRD and knownERD: plotTitle += r"$\bf{\ \ Avg\ ERD:\ }$" + ERD_PSNR
+        if knownRD and knownERD: plotTitle += r"$\bf{\ \ Avg\ ERD:\ }$" + avgERD_PSNR + r"$\bf{\ \ Avg\ Chan\ ERD:\ }$" + avgChanERD_PSNR
+        plotTitle += '\n' + r"$\bf{\ \ SSIM\ -\ All\ Channel\ Avg:\ }$" + allImageAvgSSIM + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgSSIM + r"$\bf{\ \ Sum\ Image: }$" + sumImageSSIM
+        if knownRD and knownERD: plotTitle += r"$\bf{\ \ Avg\ ERD:\ }$" + avgERD_SSIM + r"$\bf{\ \ Avg\ Chan\ ERD:\ }$" + avgChanERD_SSIM
+        plotTitle += '\n' + r"$\bf{NRMSE\ -\ All\ Channel\ Avg:\ }$" + allImageAvgNRMSE + r"$\bf{\ \ Targeted\ Channel\ Avg:\ }$" + chanImageAvgNRMSE + r"$\bf{\ \ Sum\ Image: }$" + sumImageNRMSE
+        if knownRD and knownERD: plotTitle += r"$\bf{\ \ Avg\ ERD:\ }$" + avgERD_NRMSE + r"$\bf{\ \ Avg\ Chan\ ERD:\ }$" + avgChanERD_NRMSE 
     plt.suptitle(plotTitle)
     
     if sampleData.impFlag or sampleData.postFlag: ax = plt.subplot2grid((1,5), (0,3))
@@ -1911,10 +1930,10 @@ def compare_NRMSE(image_true, image_test, data_range):
 #Compare label and recon images after min-max rescaling
 def compareImages(label, recon, minValue, maxValue):
     data_range=maxValue-minValue
-    score_NRMSE = compare_NRMSE(label, recon, data_range)
-    score_SSIM = compare_SSIM(label, recon, data_range=data_range)
     score_PSNR = compare_PSNR(label, recon, data_range=data_range)
-    return score_NRMSE, score_SSIM, score_PSNR
+    score_SSIM = compare_SSIM(label, recon, data_range=data_range)
+    score_NRMSE = compare_NRMSE(label, recon, data_range)    
+    return score_PSNR, score_SSIM, score_NRMSE, 
 
 #Interpolate results to a given precision for averaging results
 def percResults(results, perc_testingResults, precision):

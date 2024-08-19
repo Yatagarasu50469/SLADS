@@ -89,9 +89,13 @@ imzMLExport = False
 #Should an evaluation of reconstructions be performed across all channels (MSI only; default: False)
 allChanEval = True
 
-#Should input data be standardized for RDPP/ERD computations (default: True)
-#If this and the value of padInputData changes, then training data generation will need to be rerun
-standardizeInputData = True
+#Should input data be padded for even dimensions throughout up and down sampling (default: True)
+#If this and/or the value of processInputData changes, then training data generation will need to be rerun
+padInputData = True
+
+#How should input data be processed for RDPP/ERD computations: 'standardize', 'normalize', or 'None' (default: 'None')
+#If this and/or the value of padInputData changes, then training data generation will need to be rerun
+processInputData = 'None'
 
 #==================================================================
 
@@ -178,6 +182,10 @@ numNeighbors = 10
 #Possible c values for RD approximation
 cValues = [1, 2, 4, 8, 16, 32]
 
+#Metric to use when optimizing c value: 'PSNR', 'SSIM', or 'NRMSE' (default: 'NRMSE')
+#If this value changes, then training data generation will need to be rerun
+cOptMetric = 'PSNR'
+
 #When optimizing c, percentage of points (group-based) to acquire between steps; set as None to disable (default: 1)
 #Temporarily sets the RD values in unmeasured locations, that would be impacted by selected scan positions, to zero
 percToScanC = 1
@@ -214,7 +222,7 @@ percToVizTV = None
 #DLADS default: ['mask',  'combinedData']
 #DLADS(-TF,-PY) default: ['mask', 'reconData', 'measureData']
 #GLANDS default: ['mask', 'measureData']
-inputChannels = ['mask', 'combinedData']
+inputChannels = ['mask', 'reconData', 'measureData']
 
 #What percentage of the training data should be used for training (default: 0.8)
 #1.0 or using only one input sample will use training loss for early stopping criteria
@@ -242,18 +250,20 @@ batchsize_VAL = -1
 #ARCHITECTURE PARAMETERS
 #==================================================================
 
-#Should input data be padded for even dimensions throughout up and down sampling (default: True)
-#If this and the value of standardizeInputData changes, then training data generation will need to be rerun
-padInputData = True
-
 #Reference number of how many convolutional filters to use in building the model
 numStartFilters = 64
+
+#How many layers down should the network go
+networkDepth = 4
+
+#Should the number of filters double at depth
+doubleFilters = True
 
 #What initialization should be used: 'xavier_uniform', 'xavier_normal', 'kaiming_uniform', 'kaiming_normal' (default: 'xavier_uniform')
 initialization='xavier_uniform'
 
 #Activations for network sections (input, down, embedding down, upsampling, embedding up, final): 'leaky_relu', 'relu', 'prelu', 'linear'
-inAct, dnAct, upAct, fnAct = 'leaky_relu', 'leaky_relu', 'leaky_relu', 'relu'
+inAct, dnAct, upAct, fnAct = 'leaky_relu', 'leaky_relu', 'relu', 'relu'
 
 #Negative slope for any 'leaky_relu' or 'prelu' activations (default: 0.2)
 leakySlope = 0.2
@@ -265,10 +275,10 @@ useBias = True
 blurPaddingMode = 'reflection'
 
 #Sigma for binomial filter applied during upsampling; 0 to disable (default: 3)
-sigmaUp = 3
+sigmaUp = 1
 
 #Sigma for binomial filter applied during downsampling; 0 to disable (default: 1)
-sigmaDn = 1
+sigmaDn = 0
 
 #Should instance normalization be used throughout the network (default: False)
 dataNormalize = False
@@ -283,10 +293,13 @@ dataNormalize = False
 #==================================================================
 
 #Which optimizer should be used: 'AdamW', 'Adam', 'NAdam', 'RMSprop', or 'SGD' (default: 'AdamW')
-optimizer = 'AdamW'
+optimizer = 'NAdam'
 
 #What should the initial learning rate for the model optimizer(s) be (default: 1e-4)
-learningRate = 1e-4
+learningRate = 1e-5
+
+#What loss fucntion should be used for training the model: 'MAE' or 'MSE' (default: 'MAE')
+lossFunction = 'MAE'
 
 #How many epochs should the model training wait to see an improvement using the early stopping criteria (default: 100)
 maxPatience = 100
@@ -295,7 +308,7 @@ maxPatience = 100
 maxEpochs = 1000
 
 #If cosine annealing with warm restarts should be used (default: True)
-scheduler_CAWR = True
+scheduler_CAWR = False
 
 #If using cosine annealing, what should the period be between resets (default: 1)
 schedPeriod = 1
@@ -359,7 +372,7 @@ precision = 0.001
 overWriteFile = None
 
 #Model overwrite file; will execute specified file to overwrite otherwise defined methods/parameters at model definition time (default: None)
-overWriteModelFile = None
+overWriteModelFile = './CODE/0_MODEL_DLADS.py'
 
 #Should testing/simulation sample data object be saved; sometimes needed for post-processing and results writeup (default: False)
 storeTestingSampleData = False

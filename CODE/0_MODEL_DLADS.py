@@ -39,15 +39,19 @@ class DataPreprocessing_DLADS(Dataset):
     def __len__(self):
         return len(self.data_Inputs)
 
-#Compute RDPPs, standardizing input data as done in model inferencing (must use torch as numpy arithmetic optimization yields slightly different values)
+#Compute RDPPs, standardizing input data as done in model inferencing (must use torch, as numpy arithmetic optimization yields slightly different values)
 def computeRDPPs(labels, recons):
-    if standardizeInputData: 
-        recons, labels = torch.from_numpy(recons).float(), torch.from_numpy(labels).float()
-        if padInputData: paddedRecons = F.pad(recons.float(), ((-(-recons.shape[-1]//16)*16)-recons.shape[-1], 0, (-(-recons.shape[-2]//16)*16)-recons.shape[-2], 0), mode='constant')
-        else: paddedRecons = recons
-        meanValue, stdValue = torch.mean(paddedRecons, axis=(-1, -2), keepdims=True), torch.std(paddedRecons, dim=(-1, -2), correction=0, keepdims=True)
-        recons, labels = torch.nan_to_num((recons-meanValue)/stdValue).numpy(), torch.nan_to_num((labels-meanValue)/stdValue).numpy()
-    return abs(labels-recons)
+    recons, labels = torch.from_numpy(recons).float(), torch.from_numpy(labels).float()
+    if processInputData == 'standardize': 
+        meanValue, stdValue = torch.mean(recons, dim=(-1, -2), keepdims=True), torch.std(recons, dim=(-1, -2), correction=0, keepdims=True)
+        recons, labels = torch.nan_to_num((recons-meanValue)/stdValue), torch.nan_to_num((labels-meanValue)/stdValue)
+    elif processInputData == 'normalize': 
+        minValue = torch.min(recons, dim=(-1, -2), keepdims=True), 
+        diffValue = torch.max(recons, dim=(-1, -2), keepdims=True) - minValue
+        recons, labels = torch.nan_to_num((recons-minValue)/diffValue), torch.nan_to_num((labels-minValue)/diffValue)
+    elif processInputData != 'None': 
+        sys.exit('\nError - Specified processInputData method was not supported.')
+    return abs(labels.numpy()-recons.numpy())
 
 #Prepare data for DLADS/GLANDS model input
 def prepareInput(reconImages, squareMask, squareOpticalImage=None):
@@ -64,7 +68,14 @@ def prepareInput(reconImages, squareMask, squareOpticalImage=None):
 #Custom implementation of instance normalization; removes epsilon addition in the denominator
 class CustomInstanceNorm(nn.Module):
     def __init__(self): super().__init__()
-    def forward(self, data): return torch.nan_to_num((data-torch.mean(data, axis=(-1, -2), keepdims=True))/torch.std(data, dim=(-1, -2), correction=0, keepdims=True))
+    def forward(self, data): return torch.nan_to_num((data-torch.mean(data, dim=(-1, -2), keepdims=True))/torch.std(data, dim=(-1, -2), correction=0, keepdims=True))
+
+#Custom normalization method
+class CustomNorm(nn.Module):
+    def __init__(self): super().__init__()
+    def forward(self, data): 
+        minValue = torch.min(data, dim=(-1, -2), keepdims=True)
+        return torch.nan_to_num((data-minValue)/(torch.max(data, dim=(-1, -2), keepdims=True) - minValue))
 
 #Deterministic reflection padding; modified from https://github.com/pytorch/vision/blob/main/torchvision/transforms/_functional_tensor.py#L322
 class PadRef(nn.Module):
@@ -138,11 +149,11 @@ class Conv_SC_DLADS(nn.Module):
         else: sys.exit('\nError - Unexpected initialization method specified.')
         
         #Setup normalization layers/parameters
-        if dataNormalize: self.std = nn.InstanceNorm2d(out_channels, affine=True) #default eps=1e-5 seems strangely high...
-        else: self.std = lambda inputs:inputs
+        if dataNormalize: self.preprocess = nn.InstanceNorm2d(out_channels, affine=True) #default eps=1e-5 seems strangely high...
+        else: self.preprocess = lambda inputs:inputs
         
     def forward(self, data):
-        return self.std(self.act(self.conv(data)))
+        return self.preprocess(self.act(self.conv(data)))
         
 #Processing convolutional block for DLADS
 class Conv_CB_DLADS(nn.Module):
@@ -158,13 +169,20 @@ class Conv_CB_DLADS(nn.Module):
 class Conv_IN_DLADS(nn.Module):
     def __init__(self, numIn, numOut):
         super().__init__()
-        if standardizeInputData: self.std = CustomInstanceNorm()
-        else: self.std = lambda inputs:inputs
+        if processInputData == 'standardize': self.preprocess = CustomInstanceNorm()
+        elif processInputData == 'normalize': self.preprocess = CustomNorm()
+        else: self.preprocess = lambda inputs:inputs
+        if padInputData: self.padDivisor = (2**networkDepth)
         self.conv0 = Conv_CB_DLADS(numIn, numOut, inAct)
         
     def forward(self, data):
-        data = self.std(data)
-        return self.conv0(data)
+        data = self.preprocess(data)
+        if padInputData:
+            padHeight, padWidth = (-(-data.shape[-2]//self.padDivisor)*self.padDivisor)-data.shape[-2], (-(-data.shape[-1]//self.padDivisor)*self.padDivisor)-data.shape[-1]
+            data = F.pad(data, (padWidth, 0, padHeight, 0), mode='constant')
+        else: 
+            padHeight, padWidth = None, None
+        return padHeight, padWidth, [self.conv0(data)]
         
 #Downsampling convolutional block for DLADS
 class Conv_DN_DLADS(nn.Module):
@@ -202,34 +220,30 @@ class Conv_FN_DLADS(nn.Module):
 
 #DLADS model
 class Model_DLADS(nn.Module):
-    def __init__(self, numFilt, numChan):
+    def __init__(self, numFiltOut, numFiltIn):
         super().__init__()
-        self.convIn0 = Conv_IN_DLADS(numChan, numFilt)
-        self.convDn0 = Conv_DN_DLADS(numFilt, numFilt*2)
-        self.convDn1 = Conv_DN_DLADS(numFilt*2, numFilt*4)
-        self.convDn2 = Conv_DN_DLADS(numFilt*4, numFilt*8)
-        self.convDn3 = Conv_DN_DLADS(numFilt*8, numFilt*16)
-        self.convUp3 = Conv_UP_DLADS(numFilt*16, numFilt*8)
-        self.convUp2 = Conv_UP_DLADS(numFilt*8, numFilt*4)
-        self.convUp1 = Conv_UP_DLADS(numFilt*4, numFilt*2)
-        self.convUp0 = Conv_UP_DLADS(numFilt*2, numFilt)
-        self.convFn0 = Conv_FN_DLADS(numFilt, 1)
+        self.layersDN, self.layersUP, self.numFiltInList, self.numFiltOutList = nn.ModuleList([]), nn.ModuleList([]), [], []
+        self.convIn = Conv_IN_DLADS(numFiltIn, numFiltOut)
+        for depthNum in range(0, networkDepth):
+            numFiltIn = copy.deepcopy(numFiltOut)
+            if doubleFilters: numFiltOut = numFiltIn*2
+            else: numFiltOut = numFiltIn
+            self.numFiltInList.append(numFiltIn)
+            self.numFiltOutList.append(numFiltOut)
+            self.layersDN.append(Conv_DN_DLADS(numFiltIn, numFiltOut))
+        for depthNum in range(0, networkDepth):
+            numFiltIn = self.numFiltOutList[networkDepth-depthNum-1]
+            numFiltOut = self.numFiltInList[networkDepth-depthNum-1]
+            self.layersUP.append(Conv_UP_DLADS(numFiltIn, numFiltOut))
+        self.convFn0 = Conv_FN_DLADS(numFiltOut, 1)
         
     def forward(self, data, pause=False):
-        if padInputData:
-            padHeight, padWidth = (-(-data.shape[-2]//16)*16)-data.shape[-2], (-(-data.shape[-1]//16)*16)-data.shape[-1]
-            data = F.pad(data, (padWidth, 0, padHeight, 0), mode='constant')
-        convIn0 = self.convIn0(data)
-        convDn1 = self.convDn0(convIn0)
-        convDn2 = self.convDn1(convDn1)
-        convDn3 = self.convDn2(convDn2)
-        convDn4 = self.convDn3(convDn3)
-        convUp3 = self.convUp3(convDn4, convDn3)
-        convUp2 = self.convUp2(convUp3, convDn2)
-        convUp1 = self.convUp1(convUp2, convDn1)
-        convUp0 = self.convUp0(convUp1, convIn0)
-        convFn0 = self.convFn0(convUp0)
         #if pause: Tracer() #If corresponding line is enabled in compute loss, this will enable dropping into model; useful for debugging
+        padHeight, padWidth, outputDn = self.convIn(data)
+        for depthNum in range(0, networkDepth): outputDn.append(self.layersDN[depthNum](outputDn[-1]))
+        outputUp = outputDn[-1]
+        for depthNum in range(0, networkDepth): outputUp = self.layersUP[depthNum](outputUp, outputDn[networkDepth-depthNum-1])
+        convFn0 = self.convFn0(outputUp)
         if padInputData: return convFn0[:, :, padHeight:, padWidth:]
         else: return convFn0
 
@@ -349,7 +363,7 @@ class DLADS:
                 
                 squareRD = self.labels_Viz[vizSampleNum]
                 with torch.inference_mode(): squareERD = torch.mean(self.model(input), 0).detach().cpu().numpy()[0]
-                ERD_NRMSE, ERD_SSIM, ERD_PSNR = compareImages(squareRD, squareERD, np.min(squareRD), np.max(squareRD))
+                ERD_PSNR, ERD_SSIM, ERD_NRMSE = compareImages(squareRD, squareERD, np.min(squareRD), np.max(squareRD))
                 
                 ax = plt.subplot2grid((3,2), (vizSampleNum+1,0))
                 im = ax.imshow(squareRD, aspect='auto', interpolation='none')
@@ -390,7 +404,7 @@ class DLADS:
         
         #Compute loss
         pred = self.model(data)
-        loss = torch.mean(torch.abs(label-pred))
+        loss = self.lossFunc(pred, label)
         
         #If network returned all 0s, then can use this line to enter model (in combination with other relevent commented line); useful for debugging
         #if torch.sum(pred).item() == 0: self.model(data, True)
@@ -413,9 +427,12 @@ class DLADS:
         
     def train(self):
         
-        #Setup initial learning rate, optimizer, and scheduler
+        #Setup initial learning rate, optimizer, loss, and scheduler
         self.learningRate = copy.deepcopy(learningRate)
         self.setOptimizer()
+        if lossFunction == 'MAE': self.lossFunc = nn.L1Loss()
+        elif lossFunction == 'MSE': self.lossFunc = nn.MSELoss()
+        else: sys.exit('\nError - Unknown loss function specified for training.')
         if scheduler_CAWR: self.scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(self.opt, schedPeriod, T_mult=schedMult)
         
         #Setup storage for losses/events

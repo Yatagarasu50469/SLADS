@@ -78,17 +78,13 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         resultLocations = pickle.load(open(dir_TestingResults + 'resultLocations.p', "rb" ))
         numJobs = len(resultLocations)
     
-    #Perform completion/visualization routines
-    chanAvgNRMSE_Results, allAvgNRMSE_Results, sumImageNRMSE_Results, ERD_NRMSE_Results = [], [], [], []
-    chanAvgSSIM_Results, allAvgSSIM_Results, sumImageSSIM_Results, ERD_SSIM_Results = [], [], [], []
-    chanAvgPSNR_Results, allAvgPSNR_Results, sumImagePSNR_Results, ERD_PSNR_Results = [], [], [], []
+    #Perform completion/evaluation/visualization routines
     quantityMeasured_Results, timeResults, allAvgTimesComputeERD, allAvgTimesComputeRecon, allAvgTimesFileLoad, allAvgTimesComputeIter, lastQuantityMeasured = [], [], [], [], [], [], []
-    
-    #Set the quantity measured metric for labeling the x axes
-    xLabel = '% Measured'
-    #elif scanMethod == 'linewise': xLabel = '% Lines Measured'
-    
+    chanAvgPSNR_Results, allAvgPSNR_Results, sumImagePSNR_Results, avgERD_PSNR_Results, avgChanERD_PSNR_Results = [], [], [], [], []
+    chanAvgSSIM_Results, allAvgSSIM_Results, sumImageSSIM_Results, avgERD_SSIM_Results, avgChanERD_SSIM_Results = [], [], [], [], []
+    chanAvgNRMSE_Results, allAvgNRMSE_Results, sumImageNRMSE_Results, avgERD_NRMSE_Results, avgChanERD_NRMSE_Results = [], [], [], [], []
     warningOOM = False
+    
     for index in tqdm(range(0, len(resultLocations)), desc='Processing', position=0, leave=True, ascii=asciiFlag):
     
         #Load pickled result and sampleData from disk
@@ -101,6 +97,10 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         #Check to see if OOM occurred
         if result.warningOOM: warningOOM = True
         
+        #==========================================================================================================================================================================
+        #Gather global results
+        #==========================================================================================================================================================================
+        
         #Add individual results to rolling lists for averaging
         timeResults.append(result.finalTime)
         allAvgTimesFileLoad.append(result.avgTimeFileLoad)
@@ -108,169 +108,273 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         allAvgTimesComputeERD.append(result.avgTimeComputeERD)
         allAvgTimesComputeIter.append(result.avgTimeComputeIter)
         
-        #If pointwise, then consider the percentage measured at each step; if linewise then consider the number of lines scanned
-        #Since number of points on each line is different, this approach is not as descriptive as hoped and was therefore disabled.
+        #Accumulate the percentages measured at each step
         quantityMeasured_Results.append([sample.percMeasured for sample in result.samples])
         lastQuantityMeasured.append(result.samples[-1].percMeasured)
-        #if scanMethod == 'pointwise': quantityMeasured_Results.append([sample.percMeasured for sample in result.samples])
-        #elif scanMethod == 'linewise': quantityMeasured_Results.append([(np.sum(np.sum(sample.mask, axis=1)>0)/sample.mask.shape[0])*100 for sample in result.samples])
     
         #If performing a benchmark where processing is not needed and was not performed, continue to the next loop iteration
         if benchmarkNoProcessing: continue
         
-        chanAvgNRMSE_Results.append(result.chanAvgNRMSEList)
-        if allChanEval: allAvgNRMSE_Results.append(result.allAvgNRMSEList)
-        sumImageNRMSE_Results.append(result.sumImageNRMSEList)
-        if erdModel != 'GLANDS': ERD_NRMSE_Results.append(result.ERD_NRMSEList)
-        chanAvgSSIM_Results.append(result.chanAvgSSIMList)
-        if allChanEval: allAvgSSIM_Results.append(result.allAvgSSIMList)
-        sumImageSSIM_Results.append(result.sumImageSSIMList)
-        if erdModel != 'GLANDS': ERD_SSIM_Results.append(result.ERD_SSIMList)
         chanAvgPSNR_Results.append(result.chanAvgPSNRList)
         if allChanEval: allAvgPSNR_Results.append(result.allAvgPSNRList)
         sumImagePSNR_Results.append(result.sumImagePSNRList)
-        if erdModel != 'GLANDS': ERD_PSNR_Results.append(result.ERD_PSNRList)
+        if erdModel != 'GLANDS': 
+            avgERD_PSNR_Results.append(result.avgERD_PSNRList)
+            avgChanERD_PSNR_Results.append(result.avgChanERD_PSNRList)
+
+        chanAvgSSIM_Results.append(result.chanAvgSSIMList)
+        if allChanEval: allAvgSSIM_Results.append(result.allAvgSSIMList)
+        sumImageSSIM_Results.append(result.sumImageSSIMList)
+        if erdModel != 'GLANDS': 
+            avgERD_SSIM_Results.append(result.avgERD_SSIMList)
+            avgChanERD_SSIM_Results.append(result.avgChanERD_SSIMList)
         
+        chanAvgNRMSE_Results.append(result.chanAvgNRMSEList)
+        if allChanEval: allAvgNRMSE_Results.append(result.allAvgNRMSEList)
+        sumImageNRMSE_Results.append(result.sumImageNRMSEList)
+        if erdModel != 'GLANDS': 
+            avgERD_NRMSE_Results.append(result.avgERD_NRMSEList)
+            avgChanERD_NRMSE_Results.append(result.avgChanERD_NRMSEList)
+        #==========================================================================================================================================================================
+        
+        #==========================================================================================================================================================================
         #Save individual results
-        np.savetxt(result.dir_sampleResults+'NRMSE_chanAvg.csv', np.transpose([result.percsMeasured, result.chanAvgNRMSEList]), delimiter=',')
-        if allChanEval: np.savetxt(result.dir_sampleResults+'NRMSE_allAvg.csv', np.transpose([result.percsMeasured, result.allAvgNRMSEList]), delimiter=',')
-        np.savetxt(result.dir_sampleResults+'NRMSE_sumImage.csv', np.transpose([result.percsMeasured, result.sumImageNRMSEList]), delimiter=',')
-        if erdModel != 'GLANDS': np.savetxt(result.dir_sampleResults+'NRMSE_ERD.csv', np.transpose([result.percsMeasured, result.ERD_NRMSEList]), delimiter=',')
-        np.savetxt(result.dir_sampleResults+'SSIM_chanAvg.csv', np.transpose([result.percsMeasured, result.chanAvgSSIMList]), delimiter=',')
-        if allChanEval: np.savetxt(result.dir_sampleResults+'SSIM_allAvg.csv', np.transpose([result.percsMeasured, result.allAvgSSIMList]), delimiter=',')
-        np.savetxt(result.dir_sampleResults+'SSIM_sumImage.csv', np.transpose([result.percsMeasured, result.sumImageSSIMList]), delimiter=',')
-        if erdModel != 'GLANDS': np.savetxt(result.dir_sampleResults+'SSIM_ERD.csv', np.transpose([result.percsMeasured, result.ERD_SSIMList]), delimiter=',')
+        #==========================================================================================================================================================================
         np.savetxt(result.dir_sampleResults+'PSNR_chanAvg.csv', np.transpose([result.percsMeasured, result.chanAvgPSNRList]), delimiter=',')
         if allChanEval: np.savetxt(result.dir_sampleResults+'PSNR_allAvg.csv', np.transpose([result.percsMeasured, result.allAvgPSNRList]), delimiter=',')
         np.savetxt(result.dir_sampleResults+'PSNR_sumImage.csv', np.transpose([result.percsMeasured, result.sumImagePSNRList]), delimiter=',')
-        if erdModel != 'GLANDS': np.savetxt(result.dir_sampleResults+'PSNR_ERD.csv', np.transpose([result.percsMeasured, result.ERD_PSNRList]), delimiter=',')
+        if erdModel != 'GLANDS': 
+            np.savetxt(result.dir_sampleResults+'PSNR_avgERD.csv', np.transpose([result.percsMeasured, result.avgERD_PSNRList]), delimiter=',')
+            np.savetxt(result.dir_sampleResults+'PSNR_avgChanERD.csv', np.transpose([result.percsMeasured, result.avgChanERD_PSNRList]), delimiter=',')
         
+        np.savetxt(result.dir_sampleResults+'SSIM_chanAvg.csv', np.transpose([result.percsMeasured, result.chanAvgSSIMList]), delimiter=',')
+        if allChanEval: np.savetxt(result.dir_sampleResults+'SSIM_allAvg.csv', np.transpose([result.percsMeasured, result.allAvgSSIMList]), delimiter=',')
+        np.savetxt(result.dir_sampleResults+'SSIM_sumImage.csv', np.transpose([result.percsMeasured, result.sumImageSSIMList]), delimiter=',')
+        if erdModel != 'GLANDS': 
+            np.savetxt(result.dir_sampleResults+'SSIM_avgERD.csv', np.transpose([result.percsMeasured, result.avgERD_SSIMList]), delimiter=',')
+            np.savetxt(result.dir_sampleResults+'SSIM_avgChanERD.csv', np.transpose([result.percsMeasured, result.avgChanERD_SSIMList]), delimiter=',')
+        
+        np.savetxt(result.dir_sampleResults+'NRMSE_chanAvg.csv', np.transpose([result.percsMeasured, result.chanAvgNRMSEList]), delimiter=',')
+        if allChanEval: np.savetxt(result.dir_sampleResults+'NRMSE_allAvg.csv', np.transpose([result.percsMeasured, result.allAvgNRMSEList]), delimiter=',')
+        np.savetxt(result.dir_sampleResults+'NRMSE_sumImage.csv', np.transpose([result.percsMeasured, result.sumImageNRMSEList]), delimiter=',')
+        if erdModel != 'GLANDS': 
+            np.savetxt(result.dir_sampleResults+'NRMSE_avgERD.csv', np.transpose([result.percsMeasured, result.avgERD_NRMSEList]), delimiter=',')
+            np.savetxt(result.dir_sampleResults+'NRMSE_avgChanERD.csv', np.transpose([result.percsMeasured, result.avgChanERD_NRMSEList]), delimiter=',')
+        #==========================================================================================================================================================================
+        
+        #==========================================================================================================================================================================
         #Save individual result plots
-        basicPlot(result.percsMeasured, result.chanAvgNRMSEList, result.dir_sampleResults+'NRMSE_chanAvg'+'.tiff', xLabel=xLabel, yLabel='Average NRMSE')
-        if allChanEval: basicPlot(result.percsMeasured, result.allAvgNRMSEList, result.dir_sampleResults+'NRMSE_allAvg'+'.tiff', xLabel=xLabel, yLabel='Average NRMSE')
-        basicPlot(result.percsMeasured, result.sumImageNRMSEList, result.dir_sampleResults+'NRMSE_sumImage'+'.tiff', xLabel=xLabel, yLabel='Average NRMSE')
-        if erdModel != 'GLANDS': basicPlot(result.percsMeasured, result.ERD_NRMSEList, result.dir_sampleResults+'NRMSE_ERD'+'.tiff', xLabel=xLabel, yLabel='Average NRMSE')
-        basicPlot(result.percsMeasured, result.chanAvgSSIMList, result.dir_sampleResults+'SSIM_chanAvg'+'.tiff', xLabel=xLabel, yLabel='Average SSIM')
-        if allChanEval: basicPlot(result.percsMeasured, result.allAvgSSIMList, result.dir_sampleResults+'SSIM_allAvg'+'.tiff', xLabel=xLabel, yLabel='Average SSIM')
-        basicPlot(result.percsMeasured, result.sumImageSSIMList, result.dir_sampleResults+'SSIM_sumImage'+'.tiff', xLabel=xLabel, yLabel='Average SSIM')
-        if erdModel != 'GLANDS': basicPlot(result.percsMeasured, result.ERD_SSIMList, result.dir_sampleResults+'SSIM_ERD'+'.tiff', xLabel=xLabel, yLabel='Average SSIM')
-        basicPlot(result.percsMeasured, result.chanAvgPSNRList, result.dir_sampleResults+'PSNR_chanAvg'+'.tiff', xLabel=xLabel, yLabel='Average PSNR')
-        if allChanEval: basicPlot(result.percsMeasured, result.allAvgPSNRList, result.dir_sampleResults+'PSNR_allAvg'+'.tiff', xLabel=xLabel, yLabel='Average PSNR')
-        basicPlot(result.percsMeasured, result.sumImagePSNRList, result.dir_sampleResults+'PSNR_sumImage'+'.tiff', xLabel=xLabel, yLabel='Average PSNR')
-        if erdModel != 'GLANDS': basicPlot(result.percsMeasured, result.ERD_PSNRList, result.dir_sampleResults+'PSNR_ERD'+'.tiff', xLabel=xLabel, yLabel='Average PSNR')
+        #==========================================================================================================================================================================
+        basicPlot(result.percsMeasured, result.chanAvgPSNRList, result.dir_sampleResults+'PSNR_chanAvg'+'.tiff', xLabel='% Measured', yLabel='Average PSNR')
+        if allChanEval: basicPlot(result.percsMeasured, result.allAvgPSNRList, result.dir_sampleResults+'PSNR_allAvg'+'.tiff', xLabel='% Measured', yLabel='Average PSNR')
+        basicPlot(result.percsMeasured, result.sumImagePSNRList, result.dir_sampleResults+'PSNR_sumImage'+'.tiff', xLabel='% Measured', yLabel='Average PSNR')
+        if erdModel != 'GLANDS': 
+            basicPlot(result.percsMeasured, result.avgERD_PSNRList, result.dir_sampleResults+'PSNR_avgERD'+'.tiff', xLabel='% Measured', yLabel='Average PSNR')
+            basicPlot(result.percsMeasured, result.avgChanERD_PSNRList, result.dir_sampleResults+'PSNR_avgChanERD'+'.tiff', xLabel='% Measured', yLabel='Average PSNR')
+        
+        basicPlot(result.percsMeasured, result.chanAvgSSIMList, result.dir_sampleResults+'SSIM_chanAvg'+'.tiff', xLabel='% Measured', yLabel='Average SSIM')
+        if allChanEval: basicPlot(result.percsMeasured, result.allAvgSSIMList, result.dir_sampleResults+'SSIM_allAvg'+'.tiff', xLabel='% Measured', yLabel='Average SSIM')
+        basicPlot(result.percsMeasured, result.sumImageSSIMList, result.dir_sampleResults+'SSIM_sumImage'+'.tiff', xLabel='% Measured', yLabel='Average SSIM')
+        if erdModel != 'GLANDS': 
+            basicPlot(result.percsMeasured, result.avgERD_SSIMList, result.dir_sampleResults+'SSIM_avgERD'+'.tiff', xLabel='% Measured', yLabel='Average SSIM')
+            basicPlot(result.percsMeasured, result.avgChanERD_SSIMList, result.dir_sampleResults+'SSIM_avgChanERD'+'.tiff', xLabel='% Measured', yLabel='Average SSIM')
+        
+        basicPlot(result.percsMeasured, result.chanAvgNRMSEList, result.dir_sampleResults+'NRMSE_chanAvg'+'.tiff', xLabel='% Measured', yLabel='Average NRMSE')
+        if allChanEval: basicPlot(result.percsMeasured, result.allAvgNRMSEList, result.dir_sampleResults+'NRMSE_allAvg'+'.tiff', xLabel='% Measured', yLabel='Average NRMSE')
+        basicPlot(result.percsMeasured, result.sumImageNRMSEList, result.dir_sampleResults+'NRMSE_sumImage'+'.tiff', xLabel='% Measured', yLabel='Average NRMSE')
+        if erdModel != 'GLANDS': 
+            basicPlot(result.percsMeasured, result.avgERD_NRMSEList, result.dir_sampleResults+'NRMSE_avgERD'+'.tiff', xLabel='% Measured', yLabel='Average NRMSE')
+            basicPlot(result.percsMeasured, result.avgChanERD_NRMSEList, result.dir_sampleResults+'NRMSE_avgChanERD'+'.tiff', xLabel='% Measured', yLabel='Average NRMSE')
+        #==========================================================================================================================================================================
     
-    #If performing a benchmark where processing is not needed and was not performed
+    #If performing a benchmark (where processing is not needed and was not performed)
     if not benchmarkNoProcessing:
-    
+        
+        #==========================================================================================================================================================================
         #Extract and average results at the specified precision
-        quantityMeasured, chanAvgNRMSE_Results_mean = percResults(chanAvgNRMSE_Results, quantityMeasured_Results, precision)
-        if allChanEval: quantityMeasured, allAvgNRMSE_Results_mean = percResults(allAvgNRMSE_Results, quantityMeasured_Results, precision)
-        quantityMeasured, sumImageNRMSE_Results_mean = percResults(sumImageNRMSE_Results, quantityMeasured_Results, precision)
-        if erdModel != 'GLANDS': quantityMeasured, ERD_NRMSE_Results_mean = percResults(ERD_NRMSE_Results, quantityMeasured_Results, precision)
-        quantityMeasured, chanAvgSSIM_Results_mean = percResults(chanAvgSSIM_Results, quantityMeasured_Results, precision)
-        if allChanEval: quantityMeasured, allAvgSSIM_Results_mean = percResults(allAvgSSIM_Results, quantityMeasured_Results, precision)
-        quantityMeasured, sumImageSSIM_Results_mean = percResults(sumImageSSIM_Results, quantityMeasured_Results, precision)
-        if erdModel != 'GLANDS': quantityMeasured, ERD_SSIM_Results_mean = percResults(ERD_SSIM_Results, quantityMeasured_Results, precision)
+        #==========================================================================================================================================================================
         quantityMeasured, chanAvgPSNR_Results_mean = percResults(chanAvgPSNR_Results, quantityMeasured_Results, precision)
         if allChanEval: quantityMeasured, allAvgPSNR_Results_mean = percResults(allAvgPSNR_Results, quantityMeasured_Results, precision)
         quantityMeasured, sumImagePSNR_Results_mean = percResults(sumImagePSNR_Results, quantityMeasured_Results, precision)
-        if erdModel != 'GLANDS': quantityMeasured, ERD_PSNR_Results_mean = percResults(ERD_PSNR_Results, quantityMeasured_Results, precision)
+        if erdModel != 'GLANDS': 
+            quantityMeasured, avgERD_PSNR_Results_mean = percResults(avgERD_PSNR_Results, quantityMeasured_Results, precision)
+            quantityMeasured, avgChanERD_PSNR_Results_mean = percResults(avgChanERD_PSNR_Results, quantityMeasured_Results, precision)
         
+        quantityMeasured, chanAvgSSIM_Results_mean = percResults(chanAvgSSIM_Results, quantityMeasured_Results, precision)
+        if allChanEval: quantityMeasured, allAvgSSIM_Results_mean = percResults(allAvgSSIM_Results, quantityMeasured_Results, precision)
+        quantityMeasured, sumImageSSIM_Results_mean = percResults(sumImageSSIM_Results, quantityMeasured_Results, precision)
+        if erdModel != 'GLANDS': 
+            quantityMeasured, avgERD_SSIM_Results_mean = percResults(avgERD_SSIM_Results, quantityMeasured_Results, precision)
+            quantityMeasured, avgChanERD_SSIM_Results_mean = percResults(avgChanERD_SSIM_Results, quantityMeasured_Results, precision)
+        
+        quantityMeasured, chanAvgNRMSE_Results_mean = percResults(chanAvgNRMSE_Results, quantityMeasured_Results, precision)
+        if allChanEval: quantityMeasured, allAvgNRMSE_Results_mean = percResults(allAvgNRMSE_Results, quantityMeasured_Results, precision)
+        quantityMeasured, sumImageNRMSE_Results_mean = percResults(sumImageNRMSE_Results, quantityMeasured_Results, precision)
+        if erdModel != 'GLANDS': 
+            quantityMeasured, avgERD_NRMSE_Results_mean = percResults(avgERD_NRMSE_Results, quantityMeasured_Results, precision)
+            quantityMeasured, avgChanERD_NRMSE_Results_mean = percResults(avgChanERD_NRMSE_Results, quantityMeasured_Results, precision)
+        #==========================================================================================================================================================================
+        
+        #==========================================================================================================================================================================
         #Compute area under the average NRMSE/SSIM/PSNR curves
-        chanAvgNRMSE_AreaUnderCurve = np.trapz(chanAvgNRMSE_Results_mean, quantityMeasured)
-        if allChanEval: allAvgNRMSE_AreaUnderCurve = np.trapz(allAvgNRMSE_Results_mean, quantityMeasured)
-        if erdModel != 'GLANDS': ERD_NRMSE_AreaUnderCurve = np.trapz(ERD_NRMSE_Results_mean, quantityMeasured)
-        chanAvgSSIM_AreaUnderCurve = np.trapz(chanAvgSSIM_Results_mean, quantityMeasured)
-        if allChanEval: allAvgSSIM_AreaUnderCurve = np.trapz(allAvgSSIM_Results_mean, quantityMeasured)
-        if erdModel != 'GLANDS': ERD_SSIM_AreaUnderCurve = np.trapz(ERD_SSIM_Results_mean, quantityMeasured)
-        chanAvgPSNR_AreaUnderCurve = np.trapz(chanAvgPSNR_Results_mean, quantityMeasured)
-        if allChanEval: allAvgPSNR_AreaUnderCurve = np.trapz(allAvgPSNR_Results_mean, quantityMeasured)
-        if erdModel != 'GLANDS': ERD_PSNR_AreaUnderCurve = np.trapz(ERD_PSNR_Results_mean, quantityMeasured)
+        #==========================================================================================================================================================================
+        chanAvgPSNR_AUC = np.trapz(chanAvgPSNR_Results_mean, quantityMeasured)
+        if allChanEval: allAvgPSNR_AUC = np.trapz(allAvgPSNR_Results_mean, quantityMeasured)
+        if erdModel != 'GLANDS': 
+            avgERD_PSNR_AUC = np.trapz(avgERD_PSNR_Results_mean, quantityMeasured)
+            avgChanERD_PSNR_AUC = np.trapz(avgChanERD_PSNR_Results_mean, quantityMeasured)
         
+        chanAvgSSIM_AUC = np.trapz(chanAvgSSIM_Results_mean, quantityMeasured)
+        if allChanEval: allAvgSSIM_AUC = np.trapz(allAvgSSIM_Results_mean, quantityMeasured)
+        if erdModel != 'GLANDS': 
+            avgERD_SSIM_AUC = np.trapz(avgERD_SSIM_Results_mean, quantityMeasured)
+            avgChanERD_SSIM_AUC = np.trapz(avgChanERD_SSIM_Results_mean, quantityMeasured)
+        
+        chanAvgNRMSE_AUC = np.trapz(chanAvgNRMSE_Results_mean, quantityMeasured)
+        if allChanEval: allAvgNRMSE_AUC = np.trapz(allAvgNRMSE_Results_mean, quantityMeasured)
+        if erdModel != 'GLANDS': 
+            avgERD_NRMSE_AUC = np.trapz(avgERD_NRMSE_Results_mean, quantityMeasured)
+            avgChanERD_NRMSE_AUC = np.trapz(avgChanERD_NRMSE_Results_mean, quantityMeasured)
+        #==========================================================================================================================================================================
+        
+        #==========================================================================================================================================================================
         #Save averaged results per quantity measured metric
-        np.savetxt(dir_Results+'NRMSE_chanAvg.csv', np.transpose([quantityMeasured, chanAvgNRMSE_Results_mean]), delimiter=',')
-        if allChanEval: np.savetxt(dir_Results+'NRMSE_allAvg.csv', np.transpose([quantityMeasured, allAvgNRMSE_Results_mean]), delimiter=',')
-        np.savetxt(dir_Results+'NRMSE_sumImage.csv', np.transpose([quantityMeasured, sumImageNRMSE_Results_mean]), delimiter=',')
-        if erdModel != 'GLANDS': np.savetxt(dir_Results+'NRMSE_ERD.csv', np.transpose([quantityMeasured, ERD_NRMSE_Results_mean]), delimiter=',')
-        np.savetxt(dir_Results+'SSIM_chanAvg.csv', np.transpose([quantityMeasured, chanAvgSSIM_Results_mean]), delimiter=',')
-        if allChanEval: np.savetxt(dir_Results+'SSIM_allAvg.csv', np.transpose([quantityMeasured, allAvgSSIM_Results_mean]), delimiter=',')
-        np.savetxt(dir_Results+'SSIM_sumImage.csv', np.transpose([quantityMeasured, sumImageSSIM_Results_mean]), delimiter=',')
-        if erdModel != 'GLANDS': np.savetxt(dir_Results+'SSIM_ERD.csv', np.transpose([quantityMeasured, ERD_SSIM_Results_mean]), delimiter=',')
+        #==========================================================================================================================================================================
         np.savetxt(dir_Results+'PSNR_chanAvg.csv', np.transpose([quantityMeasured, chanAvgPSNR_Results_mean]), delimiter=',')
         if allChanEval: np.savetxt(dir_Results+'PSNR_allAvg.csv', np.transpose([quantityMeasured, allAvgPSNR_Results_mean]), delimiter=',')
         np.savetxt(dir_Results+'PSNR_sumImage.csv', np.transpose([quantityMeasured, sumImagePSNR_Results_mean]), delimiter=',')
-        if erdModel != 'GLANDS': np.savetxt(dir_Results+'PSNR_ERD.csv', np.transpose([quantityMeasured, ERD_PSNR_Results_mean]), delimiter=',')
-
+        if erdModel != 'GLANDS': 
+            np.savetxt(dir_Results+'PSNR_avgERD.csv', np.transpose([quantityMeasured, avgERD_PSNR_Results_mean]), delimiter=',')
+            np.savetxt(dir_Results+'PSNR_avgChanERD.csv', np.transpose([quantityMeasured, avgChanERD_PSNR_Results_mean]), delimiter=',')
+        
+        np.savetxt(dir_Results+'SSIM_chanAvg.csv', np.transpose([quantityMeasured, chanAvgSSIM_Results_mean]), delimiter=',')
+        if allChanEval: np.savetxt(dir_Results+'SSIM_allAvg.csv', np.transpose([quantityMeasured, allAvgSSIM_Results_mean]), delimiter=',')
+        np.savetxt(dir_Results+'SSIM_sumImage.csv', np.transpose([quantityMeasured, sumImageSSIM_Results_mean]), delimiter=',')
+        if erdModel != 'GLANDS': 
+            np.savetxt(dir_Results+'SSIM_avgERD.csv', np.transpose([quantityMeasured, avgERD_SSIM_Results_mean]), delimiter=',')
+            np.savetxt(dir_Results+'SSIM_avgChanERD.csv', np.transpose([quantityMeasured, avgChanERD_SSIM_Results_mean]), delimiter=',')
+        
+        np.savetxt(dir_Results+'NRMSE_chanAvg.csv', np.transpose([quantityMeasured, chanAvgNRMSE_Results_mean]), delimiter=',')
+        if allChanEval: np.savetxt(dir_Results+'NRMSE_allAvg.csv', np.transpose([quantityMeasured, allAvgNRMSE_Results_mean]), delimiter=',')
+        np.savetxt(dir_Results+'NRMSE_sumImage.csv', np.transpose([quantityMeasured, sumImageNRMSE_Results_mean]), delimiter=',')
+        if erdModel != 'GLANDS': 
+            np.savetxt(dir_Results+'NRMSE_avgERD.csv', np.transpose([quantityMeasured, avgERD_NRMSE_Results_mean]), delimiter=',')
+            np.savetxt(dir_Results+'NRMSE_avgChanERD.csv', np.transpose([quantityMeasured, avgChanERD_NRMSE_Results_mean]), delimiter=',')
+        #==========================================================================================================================================================================
+        
+        #==========================================================================================================================================================================
         #Export plots of averaged results
-        basicPlot(quantityMeasured, chanAvgNRMSE_Results_mean, dir_Results+'NRMSE_chanAvg'+'.tiff', xLabel=xLabel, yLabel='Average NRMSE')
-        if allChanEval: basicPlot(quantityMeasured, allAvgNRMSE_Results_mean, dir_Results+'NRMSE_allAvg'+'.tiff', xLabel=xLabel, yLabel='Average NRMSE')
-        basicPlot(quantityMeasured, sumImageNRMSE_Results_mean, dir_Results+'NRMSE_sumImage'+'.tiff', xLabel=xLabel, yLabel='Average NRMSE')
-        if erdModel != 'GLANDS': basicPlot(quantityMeasured, ERD_NRMSE_Results_mean, dir_Results+'NRMSE_ERD'+'.tiff', xLabel=xLabel, yLabel='Average NRMSE')
-        basicPlot(quantityMeasured, chanAvgSSIM_Results_mean, dir_Results+'SSIM_chanAvg'+'.tiff', xLabel=xLabel, yLabel='Average SSIM')
-        if allChanEval: basicPlot(quantityMeasured, allAvgSSIM_Results_mean, dir_Results+'SSIM_allAvg'+'.tiff', xLabel=xLabel, yLabel='Average SSIM')
-        basicPlot(quantityMeasured, sumImageSSIM_Results_mean, dir_Results+'SSIM_sumImage'+'.tiff', xLabel=xLabel, yLabel='Average SSIM')
-        if erdModel != 'GLANDS': basicPlot(quantityMeasured, ERD_SSIM_Results_mean, dir_Results+'SSIM_ERD'+'.tiff', xLabel=xLabel, yLabel='Average SSIM')
-        basicPlot(quantityMeasured, chanAvgPSNR_Results_mean, dir_Results+'PSNR_chanAvg'+'.tiff', xLabel=xLabel, yLabel='Average PSNR')
-        if allChanEval: basicPlot(quantityMeasured, allAvgPSNR_Results_mean, dir_Results+'PSNR_allAvg'+'.tiff', xLabel=xLabel, yLabel='Average PSNR')
-        basicPlot(quantityMeasured, sumImagePSNR_Results_mean, dir_Results+'PSNR_sumImage'+'.tiff', xLabel=xLabel, yLabel='Average PSNR')
-        if erdModel != 'GLANDS': basicPlot(quantityMeasured, ERD_PSNR_Results_mean, dir_Results+'PSNR_ERD'+'.tiff', xLabel=xLabel, yLabel='Average PSNR')
-
+        #==========================================================================================================================================================================
+        basicPlot(quantityMeasured, chanAvgPSNR_Results_mean, dir_Results+'PSNR_chanAvg'+'.tiff', xLabel='% Measured', yLabel='Average PSNR')
+        if allChanEval: basicPlot(quantityMeasured, allAvgPSNR_Results_mean, dir_Results+'PSNR_allAvg'+'.tiff', xLabel='% Measured', yLabel='Average PSNR')
+        basicPlot(quantityMeasured, sumImagePSNR_Results_mean, dir_Results+'PSNR_sumImage'+'.tiff', xLabel='% Measured', yLabel='Average PSNR')
+        if erdModel != 'GLANDS': 
+            basicPlot(quantityMeasured, avgERD_PSNR_Results_mean, dir_Results+'PSNR_avgERD'+'.tiff', xLabel='% Measured', yLabel='Average PSNR')
+            basicPlot(quantityMeasured, avgChanERD_PSNR_Results_mean, dir_Results+'PSNR_avgChanERD'+'.tiff', xLabel='% Measured', yLabel='Average PSNR')
+        
+        basicPlot(quantityMeasured, chanAvgSSIM_Results_mean, dir_Results+'SSIM_chanAvg'+'.tiff', xLabel='% Measured', yLabel='Average SSIM')
+        if allChanEval: basicPlot(quantityMeasured, allAvgSSIM_Results_mean, dir_Results+'SSIM_allAvg'+'.tiff', xLabel='% Measured', yLabel='Average SSIM')
+        basicPlot(quantityMeasured, sumImageSSIM_Results_mean, dir_Results+'SSIM_sumImage'+'.tiff', xLabel='% Measured', yLabel='Average SSIM')
+        if erdModel != 'GLANDS': 
+            basicPlot(quantityMeasured, avgERD_SSIM_Results_mean, dir_Results+'SSIM_avgERD'+'.tiff', xLabel='% Measured', yLabel='Average SSIM')
+            basicPlot(quantityMeasured, avgChanERD_SSIM_Results_mean, dir_Results+'SSIM_avgChanERD'+'.tiff', xLabel='% Measured', yLabel='Average SSIM')
+        
+        basicPlot(quantityMeasured, chanAvgNRMSE_Results_mean, dir_Results+'NRMSE_chanAvg'+'.tiff', xLabel='% Measured', yLabel='Average NRMSE')
+        if allChanEval: basicPlot(quantityMeasured, allAvgNRMSE_Results_mean, dir_Results+'NRMSE_allAvg'+'.tiff', xLabel='% Measured', yLabel='Average NRMSE')
+        basicPlot(quantityMeasured, sumImageNRMSE_Results_mean, dir_Results+'NRMSE_sumImage'+'.tiff', xLabel='% Measured', yLabel='Average NRMSE')
+        if erdModel != 'GLANDS': 
+            basicPlot(quantityMeasured, avgERD_NRMSE_Results_mean, dir_Results+'NRMSE_avgERD'+'.tiff', xLabel='% Measured', yLabel='Average NRMSE')
+            basicPlot(quantityMeasured, avgChanERD_NRMSE_Results_mean, dir_Results+'NRMSE_avgChanERD'+'.tiff', xLabel='% Measured', yLabel='Average NRMSE')
+        #==========================================================================================================================================================================
+        
+        #==========================================================================================================================================================================
         #Find the final results for each image
-        lastChanAvgNRMSE = [chanAvgNRMSE_Results[i][-1] for i in range(0, numJobs)]
-        if allChanEval: lastAllAvgNRMSE = [allAvgNRMSE_Results[i][-1] for i in range(0, numJobs)]
-        lastSumImageNRMSE = [sumImageNRMSE_Results[i][-1] for i in range(0, numJobs)]
-        if erdModel != 'GLANDS': lastERD_NRMSE = [ERD_NRMSE_Results[i][-1] for i in range(0, numJobs)]
-        lastChanAvgSSIM = [chanAvgSSIM_Results[i][-1] for i in range(0, numJobs)]
-        if allChanEval: lastAllAvgSSIM = [allAvgSSIM_Results[i][-1] for i in range(0, numJobs)]
-        lastSumImageSSIM = [sumImageSSIM_Results[i][-1] for i in range(0, numJobs)]
-        if erdModel != 'GLANDS': lastERD_SSIM = [ERD_SSIM_Results[i][-1] for i in range(0, numJobs)]
+        #==========================================================================================================================================================================
         lastChanAvgPSNR = [chanAvgPSNR_Results[i][-1] for i in range(0, numJobs)]
         if allChanEval: lastAllAvgPSNR = [allAvgPSNR_Results[i][-1] for i in range(0, numJobs)]
         lastSumImagePSNR = [sumImagePSNR_Results[i][-1] for i in range(0, numJobs)]
-        if erdModel != 'GLANDS': lastERD_PSNR = [ERD_PSNR_Results[i][-1] for i in range(0, numJobs)]
+        if erdModel != 'GLANDS': 
+            lastAvgERD_PSNR = [avgERD_PSNR_Results[i][-1] for i in range(0, numJobs)]
+            lastAvgChanERD_PSNR = [avgChanERD_PSNR_Results[i][-1] for i in range(0, numJobs)]
         
-    #Print out final results 
+        lastChanAvgSSIM = [chanAvgSSIM_Results[i][-1] for i in range(0, numJobs)]
+        if allChanEval: lastAllAvgSSIM = [allAvgSSIM_Results[i][-1] for i in range(0, numJobs)]
+        lastSumImageSSIM = [sumImageSSIM_Results[i][-1] for i in range(0, numJobs)]
+        if erdModel != 'GLANDS': 
+            lastAvgERD_SSIM = [avgERD_SSIM_Results[i][-1] for i in range(0, numJobs)]
+            lastAvgChanERD_SSIM = [avgChanERD_SSIM_Results[i][-1] for i in range(0, numJobs)]
+        
+        lastChanAvgNRMSE = [chanAvgNRMSE_Results[i][-1] for i in range(0, numJobs)]
+        if allChanEval: lastAllAvgNRMSE = [allAvgNRMSE_Results[i][-1] for i in range(0, numJobs)]
+        lastSumImageNRMSE = [sumImageNRMSE_Results[i][-1] for i in range(0, numJobs)]
+        if erdModel != 'GLANDS': 
+            lastAvgERD_NRMSE = [avgERD_NRMSE_Results[i][-1] for i in range(0, numJobs)]
+            lastAvgChanERD_NRMSE = [avgChanERD_NRMSE_Results[i][-1] for i in range(0, numJobs)]
+        #==========================================================================================================================================================================
+        
+    #Setup to print/save final results 
     dataPrintout = [['','Average', '', 'Standard Deviation']]
     dataPrintout.append(['Final %:', np.mean(lastQuantityMeasured), '+/-', np.std(lastQuantityMeasured)])
-    #elif scanMethod == 'linewise': dataPrintout.append(['Final % of Lines:', np.mean(lastQuantityMeasured), '+/-', np.std(lastQuantityMeasured)])
     
     #If not performing a benchmark where processing is not needed and was not performed
     if not benchmarkNoProcessing:
-        if allChanEval: dataPrintout.append(['All Channel NRMSE:', np.mean(lastAllAvgNRMSE), '+/-', np.std(lastAllAvgNRMSE)])
-        if allChanEval: dataPrintout.append(['All Channel NRMSE Area Under Curve:', allAvgNRMSE_AreaUnderCurve])
-        dataPrintout.append(['Targeted Channel NRMSE:', np.mean(lastChanAvgNRMSE), '+/-', np.std(lastChanAvgNRMSE)])
-        dataPrintout.append(['Targeted Channel NRMSE Area Under Curve:', chanAvgNRMSE_AreaUnderCurve])
-        dataPrintout.append(['Sum Image NRMSE:', np.mean(lastSumImageNRMSE), '+/-', np.std(lastSumImageNRMSE)])
-        if erdModel != 'GLANDS': dataPrintout.append(['Final ERD NRMSE:', np.mean(lastERD_NRMSE), '+/-', np.std(lastERD_NRMSE)])
-        if erdModel != 'GLANDS': dataPrintout.append(['ERD NRMSE Area Under Curve:', ERD_NRMSE_AreaUnderCurve])
-        dataPrintout.append([])
-        if allChanEval: dataPrintout.append(['All Channel SSIM:', np.mean(lastAllAvgSSIM), '+/-', np.std(lastAllAvgSSIM)])
-        if allChanEval: dataPrintout.append(['All Channel SSIM Area Under Curve:', allAvgSSIM_AreaUnderCurve])
-        dataPrintout.append(['Targeted Channel SSIM:', np.mean(lastChanAvgSSIM), '+/-', np.std(lastChanAvgSSIM)])
-        dataPrintout.append(['Targeted Channel SSIM Area Under Curve:', chanAvgSSIM_AreaUnderCurve])
-        dataPrintout.append(['Sum Image SSIM:', np.mean(lastSumImageSSIM), '+/-', np.std(lastSumImageSSIM)])
-        if erdModel != 'GLANDS': dataPrintout.append(['Final ERD SSIM:', np.mean(lastERD_SSIM), '+/-', np.std(lastERD_SSIM)])
-        if erdModel != 'GLANDS': dataPrintout.append(['ERD SSIM Area Under Curve:', ERD_SSIM_AreaUnderCurve])
-        dataPrintout.append([])
+    
+        #==========================================================================================================================================================================
+        #Format averaged metrics
+        #==========================================================================================================================================================================
         if allChanEval: dataPrintout.append(['All Channel PSNR:', np.mean(lastAllAvgPSNR), '+/-', np.std(lastAllAvgPSNR)])
-        if allChanEval: dataPrintout.append(['All Channel PSNR Area Under Curve:', allAvgPSNR_AreaUnderCurve])
+        if allChanEval: dataPrintout.append(['All Channel PSNR AUC:', allAvgPSNR_AUC])
         dataPrintout.append(['Targeted Channel PSNR:', np.mean(lastChanAvgPSNR), '+/-', np.std(lastChanAvgPSNR)])
-        dataPrintout.append(['Targeted Channel PSNR Area Under Curve:', chanAvgPSNR_AreaUnderCurve])
+        dataPrintout.append(['Targeted Channel PSNR AUC:', chanAvgPSNR_AUC])
         dataPrintout.append(['Sum Image PSNR:', np.mean(lastSumImagePSNR), '+/-', np.std(lastSumImagePSNR)])
-        if erdModel != 'GLANDS': dataPrintout.append(['Final ERD PSNR:', np.mean(lastERD_PSNR), '+/-', np.std(lastERD_PSNR)])
-        if erdModel != 'GLANDS': dataPrintout.append(['ERD PSNR Area Under Curve:', ERD_PSNR_AreaUnderCurve])
+        if erdModel != 'GLANDS': 
+            dataPrintout.append(['Final Avg ERD PSNR:', np.mean(lastAvgERD_PSNR), '+/-', np.std(lastAvgERD_PSNR)])
+            dataPrintout.append(['ERD Avg PSNR AUC:', avgERD_PSNR_AUC])
+            dataPrintout.append(['Final Avg Chan ERD PSNR:', np.mean(lastAvgChanERD_PSNR), '+/-', np.std(lastAvgChanERD_PSNR)])
+            dataPrintout.append(['ERD Avg Chan PSNR AUC:', avgChanERD_PSNR_AUC])
+        dataPrintout.append([])
         
-    dataPrintout.append([])
-    dataPrintout.append(['Run Time (s):', np.mean(timeResults)])
-    dataPrintout.append([])
-    dataPrintout.append(['Note: The following values should not be considered wholly representative of actual code performance/efficiency.'])
-    dataPrintout.append(['They are only intended for debugging and internal evaluation of relative system performance!'])
-    dataPrintout.append([])
-    dataPrintout.append(['File Load Time (s):', np.mean(allAvgTimesFileLoad)])
-    if erdModel != 'GLANDS': dataPrintout.append(['Targeted Reconstruction Compute Time (s):', np.mean(allAvgTimesComputeRecon)])
-    if erdModel != 'GLANDS': dataPrintout.append(['ERD Compute Time (s):', np.mean(allAvgTimesComputeERD)])
-    dataPrintout.append(['Targeted Compute Time (s):', np.mean(allAvgTimesComputeIter)])
-    pd.DataFrame(dataPrintout).to_csv(dir_Results + 'dataPrintout.csv', index=False)
+        if allChanEval: dataPrintout.append(['All Channel SSIM:', np.mean(lastAllAvgSSIM), '+/-', np.std(lastAllAvgSSIM)])
+        if allChanEval: dataPrintout.append(['All Channel SSIM AUC:', allAvgSSIM_AUC])
+        dataPrintout.append(['Targeted Channel SSIM:', np.mean(lastChanAvgSSIM), '+/-', np.std(lastChanAvgSSIM)])
+        dataPrintout.append(['Targeted Channel SSIM AUC:', chanAvgSSIM_AUC])
+        dataPrintout.append(['Sum Image SSIM:', np.mean(lastSumImageSSIM), '+/-', np.std(lastSumImageSSIM)])
+        if erdModel != 'GLANDS': 
+            dataPrintout.append(['Final Avg ERD SSIM:', np.mean(lastAvgERD_SSIM), '+/-', np.std(lastAvgERD_SSIM)])
+            dataPrintout.append(['ERD Avg SSIM AUC:', avgERD_SSIM_AUC])
+            dataPrintout.append(['Final Avg Chan ERD SSIM:', np.mean(lastAvgChanERD_SSIM), '+/-', np.std(lastAvgChanERD_SSIM)])
+            dataPrintout.append(['ERD Avg Chan SSIM AUC:', avgChanERD_SSIM_AUC])
+        dataPrintout.append([])
+        
+        if allChanEval: dataPrintout.append(['All Channel NRMSE:', np.mean(lastAllAvgNRMSE), '+/-', np.std(lastAllAvgNRMSE)])
+        if allChanEval: dataPrintout.append(['All Channel NRMSE AUC:', allAvgNRMSE_AUC])
+        dataPrintout.append(['Targeted Channel NRMSE:', np.mean(lastChanAvgNRMSE), '+/-', np.std(lastChanAvgNRMSE)])
+        dataPrintout.append(['Targeted Channel NRMSE AUC:', chanAvgNRMSE_AUC])
+        dataPrintout.append(['Sum Image NRMSE:', np.mean(lastSumImageNRMSE), '+/-', np.std(lastSumImageNRMSE)])
+        if erdModel != 'GLANDS': 
+            dataPrintout.append(['Final Avg ERD NRMSE:', np.mean(lastAvgERD_NRMSE), '+/-', np.std(lastAvgERD_NRMSE)])
+            dataPrintout.append(['Avg ERD NRMSE AUC:', avgERD_NRMSE_AUC])
+            dataPrintout.append(['Final Avg Chan ERD NRMSE:', np.mean(lastAvgChanERD_NRMSE), '+/-', np.std(lastAvgChanERD_NRMSE)])
+            dataPrintout.append(['Avg Chan ERD NRMSE AUC:', avgChanERD_NRMSE_AUC])
+        dataPrintout.append([])
+        #==========================================================================================================================================================================
+        
+        #Save metrics to disk
+        pd.DataFrame(dataPrintout).to_csv(dir_Results + 'dataPrintout.csv', index=False)
+        
+    #Store timing metrics
+    timePrintout = []
+    timePrintout.append(['Run Time (s):', np.mean(timeResults)])
+    timePrintout.append([])
+    timePrintout.append(['Note: The following values should not be considered wholly representative of actual code performance/efficiency.'])
+    timePrintout.append(['They are only intended for debugging and internal evaluation of relative system performance!'])
+    timePrintout.append([])
+    timePrintout.append(['File Load Time (s):', np.mean(allAvgTimesFileLoad)])
+    if erdModel != 'GLANDS': 
+        timePrintout.append(['Targeted Reconstruction Compute Time (s):', np.mean(allAvgTimesComputeRecon)])
+        timePrintout.append(['ERD Compute Time (s):', np.mean(allAvgTimesComputeERD)])
+    timePrintout.append(['Targeted Compute Time (s):', np.mean(allAvgTimesComputeIter)])
+    pd.DataFrame(timePrintout).to_csv(dir_Results + 'timePrintout.csv', index=False)
     
     #If an OOM occurred, then notify the user before exiting
     if allChanEval and warningOOM: print('\nWarning - Fallback was used for allChanEval reconstructions; insufficient RAM was available for simultaneous operations on all workers.')
@@ -281,5 +385,4 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         for sampleDataLocation in sampleDataLocations: os.remove(sampleDataLocation)  
         os.remove(dir_TestingResults + 'resultLocations.p')
         os.remove(dir_TestingResults + 'sampleDataLocations.p')
-    
     

@@ -355,7 +355,7 @@ class DLADS_PY:
                 
                 squareRD = self.labels_Viz[vizSampleNum]
                 with torch.inference_mode(): squareERD = torch.mean(self.model(input), 0).detach().cpu().numpy()[0]
-                ERD_NRMSE, ERD_SSIM, ERD_PSNR = compareImages(squareRD, squareERD, np.min(squareRD), np.max(squareRD))
+                ERD_PSNR, ERD_SSIM, ERD_NRMSE = compareImages(squareRD, squareERD, np.min(squareRD), np.max(squareRD))
                 
                 ax = plt.subplot2grid((3,2), (vizSampleNum+1,0))
                 im = ax.imshow(squareRD, aspect='auto', interpolation='none')
