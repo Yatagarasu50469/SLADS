@@ -33,15 +33,16 @@ def resetRay(numberCPUS):
 
 #Store string of all system GPUs (Ray hides them)
 if 'DLADS-PY' in erdModel or 'GLANDS' in erdModel: systemGPUs = ", ".join(map(str, [*range(torch.cuda.device_count())]))
-else: systemGPUs = ", ".join(map(str, [*range(len(tf.config.list_physical_devices('GPU')))]))
-
+elif 'DLADS-TF' in erdModel: systemGPUs = ", ".join(map(str, [*range(len(tf.config.list_physical_devices('GPU')))]))
+else: systemGPUs = ""
 #Note GPUs available/specified
 if 'DLADS-PY' in erdModel or 'GLANDS' in erdModel: 
     if not torch.cuda.is_available(): gpus = []
     if (len(gpus) > 0) and (gpus[0] == -1): gpus = [*range(torch.cuda.device_count())]
-else:
+elif 'DLADS-TF' in erdModel:
     if not tf.test.is_gpu_available(cuda_only=True): gpus = []
     if (len(gpus) > 0) and (gpus[0] == -1): gpus = [*range(len(tf.config.list_physical_devices('GPU')))]
+else: gpus = []
 numGPUs = len(gpus)
 
 #Detect logical and physical core counts, determining if hyperthreading is active
