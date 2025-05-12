@@ -8,7 +8,7 @@
 #Dictionary to store environmental variables; passes to ray workers
 environmentalVariables = {}
 
-#Setup deterministic behavior for CUDA; may change in future versions...
+#Setup deterministic behavior for CUDA operations called by torch; may change in future versions...
 #"Set a debug environment variable CUBLAS_WORKSPACE_CONFIG to :16:8 (may limit overall performance) 
 #or :4096:8 (will increase library footprint in GPU memory by approximately 24MiB)."
 if manualSeedValue != -1: environmentalVariables["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
@@ -20,9 +20,9 @@ environmentalVariables["HDF5_USE_FILE_LOCKING"] = "FALSE"
 environmentalVariables["MPLBACKEND"] = "agg"
 
 #Allocate memory for CUDA in an asynchronous manner when using TensorFlow; disable this line if GPU compute is < 6.1 (Maxwell and previous)
-if erdModel == 'DLADS-TF': environmentalVariables["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
+if 'DLADS-TF' in erdModel : environmentalVariables["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
 
-#Enable deterministic operations in TensorFlow as applicable
+#Enable deterministic operations in TensorFlow as applicable; may only make `tf.nn.bias_add` operate deterministically
 if manualSeedValue != -1 and erdModel == 'DLADS-TF': environmentalVariables["TF_DETERMINISTIC_OPS"] = "1"
 
 #Increase memory usage threshold for Ray from the default 95%
@@ -39,7 +39,7 @@ if debugMode:
 else:
     
     #Have TensorFlow only report errors ('3'), warnings ('2'), information ('1'), all ('0')
-    if erdModel == 'DLADS-TF': environmentalVariables['TF_CPP_MIN_LOG_LEVEL'] = '3'
+    if 'DLADS-TF' in erdModel: environmentalVariables['TF_CPP_MIN_LOG_LEVEL'] = '3'
     
     #Stop Ray from crashing the program when errors occur (otherwise may crash despite being handled by try/catch!)
     environmentalVariables["RAY_IGNORE_UNHANDLED_ERRORS"] = "1"
@@ -60,10 +60,9 @@ for var, value in environmentalVariables.items(): os.environ[var] = value
 #IMPORTS
 #==================================================================
 
-import alphatims
-import alphatims.bruker
 import contextlib
 import copy
+import ctypes
 import cv2
 import datetime
 import gc
@@ -75,15 +74,13 @@ import math
 import matplotlib
 import matplotlib.pyplot as plt
 import multiplierz
-import multiplierz.mzAPI.raw as raw
 import multivolumefile
 import natsort
 import numpy as np
-import numpy.matlib as matlib
+import opentimspy
 import pandas as pd
 import pickle
 import PIL
-import PIL.ImageOps
 import platform
 import psutil
 import py7zr
@@ -105,29 +102,28 @@ from IPython.core.debugger import set_trace as Tracer
 from joblib import Parallel, delayed
 from matplotlib.pyplot import figure
 from multiplierz.mzAPI import mzFile
-from multiplierz.spectral_process import mz_range
-from numba import cuda
-from numba import jit
+#from numba import cuda, jit
+from numpy import matlib
+from opentimspy import OpenTIMS
 from PIL import Image
 from pyimzml.ImzMLParser import ImzMLParser
 from pyimzml.ImzMLWriter import ImzMLWriter
 from ray.util.multiprocessing import Pool
-from scipy import signal
-from scipy.io import loadmat
+from scipy.interpolate import interp1d
+from scipy.signal import find_peaks_cwt
+from scipy.signal.windows import gaussian
+from scipy.stats import binned_statistic
 from sklearn import linear_model
 from sklearn.neighbors import NearestNeighbors
 from sklearn.neural_network import MLPRegressor as nnr
-from sklearn.preprocessing import *
-from skimage import filters
-from skimage.filters import *
-from skimage.metrics import mean_squared_error as compare_MSE
-from skimage.metrics import structural_similarity as compare_SSIM
-from skimage.metrics import peak_signal_noise_ratio as compare_PSNR
+from sklearn.preprocessing import PolynomialFeatures
+from skimage.filters import threshold_otsu
+from skimage.metrics import mean_squared_error, peak_signal_noise_ratio, structural_similarity
 from skimage.transform import resize
 from tqdm.auto import tqdm
 
 #Imports specific to the configured machine learning package 
-if erdModel == 'DLADS-TF':
+if 'DLADS-TF' in erdModel:
     import tensorflow as tf
     from tensorflow import keras
     from tensorflow.keras.layers import *
@@ -135,7 +131,7 @@ if erdModel == 'DLADS-TF':
     from tensorflow.keras.utils import *
     from tensorflow.python.ops import array_ops, image_ops
     from tensorflow.keras.layers.experimental.preprocessing import PreprocessingLayer
-else: 
+elif 'DLADS-PY' in erdModel or 'GLANDS' in erdModel: 
     import torch
     import torch.nn.functional as F
     import torch.nn.parallel
@@ -149,16 +145,16 @@ else:
     
 #Additional external definitions to import through execution
 exec(open("./CODE/LOGGING.py", encoding='utf-8').read())
-if erdModel != 'DLADS-TF': exec(open("./CODE/PCONV2D.py", encoding='utf-8').read())
+if 'DLADS-PY' in erdModel or 'GLANDS' in erdModel: exec(open("./CODE/PCONV2D.py", encoding='utf-8').read())
 
 #LIBRARY AND WARNING SETUP
 #==================================================================
 
 #Benchmarks algorithms and uses the fastest; only recommended if input sizes are consistent
-#if erdModel != 'DLADS-TF': torch.backends.cudnn.benchmark = True
+#if 'DLADS-PY' in erdModel or 'GLANDS' in erdModel: torch.backends.cudnn.benchmark = True
 
 #Allow anomaly detection in training a PyTorch model; sometimes needed for debugging
-#if erdModel != 'DLADS-TF': torch.autograd.set_detect_anomaly(True)
+#if 'DLADS-PY' in erdModel or 'GLANDS' in erdModel: torch.autograd.set_detect_anomaly(True)
 
 #Setup logging configuration
 setupLogging()
@@ -166,11 +162,10 @@ setupLogging()
 #Change method of instantiation for COM objects
 sys.coinit_flags = 0 
 
-#Turn off alphatims internal tqdm callback
-alphatims.utils.set_progress_callback(None)
-
-#Setup deterministic behavior for torch (this alone does not affect CUDA-specific operations)
-if (manualSeedValue != -1) and (erdModel != 'DLADS-TF'): torch.use_deterministic_algorithms(True, warn_only=False)
+#Setup deterministic behavior
+if (manualSeedValue != -1): 
+    if 'DLADS-TF' in erdModel: tf.config.experimental.enable_op_determinism()
+    if 'DLADS-PY' in erdModel or 'GLANDS' in erdModel: torch.use_deterministic_algorithms(True, warn_only=False)
 
 #OS SPECIFIC
 #==================================================================
@@ -182,6 +177,6 @@ systemOS = platform.system()
 if systemOS == 'Windows':
     from ctypes import windll, create_string_buffer
     import struct
-
+    
 #==================================================================
 

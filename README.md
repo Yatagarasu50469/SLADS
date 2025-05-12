@@ -6,7 +6,7 @@
 # PROGRAM
 
     NAME:           SLADS/DLADS/GLANDS
-    MODIFIED:       19 August 2024
+    MODIFIED:       12 May 2025
     VERSION:        0.10.1
     LICENSE:        GNU General Public License v3.0
     DESCRIPTION:    Dynamic sampling algorithms with updated/developing implementations of:
@@ -15,8 +15,8 @@
                        -GLANDS      Generative Learning Adversarial Network for Dynamic Sampling, using a Generative Adversarial Network (GAN)
     
     AUTHOR(S):      David Helminiak    EECE, Marquette University
-    ADVISOR(S):     Dong Hye Ye        COSC, Georgia State University
-    
+    ADVISOR(S):     Dong Hye Ye        COSC, Georgia State University   
+	
     FUNDING:        Development of the SLADS and DLADS variations herein was originally funded by and developed for NIH Grant 1UG3HL145593-01
                     GLANDS development has no funding to presently delcare
 
@@ -43,10 +43,9 @@
         |    |------->INTERNAL.py
         |    |------->LOGGING.py
         |    |------->MAIN.py
-        |    |------->MODEL_DLADS.py
-        |    |------->MODEL_DLADS_PY.py
-        |    |------->MODEL_DLADS_TF.py
-        |    |------->MODEL_DLADS_TF_Deprecated.py		
+        |    |------->MODEL_DLADS_PY_SYNC.py
+        |    |------->MODEL_DLADS_TF_SYNC.py
+        |    |------->MODEL_DLADS_TF_DEP.py		
         |    |------->MODEL_GLANDS.py
         |    |------->MODEL_SLADS.py
         |    |------->PCONV2D.py
@@ -64,8 +63,8 @@
         |    |    |------->SAMPLE_DESI
         |    |    |    |------->sampleInfo.txt
         |    |    |    |------->channels.csv
-        |    |    |    |------->sampleName-line-0001.(D, RAW)
-        |    |    |    |------->sampleName-line-0002.(D, RAW)
+        |    |    |    |------->sampleName-line-0001.(d, RAW)
+        |    |    |    |------->sampleName-line-0002.(d, RAW)
         |    |    |    |------->...
         |    |    |------->SAMPLE_MALDI
         |    |    |    |------->sampleInfo.txt
@@ -81,29 +80,33 @@
         |    |    |    |------->sampleInfo.txt
         |    |    |    |------->channels.csv
         |    |    |    |------->measuredMask.csv
-        |    |    |    |------->sampleName-line-0001.(D, RAW)
-        |    |    |    |------->sampleName-line-0002.(D, RAW)
+        |    |    |    |------->sampleName-line-0001.(d, RAW)
+        |    |    |    |------->sampleName-line-0002.(d, RAW)
         |    |    |    |------->...
         |    |    |------->EXPERIMENTAL_SAMPLE_DESI
         |    |    |    |------->sampleInfo.txt
         |    |    |    |------->channels.csv
         |    |    |    |------->measuredMask.csv
         |    |    |    |------->physicalLineNums.csv
-        |    |    |    |------->sampleName-line-0001.(D, RAW)
-        |    |    |    |------->sampleName-line-0002.(D, RAW)
+        |    |    |    |------->sampleName-line-0001.(d, RAW)
+        |    |    |    |------->sampleName-line-0002.(d, RAW)
         |    |    |    |------->...
         |    |------->IMP
         |    |    |------->sampleInfo.txt
         |    |    |------->channels.csv
         |    |    |------->physicalLineNums.csv
-        |    |    |------->sampleName-line-0001.(D, RAW)
-        |    |    |------->sampleName-line-0002.(D, RAW)
+        |    |    |------->sampleName-line-0001.(d, RAW)
+        |    |    |------->sampleName-line-0002.(d, RAW)
         |    |    |------->...
         |    |    |-------> UNLOCK
         |    |    |-------> LOCK
         |    |    |-------> DONE
         |------->OTHER
-        |    |------->LOGO.PNG
+        |    |------->DEPRECATED
+        |    |    |-------> ...
+        |    |------->SCRIPTS
+        |    |    |-------> ...
+        |    |------->HEADER.PNG
         |    |------->SOCIAL.PNG
         |------->RESULTS
         |    |------->IMP
@@ -185,21 +188,18 @@ Follow the instructions provided in the pre-installation guide specific to your 
 **Software/Package Combinations**  
 	
     Python             3.11.8
-    pip                24.2
-    NVIDIA Driver      560.81
+    pip                25.1
+    NVIDIA Driver      566.03
 	
     aiorwlock          1.4.0
-    antialiased-cnns   0.3
     colorama           0.4.6
     datetime           5.5
-    fastapi            0.108.0
+    fastapi            0.110.2
     glob2              0.7
     graphviz           0.20.3
     ipython            8.26.0
-    joblib             1.4.2
     matplotlib         3.9.1
     multiplierz        2.2.2.dev1
-    multiprocess       0.70.16
     multivolumefile    0.2.3
     natsort            8.4.0
     numba              0.60.0
@@ -212,16 +212,15 @@ Follow the instructions provided in the pre-installation guide specific to your 
     py7zr              0.21.1
     pydot              3.0.1
     pyimzml            1.5.4
-    pypiwin32          306
-    ray                2.33.0
-    scikit-image       0.22.0
+    ray                2.44.1
+    scikit-image       0.24.0
     scikit-learn       1.5.1
-    scipy              1.14.0
+    scipy              1.15.2
     sobol              0.9
     sobol-seq          0.2.0
-    torch              2.2.2+cu121
-    torchaudio         2.2.2+cu121
-    torchvision        0.17.2+cu121
+    torch              2.1.1+cu121
+    torchaudio         2.1.1+cu121
+    torchvision        0.16.1+cu121
     tqdm               4.66.4
     typeguard          4.3.0
 	
@@ -229,15 +228,12 @@ Follow the instructions provided in the pre-installation guide specific to your 
 
 	Python             3.10.12
 	tensorflow         2.15.1
-    torch              2.1.1+cu121
-    torchaudio         2.1.1+cu121
-    torchvision        0.16.1+cu121
 	
 **Minimum Hardware Requirements:** As more functionality is continually being added, minimum hardware specifications cannot be exactly ascertained, however validation of functionality is performed on systems containing 64+ GB DDR3/4/5 RAM, 32+ CPU threads at 3.0+ GHz, 1080Ti/2080Ti+/4090 GPUs, and 1TB+ SSD storage. While v0.8.9 and below have managed to utilize pre-trained models with only a dual core CPU, 8 GB DDR2, and no discrete GPU, this is not an advisable set of hardware for utilizing this program. 
 
 **GPU/CUDA Acceleration:** Highly recommended. Note that there shouldn't be a need to manually install the CUDA toolkit, or cudnn as pytorch (and TensorFlow) installation using pip should come include the neccessary files. 
 
-**MSI Compatability:** Using alphatims and the custom fork of multiplierz, the following MSI file formats are functional: Agilent .D (Native Windows only), Thermo .RAW, Bruker .tdf/.tsf, and .imzML. The following MSI file formats supported by muliplierz have not been tested in this program: .wiff and .t2d 
+**MSI Compatability:** Using OpenTIMS and the custom fork of multiplierz, the following MSI file formats are functional: Agilent .D (Native Windows only), Thermo .RAW, Bruker .tdf (.tsf support has been deprecated), and .imzML. The following MSI file formats supported by muliplierz have not been tested in this program: .wiff and .t2d 
 
 ## Windows (Native) Pre-Installation
 
@@ -290,7 +286,7 @@ Additional useful flags for a Docker container setup:
     '-v /mnt/Volume/:/workspace': Map mounted volume on host system to /workspace directory inside of the container; allows transmission of data between container and host
     '-p 8889:8888': Map port 8888 inside of the container to 8889 (change on a per-user basis) on the host network (in case of performing development with jupyter-notebook on systems with multiple users)
 
-## Ubuntu 20.04+ and WSL2 (Windows Subsystem for Linux) Pre-Installation
+## Ubuntu 20.04, Docker, and WSL2 (Windows Subsystem for Linux) Pre-Installation
 
 Open a terminal window and perform the following operations: 
 	
@@ -309,7 +305,7 @@ Open a terminal window and perform the following operations:
 Open a terminal or command prompt (**not as an administrator**) and run the commands shown below. If intending to use the legacy TensorFlow model variant ('DLADS-TF'), **do not run** the first line (that installs torch, torchvision, and torchaudio), but follow the relevant directions in the **FAQ** after completing the other instructions.
     
 	$ pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-    $ pip3 install opencv-python datetime glob2 IPython joblib pandas pathlib psutil matplotlib numpy numba pillow ray[serve]==2.33.0 scipy scikit-learn sobol sobol-seq natsort multiprocess scikit-image tqdm pydot graphviz aiorwlock pyimzml colorama typeguard py7zr multivolumefile alphatims
+    $ pip3 install opencv-python datetime glob2 IPython pandas pathlib psutil matplotlib numpy numba pillow ray[serve]==2.33.0 scipy scikit-learn sobol sobol-seq natsort scikit-image tqdm pydot graphviz aiorwlock pyimzml colorama typeguard py7zr multivolumefile opentimspy opentims_bruker_bridge
 	$ pip3 install git+https://github.com/Yatagarasu50469/multiplierz.git@master
 
 If on Windows, open command prompt **as an administrator** and replace python3 with python below; the final printout may indicate actions relating to the MSI file format intended for use; follow through as neccessary. If on Ubuntu, this command will produce a warning that module 'ctypes' has no attribute 'windll'; this should be safe to ignore for use with XCalibur .RAW files.
@@ -345,11 +341,11 @@ For MSI data, another file: 'channels.csv', should also be placed in the base di
 
 For MALDI samples, aligned optical images may be incorporated into the model, however all samples must have an image of the same resolution included and training must have been conducted with the same optical flags enabled as intended to be used during simulation/implementation. The optical image should be placed in each sample's directory as 'optical.tiff'.
 
-For DESI Bruker .tdf samples (.d files with timsTOF enabled) alphatims may be used instead of multiplierz, by specifying the sample type DESI-ALPHA. Alphatims is only compatible with DESI Bruker .tdf files, use of alphatims with Bruker .tsf, or other vendor MSI files is not supported!
+For DESI-CSV data, m/z in 'channels.csv' must match exactly with the m/z values used as headers in each sampleName-line-0001.d/ms-chromatograms.csv' file. Any m/z listed in a 'ms-chromatograms.csv' that is not in 'channels.csv' will be ignored. If an m/z is in 'channels.csv' but not in a 'ms-chromatograms.csv' will cause the program to crash. 
 
 ### DESI MSI
     - Sample Type
-        Specify the kind of file for correct parsing of the remaining fields (DESI, DESI-ALPHA, MALDI, IMAGE)
+        Specify the kind of file for correct parsing of the remaining fields (DESI, DESI-CSV)
     - Number of lines in the sample 
         Not to be confused with the number of line files present in the directory!
     - Width (mm) 
@@ -376,7 +372,7 @@ Each DESI MSI data file (ex. extensions: .d, or .raw), must be named with the st
 
 ### MALDI MSI
     - Sample Type
-        Specify the kind of file for correct parsing of the remaining fields (DESI, MALDI, IMAGE)
+        Specify the kind of file for correct parsing of the remaining fields (MALDI)
     - Columns (px)
         Number of columns in the sample
     - Rows (px)
@@ -394,7 +390,7 @@ Each MALDI MSI data file (ex. .ibd and .imzML), must be named with the standard 
 
 ### Images
     - Sample Type
-        Specify the kind of file for correct parsing of the remaining fields (DESI, MALDI, IMAGE)
+        Specify the kind of file for correct parsing of the remaining fields (IMAGE)
     - Columns (px)
         Number of columns in the sample
     - Rows (px)
@@ -500,7 +496,7 @@ This is probably still possible to some extent (was confirmed to be functional a
 Multiplierz relies on vendor-provided, proprietary .dll files to read MSI data and are therefore subject to their limitations. Substantial efforts have been made to port those files into a Linux-compatible format, though without any success. 
 
 ### Why is manual installation of the mutliplierz package needed?
-Compatibility support for Bruker .tsf MSI files is not currently available in the main package (Reference: https://github.com/BlaisProteomics/multiplierz/issues/10). Additionally, a required overhead bypass flag has not yet been validated as functional (Reference: https://github.com/BlaisProteomics/multiplierz/issues/9). 
+Compatibility support for Bruker .tsf MSI files is not currently available in the main package (Reference: https://github.com/BlaisProteomics/multiplierz/issues/10). Additionally, a required overhead bypass flag has not yet been validated as functional (Reference: https://github.com/BlaisProteomics/multiplierz/issues/9). While support for .tsf files and the required bypass flag is currently being deprecated, this note will remain until functionality with the primary repository has been confirmed.  
 
 ### Why has the framework been switched to PyTorch?
 The short answer is that TensorFlow, as of v2.10.1, has dropped support for GPU acceleration on Windows and Agilent .D files can only be read/used on native Windows. Older model variants (referenced as 'DLADS-TF' during configuration) have been included (principally for benchmarking and historical reference) and should be functional if a TensorFlow installation (lower than v2.16) is available/desirable. Theoretically, installation of TensorFlow v2.10.1 would enable the model to run with CUDA acceleration on native Windows, though issues with keras augmentation layers in that release would be expected to significantly hamper model training performance. Legacy model variants have been successfully installed and run in an Ubuntu 22.04 guest, on a Windows 11 host, through WSL2 (Windows Subsystem for Linux), using the directions below. 
@@ -598,25 +594,25 @@ v0.9.2 and earlier used the multiplierz XIC method to extract intensities from M
 
 ### Encountering OOM errors during new code development
 Ray/Python pin objects in memory if any reference to them still exists; references (particularly to large objects) must be prevented or deleted. Admittedly, there's probably a better way of handling this, but the current coding practices for reducing memory overhead and OOM errors are as follows:
-1. Delete Ray references when they are no longer needed, then calling gc.collect()
-2. Reset Ray (resetRay(numberCPUS), which also has been set to call gc.collect() after major remote computations and results have been retrieved
+1. Delete Ray references when they are no longer needed, then calling cleanup()
+2. Reset Ray (resetRay(numberCPUS), which also has been set to call cleanup() after major remote computations and results have been retrieved
 3. On returns from remote calls, copy the data to prevent reference storage  
    -if _ = ray.get() (i.e. returning a None object) -> No problem, a reference was not created  
    -if ray.get(), returns list/array -> use ray.get().copy()  
    -if ray.get(), returns something else -> use copy.deepcopy(ray.get())  
-4. Delete large objects when they are no longer needed, then calling gc.collect()
-5. Call gc.collect() after major methods return to MAIN.py
+4. Delete large objects when they are no longer needed, then calling cleanup()
+5. Call cleanup() after major methods return to MAIN.py
 
 ***
 # PUBLICATIONS
 
 ### RESEARCH PRODUCED WITH THIS CODE
 
-**DLADSv2: Improvements to a Deep Learning Approach for Dynamic Sampling in Mass Spectrometry Imaging Technologies**  
+**Advancement of a Deep Learning Approach for Dynamic Sampling in Mass Spectrometry Imaging Technologies**  
 **Version(s):** v0.10.1  
 **Subject:** MALDI and DESI MSI  
 **Citation(s):** TBD   
-**Available:** TBD  
+**Available:** TBD   
 
 **Simulatated Acquisition of MALDI MSI with DLADS**  
 **Version(s):** v0.9.5  
@@ -639,8 +635,8 @@ Ray/Python pin objects in memory if any reference to them still exists; referenc
 **Development for Simulatated Acquisition of DESI MSI with DLADS - Master's Thesis**  
 **Version(s):** v0.8.6  
 **Subject:** DESI MSI  
-**Citation(s):** D. S. Helminiak, “Deep learning approach for dynamic sampling for high-throughput nano-desi msi,” Master's Thesis, Marquette University, 2021, copyright - Database copyright ProQuest LLC; ProQuest does not claim copyright in the individual underlying works; Last updated - 2022-02-21.  
-**Available:** (https://epublications.marquette.edu/theses_open/710/)  
+**Citation(s):**  D. S. Helminiak, “Deep Learning Approach for Dynamic Sampling for High-Throughput Nano-DESI MSI,” Master’s Thesis, Marquette University, 2021.   
+**Available:** (https://epublications.marquette.edu/theses_open/710)  
 **Presentation:** (https://www.youtube.com/watch?v=WY5Ae19pmiE)
 
 **Initial Simulatated Acquisition of with DLADS**  

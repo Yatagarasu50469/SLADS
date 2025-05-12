@@ -32,8 +32,9 @@ exec(open("./CODE/COMPUTE.py", encoding='utf-8').read())
 #Setup model definitions
 exec(open("./CODE/MODEL_SLADS.py", encoding='utf-8').read()) #computePolyFeatures and associated data really should be segmented out of DEFINITIONS; run at training or inference time
 if erdModel=='DLADS': exec(open("./CODE/MODEL_DLADS.py", encoding='utf-8').read())
-elif erdModel=='DLADS-TF': exec(open("./CODE/MODEL_DLADS_TF.py", encoding='utf-8').read())
-elif erdModel=='DLADS-PY': exec(open("./CODE/MODEL_DLADS_PY.py", encoding='utf-8').read())
+elif erdModel=='DLADS-TF-DEP': exec(open("./CODE/MODEL_DLADS_TF_DEP.py", encoding='utf-8').read())
+elif erdModel=='DLADS-TF-SYNC': exec(open("./CODE/MODEL_DLADS_TF_SYNC.py", encoding='utf-8').read())
+elif erdModel=='DLADS-PY-SYNC': exec(open("./CODE/MODEL_DLADS_PY_SYNC.py", encoding='utf-8').read())
 elif erdModel =='GLANDS': exec(open("./CODE/MODEL_GLANDS.py", encoding='utf-8').read())
 if overWriteModelFile != None: exec(open(overWriteModelFile, encoding='utf-8').read())
 
@@ -82,7 +83,7 @@ if trainingDataGen or trainingModel or validationModel:
         
         #Perform import and setup for training and validation datasets
         trainingValidationSampleData = importInitialData(natsort.natsorted(glob.glob(dir_TrainingData + '/*'), reverse=False))
-        _ = gc.collect()
+        _ = cleanup()
         validationSampleData = trainingValidationSampleData[int(trainingSplit*len(trainingValidationSampleData)):]
         trainingSampleData = trainingValidationSampleData[:int(trainingSplit*len(trainingValidationSampleData))]
         
@@ -92,32 +93,39 @@ if trainingDataGen or trainingModel or validationModel:
             #Optimize the c value
             sectionTitle('OPTIMIZING C VALUE')
             optimalC = optimizeC(trainingValidationSampleData)
-            _ = gc.collect()
+            _ = cleanup()
             modelName += 'c_' + str(optimalC)
             
-            #Generate a training database for the optimal c value and training samples
+            #Generate and store training/validation database for the optimal c value
             sectionTitle('GENERATING TRAINING/VALIDATION DATASETS')
             trainingDatabase, validationDatabase = genTrainValDatabases(trainingValidationSampleData, optimalC)
-            _ = gc.collect()
+            _ = cleanup()
+            pickle.dump(trainingDatabase, open(dir_TrainingResults + 'trainingDatabase.p', 'wb'))
+            pickle.dump(validationDatabase, open(dir_TrainingResults + 'validationDatabase.p', 'wb'))
+            _ = cleanup()
 else:
     optimalC = np.load(dir_TrainingResults + 'optimalC.npy', allow_pickle=True).item()
     modelName += 'c_' + str(optimalC)
 
-#Perform model training as configured
+#Perform model training as configured; temporarily shutdown ray
 if trainingModel:
+    if parallelization: 
+        _ = ray.shutdown()
+        rayUp = False
     sectionTitle('PERFORMING TRAINING')
     trainModel(trainingDatabase, validationDatabase, trainingSampleData, validationSampleData, modelName)
+    if parallelization: resetRay(numberCPUS)
 
-#Clear large variables from memory that are no longer needed
-try: del trainingValidationSampleData
-except: pass
-try: del trainingDatabase
-except: pass
-try: del validationDatabase
-except: pass
-try: del trainingSampleData
-except: pass
-_ = gc.collect()
+#Clear large variables from memory that are no longer needed; setting to None ensures the variables exist first
+trainingValidationSampleData = None
+del trainingValidationSampleData
+trainingDatabase = None
+del trainingDatabase
+validationDatabase = None
+del validationDatabase
+trainingSampleData = None
+del trainingSampleData
+_ = cleanup()
 
 #If a model needs to be simulated with validation data
 if validationModel:
@@ -125,32 +133,32 @@ if validationModel:
     simulateSampling([sampleData.sampleFolder for sampleData in validationSampleData], dir_ValidationResults, optimalC, modelName)
 
 #Clear large variables from memory that are no longer needed
-try: del validationSampleData
-except: pass
-_ = gc.collect()
+validationSampleData = None
+del validationSampleData
+_ = cleanup()
 
 #If a model needs to be simulated with testing data
 if testingModel:
     sectionTitle('PERFORMING SIMULATION ON TESTING SET')
     simulateSampling(natsort.natsorted(glob.glob(dir_TestingData + '/*'), reverse=False), dir_TestingResults, optimalC, modelName)
-    _ = gc.collect()
+    _ = cleanup()
     
 #If a model is to be used in an implementation
 if impModel:
     sectionTitle('PERFORMING PHYSICAL EXPERIMENT')
     performImplementation(optimalC, modelName)
-    _ = gc.collect()
+    _ = cleanup()
 
 #If post-processing is to be performed
 if postModel:
     sectionTitle('POST-PROCESSING SAMPLES')
     postprocess(natsort.natsorted(glob.glob(dir_PostData + '/*'), reverse=False), optimalC, modelName)
-    _ = gc.collect()
+    _ = cleanup()
 
 #Shutdown ray
 if parallelization: 
     _ = ray.shutdown()
-    rayUp=False
+    rayUp = False
 
 #Copy the results folder, the config file and ray log directory into it if applicable
 _ = shutil.copytree(dir_Results, destResultsFolder)

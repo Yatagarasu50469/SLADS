@@ -29,27 +29,23 @@ class SampleData:
         self.allChanEvalFlag = False
         self.imzMLExportFlag = False
         self.lineExt = None
+        self.format = None
         self.mask = None
         self.unorderedNames = False
         self.missingLines = np.asarray([])
         self.mzRanges = []
+        self.mzFinalBinEdges = []
         self.chanValues = []
         self.chanIndexes = []
         self.maskFOV = None
         self.squareMaskFOV = None
         self.firstScanDone = False
-        self.mzFinalGrid = None
-        self.chanFinalGrid = None
         self.newTimes = None
         self.scanRate = None
         self.maxRadius = 0
         self.gaussianWindows = {}
         self.dataMSI = False
         self.readAllMSI = False
-        self.mzOriginalIndices = None
-        self.mzLowerIndex = None
-        self.mzInitialCount = None
-        self.mzInitialDist = None
         self.mzFinal = []
         self.mzLowerValues = None
         self.mzUpperValues = None
@@ -57,9 +53,7 @@ class SampleData:
         self.mzIndices = None
         self.allImagesDataPath = None
         self.allImagesPath = None
-        self.squareAllImagesPath = None
         self.avgTimeFileLoad = None
-        self.useAlphaTims = False
         self.squareOpticalImage = None
         
         #If linewise, set the % per line as the original stop percentage, if visiting all lines then set the latter value to 100
@@ -89,10 +83,10 @@ class SampleData:
         except: 
             sys.exit('\nError - sampleInfo.txt was not found in the sample folder')
         
-        #Check if alphatims should be used instead of multiplierz
-        if self.sampleType == 'DESI-ALPHA':
+        #Check for special read modes (reading Bruker.d/ms-chromatograms.csv)
+        if self.sampleType == 'DESI-CSV':
             self.sampleType = 'DESI'
-            self.useAlphaTims = True
+            self.format = 'Bruker-csv'
         
         if self.sampleType == 'DESI':
 
@@ -117,7 +111,7 @@ class SampleData:
             lineIndex += 1
             
             #Read window tolerance (ppm)
-            self.ppm = truncate(float(sampleInfo[lineIndex].rstrip())*1e-6, 7)
+            self.ppm = truncate(float(sampleInfo[lineIndex].rstrip())/1e6, 7)
             lineIndex += 1
 
             #Read in lower m/z bound
@@ -143,7 +137,7 @@ class SampleData:
             lineIndex += 1
             
             #Read window tolerance (ppm)
-            self.ppm = truncate(float(sampleInfo[lineIndex].rstrip())*1e-6, 7)
+            self.ppm = truncate(float(sampleInfo[lineIndex].rstrip())/1e6, 7)
             lineIndex += 1
             
             #Read in lower m/z bound
@@ -177,8 +171,8 @@ class SampleData:
             #Indicate MSI data in a shorter variable
             self.dataMSI = True
             
-            #If all spectrum channel data should be read, then only do so if a non-training simulation or an implementation, or a post-processing run; set internal flags as needed
-            if ((self.simulationFlag and not self.trainFlag) or self.impFlag or self.postFlag) and (allChanEval or imzMLExport): 
+            #If all spectrum channel data should be read (and not Bruker-csv), then only do so if a non-training simulation or an implementation, or a post-processing run; set internal flags as needed
+            if ((self.simulationFlag and not self.trainFlag) or self.impFlag or self.postFlag) and (allChanEval or imzMLExport) and self.format != 'Bruker-csv': 
                 self.readAllMSI = True
                 if allChanEval: self.allChanEvalFlag = True
                 if imzMLExport: self.imzMLExportFlag = True
@@ -205,30 +199,18 @@ class SampleData:
         
         #If this is an ordered simulation sample, then get filetype extension and check for missing lines in DESI if applicable
         if self.simulationFlag:
-            extensions = list(map(lambda x:x, np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
-            if self.dataMSI:
-                if 'd' in extensions: self.lineExt = '.d'
-                elif 'D' in extensions: self.lineExt = '.D'
-                elif 'raw' in extensions: self.lineExt = '.raw'
-                elif 'RAW' in extensions: self.lineExt = '.RAW'
-                elif 'imzML' in extensions: self.lineExt = '.imzML'
-                else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
-            elif self.sampleType == 'IMAGE':
-                if 'png' in extensions: self.lineExt = '.png'
-                elif 'jpg' in extensions: self.lineExt = '.jpg'
-                elif 'tiff' in extensions: self.lineExt = '.tiff'
-                else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
+            self.lineExt, self.format = checkLineExt(self.dataMSI, self.sampleType, self.format, self.sampleFolder, self.name)
             scanFileNames = natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'+self.lineExt), reverse=False)
             if self.sampleType == 'DESI' and self.ignoreMissingLines and not self.unorderedNames:
                 self.missingLines = np.asarray(list(set(np.arange(1, self.finalDim[0]).tolist()) - set([int(scanFileName.split('line-')[1].split('.')[0].lstrip('0')) for scanFileName in scanFileNames])))-1
                 self.finalDim[0] -= len(self.missingLines)
         
-        #For DESI samples, determine image dimensions that will produce square pixels (consistent vertical/horizontal resolution) and new times to use as a common grid
+        #For DESI samples, determine image dimensions that will produce square pixels (consistent vertical/horizontal resolution) and new times (seconds) to use as a common grid
         if self.sampleType == 'DESI':
             if(self.finalDim[1]/self.sampleWidth) > (self.finalDim[0]/self.sampleHeight): self.squareDim = [int(round((self.finalDim[1]*self.sampleHeight)/self.sampleWidth)), self.finalDim[1]]
             elif (self.finalDim[1]/self.sampleWidth) < (self.finalDim[0]/self.sampleHeight): self.squareDim = [self.finalDim[0], int(round((self.finalDim[0]*self.sampleWidth)/self.sampleHeight))]
             else: self.squareDim = self.finalDim
-            self.newTimes = np.ascontiguousarray(np.linspace(0, ((self.sampleWidth*1e3)/self.scanRate)/60, self.finalDim[1]))
+            self.newTimes = np.linspace(0, ((self.sampleWidth*1e3)/self.scanRate), self.finalDim[1])
         
         #Determine whether to mask the FOV or not
         if (self.trainFlag and trainMaskFOVDilation != None) or (not self.trainFlag and otherMaskFOVDilation != None): self.useMaskFOV = True
@@ -237,13 +219,13 @@ class SampleData:
         #If masking the FOV measurement space, try loading a mask and dilating it if specificed, disable if no mask found and inform user
         if self.useMaskFOV: 
             try: 
-                self.maskFOV = np.loadtxt(self.sampleFolder+os.path.sep+'mask.csv', np.float32, delimiter=',')
+                self.maskFOV = np.loadtxt(self.sampleFolder+os.path.sep+'mask.csv', delimiter=',')
                 self.squareMaskFOV = resize(self.maskFOV, tuple(self.squareDim), order=0)
                 if self.trainFlag and (trainMaskFOVDilation > 0):
-                    self.squareMaskFOV = cv2.dilate(self.squareMaskFOV.astype(np.uint8), np.ones((trainMaskFOVDilation,trainMaskFOVDilation), np.uint8), iterations=1).astype(np.float32)
+                    self.squareMaskFOV = cv2.dilate(self.squareMaskFOV.astype(np.uint8), np.ones((trainMaskFOVDilation,trainMaskFOVDilation), np.uint8), iterations=1)
                     self.maskFOV = resize(self.squareMaskFOV, tuple(self.finalDim), order=0)
                 elif not self.trainFlag and (otherMaskFOVDilation > 0):
-                    self.squareMaskFOV = cv2.dilate(self.squareMaskFOV.astype(np.uint8), np.ones((otherMaskFOVDilation,otherMaskFOVDilation), np.uint8), iterations=1).astype(np.float32)
+                    self.squareMaskFOV = cv2.dilate(self.squareMaskFOV.astype(np.uint8), np.ones((otherMaskFOVDilation,otherMaskFOVDilation), np.uint8), iterations=1)
                     self.maskFOV = resize(self.squareMaskFOV, tuple(self.finalDim), order=0)
             except: 
                 print('\nWarning - FOV mask use was enabled, but no mask.csv available for ' + self.name + '. Disabled for this sample, but could cause evaluation issues (particularly if percFOVMask enabled). Consider disabling this in the program configuration file.')
@@ -251,11 +233,11 @@ class SampleData:
             
         #If post-processing load the measurement mask
         if self.postFlag:
-            try: self.mask = np.loadtxt(self.sampleFolder+os.path.sep+'measuredMask.csv', np.float32, delimiter=',')
+            try: self.mask = np.loadtxt(self.sampleFolder+os.path.sep+'measuredMask.csv', delimiter=',')
             except: sys.exit('\nError - Unable to load measurement mask for sample: ' + self.name)
             try: 
-                self.progMap = np.loadtxt(self.sampleFolder+os.path.sep+'progressMap.csv', np.float32, delimiter=',')
-                self.progMap[self.progMap==-1]=np.nan
+                self.progMap = np.loadtxt(self.sampleFolder+os.path.sep+'progressMap.csv', delimiter=',')
+                self.progMap[self.progMap==-1] = np.nan
             except: self.progMap = np.empty([])
         
         #Establish sample area to measure; do not apply percFOVMask in training/validation database
@@ -265,23 +247,12 @@ class SampleData:
         #If not just post-processing, setup initial sets
         if not self.postFlag: self.generateInitialSets(self.scanMethod)
         
-        #If MSI data, determine the needed precision to prevent overlap when mapping/indexing m/z values to a common spectrum
-        #How many decimal places are used in the lowerbound mz range, as first limited by the ppm precision
-        #Arbitrary precision rounding is problematic, so go to the lower power of 10 instead
-        if self.dataMSI:
-            ppmRound = ('%f' % self.ppm).rstrip('0').rstrip('.')[::-1].find('.')
-            mzMinDiff = np.round((self.mzLowerBound*self.ppmPos)-(self.mzLowerBound*self.ppmNeg), ppmRound)
-            self.mzRound = str(mzMinDiff)[::-1].find('.')
-            self.mzPrecision = np.float32(10**-self.mzRound)
-        
         #If reading in all MSI Data determine set of non-overlapping bins based on ppm
         if self.dataMSI and self.readAllMSI: 
         
             #Setup .hdf5 file locations
             self.allImagesDataPath = self.sampleFolder+os.path.sep+'allImageData'+os.path.sep
             self.allImagesPath = self.allImagesDataPath + 'allImages.hdf5'
-            if self.sampleType=='MALDI': self.squareAllImagesPath = None
-            elif self.sampleType=='DESI': self.squareAllImagesPath = self.allImagesDataPath+'squareAllImages.hdf5'
             
             #If not configured to overwrite, but the allImages .hdf5 file doesn't exist, then activate the flag
             if not self.overwriteAllChanFiles and not os.path.exists(self.allImagesPath): self.overwriteAllChanFiles = True
@@ -293,46 +264,22 @@ class SampleData:
                 if os.path.exists(self.allImagesDataPath): shutil.rmtree(self.allImagesDataPath)
                 os.makedirs(self.allImagesDataPath)
                 
-                #Compute the unshifted lower m/z bound's index position
-                self.mzLowerIndex = int(self.mzLowerBound/self.mzPrecision)
-                
-                #Compute m/z for initial binning
-                self.mzInitialCount = int((self.mzUpperBound-self.mzLowerBound)/self.mzPrecision)+1
-                self.mzInitialDist = np.round(np.round(np.linspace(self.mzLowerBound, self.mzUpperBound, self.mzInitialCount)/self.mzPrecision)*self.mzPrecision, self.mzRound)
-                
-                #Determine m/z values by ppm with non-overlapping bins
-                self.mzFinal = [self.mzLowerBound/self.ppmNeg]
-                while(True):
-                    mzNewValue = (self.mzFinal[-1]*self.ppmPos)/self.ppmNeg
-                    if mzNewValue*self.ppmNeg <= self.mzUpperBound: self.mzFinal.append(mzNewValue)
-                    else: break
-                
-                #Set final mz as a contiguous array 
-                self.mzFinal = np.ascontiguousarray(self.mzFinal)
-                
-                #Compute lower/upper bin bounds for each of the final m/z ranges
-                self.mzLowerValues, self.mzUpperValues = self.mzFinal*self.ppmNeg, self.mzFinal*self.ppmPos
-                
-                #Find unique index mapping between maximum precision distribution and the non-overlapping ppm bins
-                _, self.mzOriginalIndices = np.unique([bisect_left(self.mzUpperValues, mzValue) for mzValue in self.mzInitialDist], return_index=True)
-                
-                #Save variables for future reuse
-                np.save(self.allImagesDataPath + 'mzLowerIndex', self.mzLowerIndex)
-                np.save(self.allImagesDataPath + 'mzInitialCount', self.mzInitialCount)
-                np.save(self.allImagesDataPath + 'mzInitialDist', self.mzInitialDist)
+                #Determine m/z values by ppm with non-overlapping bins and save for future reuse
+                self.mzFinal, self.mzLowerValues, self.mzUpperValues = [self.mzLowerBound], [self.mzLowerBound*self.ppmNeg], [self.mzLowerBound*self.ppmPos]
+                while self.mzUpperValues[-1] < self.mzUpperBound:
+                    self.mzLowerValues.append(self.mzUpperValues[-1])
+                    self.mzFinal.append(self.mzLowerValues[-1]/self.ppmNeg)
+                    self.mzUpperValues.append(self.mzFinal[-1]*self.ppmPos)
+                self.mzFinalBinEdges = self.mzLowerValues + [self.mzUpperBound]
                 np.save(self.allImagesDataPath + 'mzFinal', self.mzFinal)
                 np.save(self.allImagesDataPath + 'mzLowerValues', self.mzLowerValues)
-                np.save(self.allImagesDataPath + 'mzUpperValues', self.mzUpperValues)
-                np.save(self.allImagesDataPath + 'mzOriginalIndices', self.mzOriginalIndices)
-                
+                np.save(self.allImagesDataPath + 'mzUpperValues', self.mzUpperValues)       
+                np.save(self.allImagesDataPath + 'mzFinalBinEdges', self.mzFinalBinEdges) 
             else: 
-                self.mzLowerIndex = np.load(self.allImagesDataPath + 'mzLowerIndex.npy', allow_pickle=True)
-                self.mzInitialCount = np.load(self.allImagesDataPath + 'mzInitialCount.npy', allow_pickle=True)
-                self.mzInitialDist = np.load(self.allImagesDataPath + 'mzInitialDist.npy', allow_pickle=True)
-                self.mzFinal = np.load(self.allImagesDataPath + 'mzFinal.npy', allow_pickle=True)
-                self.mzLowerValues = np.load(self.allImagesDataPath + 'mzLowerValues.npy', allow_pickle=True)
-                self.mzUpperValues = np.load(self.allImagesDataPath + 'mzUpperValues.npy', allow_pickle=True)
-                self.mzOriginalIndices = np.load(self.allImagesDataPath + 'mzOriginalIndices.npy', allow_pickle=True)
+                self.mzFinal = np.load(self.allImagesDataPath + 'mzFinal.npy', allow_pickle=True).tolist()
+                self.mzLowerValues = np.load(self.allImagesDataPath + 'mzLowerValues.npy', allow_pickle=True).tolist()
+                self.mzUpperValues = np.load(self.allImagesDataPath + 'mzUpperValues.npy', allow_pickle=True).tolist()
+                self.mzFinalBinEdges = np.load(self.allImagesDataPath + 'mzFinalBinEdges.npy', allow_pickle=True).tolist()
         
         #If MSI data, regardless of if all channel data is to be loaded or not
         if self.dataMSI:
@@ -349,26 +296,16 @@ class SampleData:
             self.chanValues.sort()
             self.mzRanges = np.column_stack((self.chanValues*self.ppmNeg, self.chanValues*self.ppmPos))
             
-            #For DESI MSI samples, create regular grids for interpolating all/targeted m/z data
-            if self.sampleType == 'DESI': 
-                mzFinalGrid_x, mzFinalGrid_y = np.meshgrid(self.newTimes, self.mzFinal)
-                if parallelization: self.mzFinalGrid_id = ray.put((mzFinalGrid_x, mzFinalGrid_y))
-                else: self.mzFinalGrid = (mzFinalGrid_x, mzFinalGrid_y)
-                chanFinalGrid_x, chanFinalGrid_y = np.meshgrid(self.newTimes, self.chanValues)
-                if parallelization: self.chanFinalGrid_id = ray.put((chanFinalGrid_x, chanFinalGrid_y))
-                else: self.chanFinalGrid = (chanFinalGrid_x, chanFinalGrid_y)
-                _ = gc.collect()
-            
             #Setup shared memory actor for operations in parallel, or local memory for serial execution
             if parallelization: 
-                self.mzOriginalIndices_id, self.mzRanges_id = ray.put(self.mzOriginalIndices), ray.put(self.mzRanges)
-                self.reader_MSI_Actor = Reader_MSI_Actor.remote(self.sampleType, self.readAllMSI, len(self.mzFinal), len(self.chanValues), self.finalDim[0], self.finalDim[1], self.allImagesDataPath, self.allImagesPath, self.squareAllImagesPath, self.overwriteAllChanFiles)
+                self.mzFinalBinEdges_id, self.mzRanges_id = ray.put(self.mzFinalBinEdges), ray.put(self.mzRanges)
+                self.reader_MSI_Actor = Reader_MSI_Actor.remote(self.sampleType, self.readAllMSI, len(self.mzFinal), len(self.chanValues), self.finalDim[0], self.finalDim[1], self.allImagesDataPath, self.allImagesPath, self.overwriteAllChanFiles)
             elif self.readAllMSI and self.overwriteAllChanFiles: 
-                self.allImages = np.zeros((len(self.mzFinal), self.finalDim[0], self.finalDim[1]), dtype=np.float32)
+                self.allImages = np.zeros((len(self.mzFinal), self.finalDim[0], self.finalDim[1]))
         
         #Setup targeted channel and sum images for holding data
-        self.chanImages = np.zeros((self.numChannels, self.finalDim[0], self.finalDim[1]), dtype=np.float32)
-        self.sumImage = np.zeros((self.finalDim), dtype=np.float32)
+        self.chanImages = np.zeros((self.numChannels, self.finalDim[0], self.finalDim[1]))
+        self.sumImage = np.zeros((self.finalDim))
         
         #If an MSI sample and an optical image is to be used try loading different extensions
         if self.dataMSI and ('opticalData' in inputChannels):
@@ -392,8 +329,7 @@ class SampleData:
             if self.dataMSI: 
                 if parallelization: 
                     if self.readAllMSI: self.allImagesMin, self.allImagesMax = copy.deepcopy(ray.get(self.reader_MSI_Actor.writeToDisk.remote(self.squareDim)))
-                    del self.reader_MSI_Actor, self.mzOriginalIndices_id, self.mzRanges_id
-                    if self.sampleType == 'DESI': del self.mzFinalGrid_id, self.chanFinalGrid_id
+                    del self.reader_MSI_Actor, self.mzFinalBinEdges_id, self.mzRanges_id
                 else: 
                     if self.readAllMSI: 
                         self.allImagesMin, self.allImagesMax = np.min(self.allImages, axis=(1,2)), np.max(self.allImages, axis=(1,2))
@@ -401,14 +337,10 @@ class SampleData:
                         np.save(self.allImagesDataPath + 'allImagesMax', self.allImagesMax)
                         if self.overwriteAllChanFiles:
                             allImagesFile = h5py.File(self.allImagesPath, 'a')
-                            _ = allImagesFile.create_dataset(name='allImages', data=self.allImages, chunks=(1, self.finalDim[0], self.finalDim[1]), dtype=np.float32)
+                            _ = allImagesFile.create_dataset(name='allImages', data=self.allImages, chunks=(1, self.finalDim[0], self.finalDim[1]))
                             allImagesFile.close()
-                            if self.sampleType=='DESI':
-                                squareAllImagesFile = h5py.File(self.squareAllImagesPath, 'a')
-                                _ = squareAllImagesFile.create_dataset(name='squareAllImages', data=np.moveaxis(resize(self.allImages, tuple(squareDim), order=0), -1, 0), chunks=(1, squareDim[0], squareDim[1]), dtype=np.float32)
-                                squareAllImagesFile.close()
                         del self.allImages
-                        _ = gc.collect()
+                        _ = cleanup()
 
     #Generate initial scanning mask; allows changing the scan method without rescanning all of the data
     def generateInitialSets(self, scanMethod):
@@ -471,20 +403,7 @@ class SampleData:
         t0_readFile = time.perf_counter()
         
         #Get the MSI file extension automatically if it isn't already known
-        if self.lineExt == None:
-            extensions = list(map(lambda x:x, np.unique([filename.split('.')[-1] for filename in natsort.natsorted(glob.glob(self.sampleFolder+os.path.sep+'*'), reverse=False)])))
-            if self.dataMSI:
-                if 'd' in extensions: self.lineExt = '.d'
-                elif 'D' in extensions: self.lineExt = '.D'
-                elif 'raw' in extensions: self.lineExt = '.raw'
-                elif 'RAW' in extensions: self.lineExt = '.RAW'
-                elif 'imzML' in extensions: self.lineExt = '.imzML'
-                else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
-            elif self.sampleType == 'IMAGE':
-                if 'png' in extensions: self.lineExt = '.tiff'
-                elif 'jpg' in extensions: self.lineExt = '.jpg'
-                elif 'tiff' in extensions: self.lineExt = '.tiff'
-                else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + self.name)
+        if self.lineExt == None: self.lineExt, self.format = checkLineExt(self.dataMSI, self.sampleType, self.format, self.sampleFolder, self.name)
         
         #TODO: MALDI experimental operation is not yet implemented, where the program should just read new positions referencing the chosen new idxs
         
@@ -501,30 +420,46 @@ class SampleData:
 
         #If MALDI, then there is only a single file with all of the spectral data
         elif self.sampleType == 'MALDI':
-        
-            #Establish file pointer for the single imzML file and verify it is readable
+            
+            #Establish file pointer for the single imzML file and verify it is readable and centroided
             try: data = ImzMLParser(scanFileNames[0])
             except: sys.exit('\nError - Unable to read file' + scanFileNames[0])
             
-            #Adjust stored coordinates to be zero-based
-            coordinates = np.asarray(data.coordinates)-1
+            #Issue a warning if data is not centroided
+            if data.spectrum_mode == 'profile': print('\nWarning - Sample contains profile mode data that must be centroided. Given the computational expense/time, it is highly recommended that centroiding be done before using this program.\n')
+            
+            #Store precision for potential result writeout
+            if data.intensityPrecision == 'f': self.intensity_dtype = np.float32
+            elif data.intensityPrecision == 'd': self.intensity_dtype = np.float64
+            else: sys.exit('\nError - Unknown intensity precision type')
+            if data.mzPrecision == 'f': self.mz_dtype = np.float32
+            elif data.mzPrecision == 'd': self.mz_dtype = np.float64
+            else: sys.exit('\nError - Unknown mz precision type')
+            
+            #Adjust coordinates to start at (x,y) = (0,0)
+            coordinates = np.asarray(data.coordinates)
+            coordinates[:,0] = coordinates[:,0] - coordinates[:,0].min()
+            coordinates[:,1] = coordinates[:,1] - coordinates[:,1].min()
             
             #If parallelization is disabled then read in data sequentially, otherwise pass writable coordinates to parallel actor
+            #Initially load data as strings (avoid accuracy loss from direct 32-to-64-bit casting)
             if not parallelization:
                 for i, (x, y, z) in tqdm(enumerate(coordinates), total = len(coordinates), desc='Reading', leave=False, disable=self.impFlag, ascii=asciiFlag):
                     mzs, ints = data.getspectrum(i)
+                    mzs, ints = np.asarray(mzs, dtype='str').astype(np.float64), np.asarray(ints, dtype='str').astype(np.float64)
+                    if data.spectrum_mode == 'profile':
+                        peakLocations = find_peaks_cwt(ints, np.arange(1,30), min_snr=3.0)
+                        mzs, ints = mzs[peakLocations], ints[peakLocations]
                     self.sumImage[y, x] = np.sum(ints)
-                    if self.overwriteAllChanFiles and self.readAllMSI: 
-                        filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
-                        self.allImages[:, y, x] = np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices).astype(np.float32)
                     self.chanImages[:, y, x] = [np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]) for mzRange in self.mzRanges]
+                    if self.overwriteAllChanFiles and self.readAllMSI: self.allImages[:, y, x] = binned_statistic(mzs, ints, statistic='sum', bins=self.mzFinalBinEdges, range=(self.mzLowerBound, self.mzUpperBound))[0]
             else:
                 _ = ray.get(self.reader_MSI_Actor.setCoordinates.remote(coordinates))
-                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.useAlphaTims, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.overwriteAllChanFiles) for indexes in np.array_split(np.arange(0, len(coordinates)), numberCPUS)])
-                
+                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.format, self.readAllMSI, scanFileNames, indexes, self.chanValues, self.mzFinalBinEdges_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.overwriteAllChanFiles) for indexes in np.array_split(np.arange(0, len(coordinates)), numberCPUS)])
+            
             #Close the file
             del data
-            _ = gc.collect()
+            _ = cleanup()
         
         #If DESI, each file corresponds to a full line of data
         elif self.sampleType == 'DESI':
@@ -535,119 +470,35 @@ class SampleData:
             #If parallelization is disabled then read in data sequentially
             if not parallelization:
                 
-                #Extract line number from the filenames, removing leading zeros, subtract 1 for zero indexing, and obtain correct physical row indexes from LUT if applicable
+                #For each of the available files
                 for scanFileName in tqdm(scanFileNames, total = len(scanFileNames), desc='Reading', leave=False, disable=self.impFlag, ascii=asciiFlag):
                     
-                    #Load the line data and flag errors during the process (primarily checking for files without data)
-                    errorFlag = False
-                    try: 
-                        if not self.useAlphaTims: 
-                            data = mzFile(scanFileName, numThreads=1)
-                        else: 
-                            data = alphatims.bruker.TimsTOF(scanFileName, use_hdf_if_available=False)
-                            data.format = 'Bruker'
-                    except: 
-                        errorFlag = True
-                        if debugMode: print('\nWarning - Failed to load any data from file: ' + scanFileName + ' This file will be ignored this iteration.')
+                    #Read and process the file
+                    data = readDESI(scanFileName, self.format, self.chanValues, self.mzRanges, self.mzLowerBound, self.mzUpperBound, self.mzFinalBinEdges, self.readAllMSI, self.overwriteAllChanFiles, self.impFlag, self.postFlag, self.physicalLineNums, self.ignoreMissingLines, self.missingLines, self.unorderedNames)
                     
-                    #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number minus 1
-                    if not errorFlag:
-                        fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
-                        if self.unorderedNames: 
-                            try: 
-                                lineNum = self.physicalLineNums[fileNum+1]
-                            except: 
-                                errorFlag = True 
-                                if debugMode: print('\nWarning - Failed to find the physical line number for the file: ' + scanFileName + ' This file will be ignored this iteration.')
-                        else: lineNum = fileNum
-                    
-                    #If error still has not occurred 
-                    if not errorFlag:
-                        
-                        #If ignoring missing lines and there are stored missing lines (simulation with ordered filenames only), then determine the offset for correct indexing
-                        if self.ignoreMissingLines and len(self.missingLines) > 0: lineNum -= int(np.sum(lineNum > self.missingLines))
-                        
-                        #Add file name to those that will have been already scanned (when this process finishes)
-                        self.readScanFiles.append(scanFileName)
-                        
-                        #Extract original measurement times
-                        if data.format == 'Bruker': 
-                            if not self.useAlphaTims: origTimes = np.asarray(data.ms1_frames)[:,1]/60
-                            else: origTimes = np.delete(data.rt_values, 0, axis = 0)/60
-                        else: 
-                            origTimes = np.asarray(data.scan_info())[:,0].astype('float64')
-                        
-                        #Force original times memory allocation to be contiguous
-                        origTimes = np.ascontiguousarray(origTimes)
-                        
-                        #Offset the original measurement times, such that the first position's time equals 0
-                        origTimes -= np.min(origTimes)
-                        
-                        #If the data is being sparesly acquired in lines, then the listed times in the file need to be shifted
-                        if (self.impFlag or self.postFlag) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(self.mask[lineNum]==1).min()/self.finalDim[1])*(((self.sampleWidth*1e3)/self.scanRate)/60)
-                        elif (self.impFlag or self.postFlag) and impOffset: sys.exit('\nError - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
-                        
-                        #Setup storage locations for each measured location
-                        chanDataLine, mzDataLine = [[] for _ in range(0, len(self.mzRanges))], []
-                        
-                        #Set positions to be scanned for the line
-                        if data.format == 'Bruker': positions = range(1, len(origTimes)+1)
-                        else: positions = range(data.scan_range()[0], data.scan_range()[1]+1)
-                        
-                        #Create list for holding TIC data
-                        sumImageLine = []
-                        
-                        #Read in and process spectrum data for each location; use 'profile' spectrum mode
-                        for pos in positions:
-                            if data.format == 'Bruker':
-                                if not self.useAlphaTims: 
-                                    mzs, ints = data.scan(pos, True)
-                                else: 
-                                    mzs, ints = data[pos]['mz_values'].values, data[pos]['corrected_intensity_values'].values
-                                    sortedIndices = np.argsort(mzs)
-                                    mzs, ints = mzs[sortedIndices], ints[sortedIndices]
-                            elif data.format == 'Agilent': 
-                                mzs, ints = data.scan(pos, 'profile')
-                            elif data.format == 'raw': 
-                                mzs, ints = data.scan(pos, False, True)
-                            
-                            #Obtain TIC by intensity summation
-                            sumImageLine.append(np.sum(ints))
-                            
-                            if self.overwriteAllChanFiles and self.readAllMSI: 
-                                filtIndexLow, filtIndexHigh = bisect_left(mzs, self.mzLowerBound), bisect_right(mzs, self.mzUpperBound)
-                                mzDataLine.append(np.add.reduceat(mzFastIndex(mzs[filtIndexLow:filtIndexHigh], ints[filtIndexLow:filtIndexHigh], self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount), self.mzOriginalIndices))
-                            for mzRangeNum in range(0, len(self.mzRanges)):
-                                mzRange = self.mzRanges[mzRangeNum]
-                                chanDataLine[mzRangeNum].append(np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]))
-                        
-                        #Create regular grid interpolators, aligning all/targeted m/z data, and storing results
-                        if self.overwriteAllChanFiles and self.readAllMSI: self.allImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.mzFinal), np.asarray(mzDataLine, dtype='float64'), bounds_error=False, fill_value=0)(self.mzFinalGrid).astype('float32')
-                        self.chanImages[:, lineNum, :] = scipy.interpolate.RegularGridInterpolator((origTimes, self.chanValues), np.asarray(chanDataLine, dtype='float64').T, bounds_error=False, fill_value=0)(self.chanFinalGrid).astype('float32')
-                        self.sumImage[lineNum, :] = np.interp(self.newTimes, origTimes, np.nan_to_num(sumImageLine, nan=0, posinf=0, neginf=0), left=0, right=0)
-                        
-                        #Close the file; (Do not use multiplierz function: data.close() - it's really slow and unclear why
-                        del data
-                        _ = gc.collect()
+                    #If the file could be handled, extract and store obtained data, interpolating as needed
+                    if data:
+                        scanFileName, lineNum, origTimes, chanDataLine, sumImageLine, mzDataLine = data
+                        self.chanImages[:, lineNum, :] = interp1d(origTimes, chanDataLine, axis=-1, bounds_error=False, kind='linear', fill_value=0)(self.newTimes)
+                        self.sumImage[lineNum, :] = interp1d(origTimes, sumImageLine, axis=-1, bounds_error=False, kind='linear', fill_value=0)(self.newTimes)
+                        if self.overwriteAllChanFiles and self.readAllMSI: self.allImages[:, lineNum, :] = interp1d(origTimes, mzDataLine, axis=-1, bounds_error=False, kind='linear', fill_value=0)(self.newTimes)
 
             #Otherwise read data in parallel and perform remaining interpolations of any remaining m/z data to regular grid in serial (parallel operation is too memory intensive)
             else:
-                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.useAlphaTims, self.readAllMSI, scanFileNames, indexes, self.mzOriginalIndices_id, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mzLowerIndex, self.mzPrecision, self.mzRound, self.mzInitialCount, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.overwriteAllChanFiles, self.mzFinal, self.mzFinalGrid_id, self.chanValues, self.chanFinalGrid_id, self.impFlag, self.postFlag, impOffset, scanMethod, lineMethod, self.physicalLineNums, self.ignoreMissingLines, self.missingLines, self.unorderedNames) for indexes in np.array_split(np.arange(0, len(scanFileNames)), numberCPUS)])
-                if self.readAllMSI: _ = ray.get(self.reader_MSI_Actor.interpolateDESI.remote(self.mzFinal, self.mzFinalGrid_id))
-                for scanFileName in ray.get(self.reader_MSI_Actor.getReadScanFiles.remote()).copy(): self.readScanFiles.append(scanFileName)
-
-        #If parallelization is enabled, and this is a MSI sample, then read MSI data in parallel, retrieve from shared memory, and process data into accessible shape
+                _ = ray.get([msi_parhelper.remote(self.reader_MSI_Actor, self.format, self.readAllMSI, scanFileNames, indexes, self.chanValues, self.mzFinalBinEdges, self.mzRanges_id, self.sampleType, self.mzLowerBound, self.mzUpperBound, self.mask, self.newTimes, self.finalDim, self.sampleWidth, self.scanRate, self.overwriteAllChanFiles, self.impFlag, self.postFlag, impOffset, scanMethod, lineMethod, self.physicalLineNums, self.ignoreMissingLines, self.missingLines, self.unorderedNames) for indexes in np.array_split(np.arange(0, len(scanFileNames)), numberCPUS)])
+                if self.readAllMSI: _ = ray.get(self.reader_MSI_Actor.interpolateDESI.remote(self.newTimes))
+                self.readScanFiles = ray.get(self.reader_MSI_Actor.getReadScanFiles.remote()).copy()
+                #for scanFileName in ray.get(self.reader_MSI_Actor.getReadScanFiles.remote()).copy(): self.readScanFiles.append(scanFileName)
+        
+        #If parallelization is enabled and this is a MSI sample, then read MSI data in parallel, retrieve from shared memory, and process data into accessible shape
         if parallelization and self.dataMSI:
-            
-            #Update local identification of which files have already been imported for DESI samples
-            if self.sampleType == 'DESI': self.readScanFiles = ray.get(self.reader_MSI_Actor.getReadScanFiles.remote()).copy()
             
             #If there are were not new specific locations that were to be scanned, retrieve everything, otherwise only pull data for new idxs
             if len(newIdxs) == 0: 
                 self.chanImages = np.moveaxis(ray.get(self.reader_MSI_Actor.getChanImages.remote()).copy(), -1, 0)
                 self.sumImage = ray.get(self.reader_MSI_Actor.getSumImage.remote()).copy()
             else: 
-                self.chanImages[:, newIdxs[:,0], newIdxs[:,1]] = ray.get(self.reader_MSI_Actor.getChanImagesNewIdxs.remote(newIdxs[:,0], newIdxs[:,1])).copy().T
+                self.chanImages[:, newIdxs[:,0], newIdxs[:,1]] = ray.get(self.reader_MSI_Actor.getChanImagesNewIdxs.remote(newIdxs[:,0], newIdxs[:,1])).copy()
                 self.sumImage[newIdxs[:,0], newIdxs[:,1]] = ray.get(self.reader_MSI_Actor.getSumImageNewIdxs.remote(newIdxs[:,0], newIdxs[:,1])).copy()
             
         #If DESI MSI, then need to resize the images to obtain square dimensionality, otherwise the square dimensions are equal to the original
@@ -678,20 +529,21 @@ class Sample:
     def __init__(self, sampleData, tempScanData):
         
         #Initialize measurement masks and other variables that are expected to exist
-        self.mask = np.zeros((sampleData.finalDim), dtype=np.float32)
+        self.mask = np.zeros((sampleData.finalDim))
+        self.measuredIdxs = None
         if sampleData.postFlag:
             self.progMap = sampleData.progMap
         else: 
-            self.progMap = np.empty((sampleData.finalDim), dtype=np.float32)
+            self.progMap = np.empty((sampleData.finalDim))
             self.progMap[:] = np.nan
         if sampleData.sampleType == 'DESI': self.squareMask = resize(self.mask, tuple(sampleData.squareDim), order=0)
         else: self.squareMask = self.mask
-        self.squareRD = np.zeros((sampleData.squareDim), dtype=np.float32)
-        self.squareRDs = np.zeros((sampleData.numChannels, sampleData.squareDim[0], sampleData.squareDim[1]), dtype=np.float32)
-        self.squareERD = np.zeros((sampleData.squareDim), dtype=np.float32)
-        self.squareERDs = np.zeros((sampleData.numChannels, sampleData.squareDim[0], sampleData.squareDim[1]), dtype=np.float32)
-        self.chanImages = np.zeros((sampleData.numChannels, sampleData.finalDim[0], sampleData.finalDim[1]), dtype=np.float32)
-        self.sumImage = np.zeros((sampleData.finalDim), dtype=np.float32)
+        self.squareRD = np.zeros((sampleData.squareDim))
+        self.squareRDs = np.zeros((sampleData.numChannels, sampleData.squareDim[0], sampleData.squareDim[1]))
+        self.squareERD = np.zeros((sampleData.squareDim))
+        self.squareERDs = np.zeros((sampleData.numChannels, sampleData.squareDim[0], sampleData.squareDim[1]))
+        self.chanImages = np.zeros((sampleData.numChannels, sampleData.finalDim[0], sampleData.finalDim[1]))
+        self.sumImage = np.zeros((sampleData.finalDim))
         self.percMeasured = 0
         self.iteration = 0
         
@@ -844,12 +696,12 @@ class Sample:
         #If every location has been scanned all E/RD values are zero
         if len(tempScanData.squareUnMeasuredIdxs) == 0:
             if sampleData.oracleFlag or sampleData.bestCFlag: 
-                self.RD = np.zeros(sampleData.finalDim, dtype=np.float32)
-                self.squareRD = np.zeros(sampleData.squareDim, dtype=np.float32)
-                self.squareRDs = np.zeros((sampleData.numChannels, sampleData.squareDim[0], sampleData.squareDim[1]), dtype=np.float32)
+                self.RD = np.zeros(sampleData.finalDim)
+                self.squareRD = np.zeros(sampleData.squareDim)
+                self.squareRDs = np.zeros((sampleData.numChannels, sampleData.squareDim[0], sampleData.squareDim[1]))
                 self.squareRDValues = self.squareRDs[:, tempScanData.squareUnMeasuredIdxs[:,0], tempScanData.squareUnMeasuredIdxs[:,1]]
                 self.squareERD = self.squareRD
-            else: self.squareERD = np.zeros(sampleData.squareDim, dtype=np.float32)
+            else: self.squareERD = np.zeros(sampleData.squareDim)
         
         #If the ground-truth data is known for training or oracle runs then compute the RDPPs and resulting RD
         elif sampleData.oracleFlag or sampleData.bestCFlag:
@@ -907,34 +759,36 @@ class Sample:
             
             t1_computeERD = time.perf_counter()
             result.avgTimesComputeERD.append((t1_computeERD-t0_computeERD)+polyComputeTime)
-    
-        #In square dimensionality, set any invalid values to 0 and average results to form a single ERD
+        
+        #Resize ERDs (before any masking) as needed
+        if sampleData.sampleType == 'DESI': self.ERDs = np.moveaxis(resize(np.moveaxis(self.squareERDs , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)
+        
+        #For square and final ERDs, set any measured locations and invalid values to 0, and average to form a singular representation
+        self.squareERDs = self.squareERDs*(1-self.squareMask)
         self.squareERDs = np.nan_to_num(self.squareERDs, nan=0, posinf=0, neginf=0)
+        self.squareERDs[self.squareERDs<0] = 0
         self.squareERD = np.mean(self.squareERDs, axis=0)
-        
-        #Resize/Average ERDs as needed according to data type
-        if sampleData.sampleType == 'DESI':
-            self.ERDs = np.moveaxis(resize(np.moveaxis(self.squareERDs , 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)
+        if sampleData.sampleType == 'DESI': 
+            self.ERDs = self.ERDs*(1-self.mask)
+            self.ERDs = np.nan_to_num(self.ERDs, nan=0, posinf=0, neginf=0)
+            self.ERDs[self.ERDs<0] = 0
             self.ERD = np.mean(self.ERDs, axis=0)
-        else:
-            self.ERD = self.squareERD
+        else: 
             self.ERDs = self.squareERDs
+            self.ERD = self.squareERD
         
-        #Duplicate the per-channel ERDs for processing, masking to just the unmeasured locations
-        self.processedERDs = copy.deepcopy(self.ERDs)*(1-self.mask)
-        
-        #Mask the ERDs by the FOV foreground if applicable
+        #Duplicate the per-channel ERDs for processing, masking by FOV forground and visited lines as applicable
+        self.processedERDs = copy.deepcopy(self.ERDs)
         if sampleData.useMaskFOV: self.processedERDs *= sampleData.maskFOV
-        
-        #Mask out visited lines if linewise and line revisiting is disabled
         if sampleData.scanMethod == 'linewise' and not sampleData.lineRevist: self.processedERDs[:, np.where(np.sum(self.mask, axis=1)>0)[0], :] = 0
         
-        #Average across all channels for measurement location selection
-        self.processedERD = np.mean(self.processedERDs, axis=0)
+        #Min-max rescale every ERD channel, so each will be considered equally during measurement selection
+        if rescaleERDs: 
+            minValue, maxValue = np.min(self.processedERDs, axis=(1,2)), np.max(self.processedERDs, axis=(1,2))
+            self.processedERDs = np.moveaxis(divideSafe((np.moveaxis(self.processedERDs, 0, -1)-minValue), (maxValue-minValue)), -1, 0)
         
-        #Rescale to force min/max values
-        minValue, maxValue = np.min(self.processedERDs, axis=(1,2)), np.max(self.processedERDs, axis=(1,2))
-        self.processedERDs = np.moveaxis(divideSafe((np.moveaxis(self.processedERDs, 0, -1)-minValue), (maxValue-minValue)), -1, 0)
+        #Merge ERD channels to a singular representation and min-max rescale the result
+        self.processedERD = np.mean(self.processedERDs, axis=0)
         minValue, maxValue = np.min(self.processedERD), np.max(self.processedERD)
         self.processedERD = divideSafe((self.processedERD-minValue), (maxValue-minValue))
 
@@ -989,7 +843,7 @@ class Result:
             
             #If operating in parallel, create actors for reconstruction and load portions of the data into each, otherwise load data into main memory
             if parallelization and erdModel != 'GLANDS':
-                self.recon_Actors = [Recon_Actor.remote(indexes, sampleData.sampleType, sampleData.squareDim, sampleData.finalDim, sampleData.allImagesMin, sampleData.allImagesMax, sampleData.allImagesPath, sampleData.squareAllImagesPath, sampleData.squareOpticalImage, erdModel) for indexes in np.array_split(np.arange(0, len(sampleData.mzFinal)), numberCPUS)]
+                self.recon_Actors = [Recon_Actor.remote(indexes, sampleData.sampleType, sampleData.squareDim, sampleData.finalDim, sampleData.allImagesMin, sampleData.allImagesMax, sampleData.allImagesPath, sampleData.squareOpticalImage, erdModel) for indexes in np.array_split(np.arange(0, len(sampleData.mzFinal)), numberCPUS)]
             else:
                 sampleData.allImagesFile = h5py.File(sampleData.allImagesPath, 'a')
                 sampleData.allImages = sampleData.allImagesFile['allImages'][:]
@@ -1012,7 +866,7 @@ class Result:
             if sampleData.simulationFlag: self.extractSimulationData(sample, sampleData)
             visualizeStep(sample, sampleData, self.dir_progression, self.dir_chanProgressions)
         
-        #Save a copy of the measurement step for later evaluation
+        #Save a copy of the measurement step data for later evaluation
         self.samples.append(copy.deepcopy(sample))
         
         #When applicable, save the physicalLineNums.csv, measuredMask.csv, and progressMap.csv to the same folder as the scanned MSI files and the results folder; otherwise just save to results
@@ -1059,30 +913,29 @@ class Result:
             #If operating in parallel, utilize actors created in the complete() method, or at initialization for live simulation; for serial, could vectorize, but extremely RAM intensive and usable batch size is system specific
             #Consider adding a batch option for GLANDS as parallelized reconsturciton is not an option
             if parallelization and erdModel != 'GLANDS':
-                
                 #If encountering an OOM, increasingly halve the number of allowable simultaneous computations; fallback solution/approach has not been fully tested
                 #Must re-initialize ray, actors, and any objects expected to be in shared memory
                 while (True):
                     try: 
                         tempScanData_id, squareMask_id, mask_id = ray.put(tempScanData), ray.put(sample.squareMask), ray.put(sample.mask)
-                        for recon_Actors_Split in np.array_split(np.array(self.recon_Actors), self.numParallelReconSplits):
-                            _ = ray.get([recon_Actor.computeRecon.remote(tempScanData_id, squareMask_id, mask_id) for recon_Actor in recon_Actors_Split])
+                        for recon_Actors_Split in np.array_split(np.array(self.recon_Actors), self.numParallelReconSplits): _ = ray.get([recon_Actor.computeRecon.remote(tempScanData_id, squareMask_id, mask_id) for recon_Actor in recon_Actors_Split])
                         break
                     except: 
                         self.warningOOM = True
                         self.numParallelReconSplits += 1
                         if self.numParallelReconSplits > len(self.recon_Actors): sys.exit('\nError - Reconstruction of all channels has failed, please try running with parallelization disabled.')
+                        else: print('\nWarning - Simultaneous reconstructions of all m/z has failed; will attempt halving workload to try preventing an OOM error.')
                         self.recon_Actors.clear()
                         del self.recon_Actors
                         resetRay(numberCPUS)
-                        self.recon_Actors = [Recon_Actor.remote(indexes, sampleData.sampleType, sampleData.squareDim, sampleData.finalDim, sampleData.allImagesMin, sampleData.allImagesMax, sampleData.allImagesPath, sampleData.squareAllImagesPath, sampleData.squareOpticalImage, erdModel) for indexes in np.array_split(np.arange(0, len(sampleData.mzFinal)), numberCPUS)]
+                        self.recon_Actors = [Recon_Actor.remote(indexes, sampleData.sampleType, sampleData.squareDim, sampleData.finalDim, sampleData.allImagesMin, sampleData.allImagesMax, sampleData.allImagesPath, sampleData.squareOpticalImage, erdModel) for indexes in np.array_split(np.arange(0, len(sampleData.mzFinal)), numberCPUS)]
                 _ = ray.get([recon_Actor.computeMetrics.remote() for recon_Actor in self.recon_Actors])
                 if not lastReconOnly:
                     sample.allImagesNRMSEList = np.concatenate([ray.get(recon_Actor.getNRMSE.remote()).copy() for recon_Actor in self.recon_Actors])
                     sample.allImagesSSIMList = np.concatenate([ray.get(recon_Actor.getSSIM.remote()).copy() for recon_Actor in self.recon_Actors])
                     sample.allImagesPSNRList = np.concatenate([ray.get(recon_Actor.getPSNR.remote()).copy() for recon_Actor in self.recon_Actors])
                 del tempScanData_id, squareMask_id, mask_id
-                _ = gc.collect()
+                _ = cleanup()
             else:
                 #Extract the sparsely measured images in square dimensionality
                 if sampleData.sampleType == 'DESI': self.reconImages = sampleData.squareAllImages*sample.squareMask
@@ -1092,7 +945,7 @@ class Result:
                 if erdModel == 'GLANDS':
                     sys.exit('\nError - Reconstruction for GLANDS has not yet been implemented.')
                     #inputStack = prepareInput(self.reconImages, samplesquareMask, sampleData.squareOpticalImage)
-                    #self.reconImages = np.array([ray.get(model.generate.remote(makeCompatible(self.inputStack[index]), True)).copy() for index in range(0, len(self.reconImages))], dtype=np.float32)
+                    #self.reconImages = np.array([ray.get(model.generate.remote(makeCompatible(self.inputStack[index]), True)).copy() for index in range(0, len(self.reconImages))])
                 else:
                     for index in range(0, len(self.reconImages)): self.reconImages[index] = computeReconIDW(self.reconImages[index], tempScanData)
                 
@@ -1127,8 +980,8 @@ class Result:
                 
                 #Compute RD; if every location has been scanned all positions are zero
                 if len(tempScanData.squareUnMeasuredIdxs) == 0: 
-                    sample.squareRD = np.zeros(sampleData.squareDim, dtype=np.float32)
-                    sample.RD = np.zeros(sampleData.finalDim, dtype=np.float32)
+                    sample.squareRD = np.zeros(sampleData.squareDim)
+                    sample.RD = np.zeros(sampleData.finalDim)
                 else: 
                     sample.RDPPs = computeRDPPs(sampleData.squareChanImages, sample.squareChanReconImages)
                     computeRD(sample, sampleData, tempScanData, self.cValue, [])
@@ -1182,13 +1035,10 @@ class Result:
             #For GLANDS will have to do reconstructions and evaluations outside of the actor...
             if sampleData.allChanEvalFlag or (sampleData.imzMLExportFlag and not sampleData.trainFlag):
                 if parallelization and erdModel != 'GLANDS':
-                    self.recon_Actors = [Recon_Actor.remote(indexes, sampleData.sampleType, sampleData.squareDim, sampleData.finalDim, sampleData.allImagesMin, sampleData.allImagesMax, sampleData.allImagesPath, sampleData.squareAllImagesPath, sampleData.squareOpticalImage, erdModel) for indexes in np.array_split(np.arange(0, len(sampleData.mzFinal)), numberCPUS)]
+                    self.recon_Actors = [Recon_Actor.remote(indexes, sampleData.sampleType, sampleData.squareDim, sampleData.finalDim, sampleData.allImagesMin, sampleData.allImagesMax, sampleData.allImagesPath, sampleData.squareOpticalImage, erdModel) for indexes in np.array_split(np.arange(0, len(sampleData.mzFinal)), numberCPUS)]
                 else:
                     sampleData.allImagesFile = h5py.File(sampleData.allImagesPath, 'r')
                     sampleData.allImages = sampleData.allImagesFile['allImages']
-                    if sampleData.sampleType == 'DESI':
-                        sampleData.squareAllImagesFile = h5py.File(sampleData.squareAllImagesPath, 'r')
-                        sampleData.squareAllImages = sampleData.squareAllImagesFile['squareAllImages']
         
         #Extract metrics for samples if a simulation, and neither already done live, nor creating samples for training
         if (sampleData.simulationFlag and not sampleData.liveOutputFlag and not sampleData.datagenFlag):
@@ -1208,19 +1058,19 @@ class Result:
                 
                 #Export all measured, reconstructed data in .imzML format
                 if parallelization and erdModel != 'GLANDS': self.reconImages = np.concatenate([ray.get(recon_Actor.getReconImages.remote()).copy() for recon_Actor in self.recon_Actors])
-                writer = ImzMLWriter(self.dir_sampleResults+sampleData.name+'_reconstructed', intensity_dtype=np.float32, mz_dtype=np.float32, spec_type='profile', mode='processed')
+                writer = ImzMLWriter(self.dir_sampleResults+sampleData.name+'_reconstructed', intensity_dtype=sampleData.intensity_dtype, mz_dtype=sampleData.mz_dtype, spec_type='centroid', mode='processed')
                 _  = [writer.addSpectrum(sampleData.mzFinal, self.reconImages[:, coord[0], coord[1]], (coord[1]+1, coord[0]+1)) for coord in coordinates]
                 writer.close()
                 del self.reconImages
-                _ = gc.collect()
+                _ = cleanup()
                 
                 #Export the equivalent ground-truth measured data here to .imzML format if needed
                 #allImages = np.concatenate([ray.get(recon_Actor.getAllImages.remote()).copy() for recon_Actor in self.recon_Actors])
-                #writer = ImzMLWriter(self.dir_sampleResults+sampleData.name+'_groundTruth', intensity_dtype=np.float32, mz_dtype=np.float32, spec_type='profile', mode='processed')
+                #writer = ImzMLWriter(self.dir_sampleResults+sampleData.name+'_groundTruth', intensity_dtype=sampleData.intensity_dtype, mz_dtype=sampleData.mz_dtype, spec_type='centroid', mode='processed')
                 #for coord in coordinates: writer.addSpectrum(sampleData.mzFinal, allImages[:, coord[0], coord[1]], (coord[1]+1, coord[0]+1))
                 #writer.close()
                 #del allImages
-                #_ = gc.collect()
+                #_ = cleanup()
             
             #If all channel evaluation or imzMLExportFlag, close all images file reference(s)
             if sampleData.allChanEvalFlag or sampleData.imzMLExportFlag:
@@ -1232,10 +1082,7 @@ class Result:
                 else:
                     sampleData.allImagesFile.close()
                     del sampleData.allImages, sampleData.allImagesFile
-                    if sampleData.sampleType == 'DESI':
-                        sampleData.squareAllImagesFile.close()
-                        del sampleData.squareAllImages, sampleData.squareAllImagesFile
-                    _ = gc.collect()
+                    _ = cleanup()
         
         #If this is a simulation, not for training database generation, then summarize NRMSE/SSIM/PSNR scores across all measurement steps
         if sampleData.simulationFlag and not sampleData.datagenFlag:
@@ -1251,7 +1098,6 @@ class Result:
                 self.allAvgPSNRList = [np.nanmean(sample.allImagesPSNRList) for sample in self.samples]
                 self.allAvgSSIMList = [np.nanmean(sample.allImagesSSIMList) for sample in self.samples]
                 self.allAvgNRMSEList = [np.nanmean(sample.allImagesNRMSEList) for sample in self.samples]
-
         
         #If ERD and RD were computed (i.e., when not a training run, nor GLANDS) summarize ERD NRMSE/SSIM/PSNR scores
         if erdModel != 'GLANDS' and sampleData.simulationFlag and not sampleData.trainFlag: 
@@ -1299,7 +1145,7 @@ class Result:
                     resetRay(numberCPUS)
                 else: 
                     _ = [visualizeStep(sample, sampleData, self.dir_progression, self.dir_chanProgressions) for sample in tqdm(self.samples, desc='Visualizing', leave=False, ascii=asciiFlag)]
-
+            
             #Combine total progression and individual channel images into animations
             dataFileNames = natsort.natsorted(glob.glob(self.dir_progression + 'progression_*.tiff'))
             height, width, layers = cv2.imread(dataFileNames[0]).shape
@@ -1731,7 +1577,7 @@ def computeRD(sample, sampleData, tempScanData, cValue, updateLocations):
         
         #Compute window sizes and positions for unmeasured locations, updating a persistant reference for updating RD
         if not staticWindow: windowSizes = 2*np.ceil(dynWindowSigMult*sigmaValues).astype(int)+1
-        else: windowSizes = (np.ones((len(sigmaValues)), dtype=np.float32)*staticWindowSize)
+        else: windowSizes = (np.ones((len(sigmaValues)))*staticWindowSize)
         windowSizes[windowSizes%2==0] += 1
         radii = (windowSizes//2).reshape(-1, 1).astype(int)
         winStartPos, winStopPos = squareUnMeasuredLocations-radii, squareUnMeasuredLocations+radii
@@ -1747,7 +1593,7 @@ def computeRD(sample, sampleData, tempScanData, cValue, updateLocations):
         
         #Store new Gaussian computations
         if len(newSigmaValues) > 0:
-            gaussianSignals = [signal.windows.gaussian(newWindows[index], newSigmaValues[index]) for index in range(0, len(newSigmaValues))]
+            gaussianSignals = [gaussian(newWindows[index], newSigmaValues[index]) for index in range(0, len(newSigmaValues))]
             sampleData.gaussianWindows.update(zip(newSigmaValues, [np.outer(gaussianSignals[index], gaussianSignals[index]) for index in range(0, len(gaussianSignals))]))
         
         #Zero-pad the RDPPs by the maximum radius and offset window positions accordingly
@@ -1758,23 +1604,23 @@ def computeRD(sample, sampleData, tempScanData, cValue, updateLocations):
         #Compute RD Values
         sample.squareRDs[:, squareUnMeasuredLocations[:,0], squareUnMeasuredLocations[:,1]] = np.asarray([np.sum(sampleData.gaussianWindows[sigmaValues[index]]*paddedRDPPs[:, offsetWinStartPos[index][0]:offsetWinStopPos[index][0]+1, offsetWinStartPos[index][1]:offsetWinStopPos[index][1]+1], axis=(1,2)) for index in range(0, len(squareUnMeasuredLocations))]).T
     
-    #In square dimensionality, set any invalid values to 0
-    sample.squareRDs = np.nan_to_num(sample.squareRDs, nan=0, posinf=0, neginf=0)
+    #Resize RDs (before any masking) as needed
+    if sampleData.sampleType == 'DESI': sample.RDs = np.moveaxis(resize(np.moveaxis(sample.squareRDs, 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)
     
-    #Resize RDs as needed according to sample type, ensure values at measured locations are zero, and average results to form a single RD
-    if sampleData.sampleType == 'DESI': 
-        sample.RDs = np.moveaxis(resize(np.moveaxis(sample.squareRDs, 0, -1), tuple(sampleData.finalDim), order=0), -1, 0)*(1-sample.mask)
-        sample.RD = np.mean(sample.RDs, axis=0)
-    
-    #In square dimensionality, ensure values at measured locations are zero and average results to form a single RD
+    #For square and final RDs, set any measured locations and invalid values to 0, and average to form a singular representation
     sample.squareRDs = sample.squareRDs*(1-sample.squareMask)
+    sample.squareRDs = np.nan_to_num(sample.squareRDs, nan=0, posinf=0, neginf=0)
+    sample.squareRDs[sample.squareRDs<0] = 0
     sample.squareRD = np.mean(sample.squareRDs, axis=0)
-    
-    #If sample type did not need resizing, set RD in regular dimensionality to that of the square
-    if sampleData.sampleType != 'DESI': 
+    if sampleData.sampleType == 'DESI': 
+        sample.RDs = sample.RDs*(1-sample.mask)
+        sample.RDs = np.nan_to_num(sample.RDs, nan=0, posinf=0, neginf=0)
+        sample.RDs[sample.RDs<0] = 0
+        sample.RD = np.mean(sample.RDs, axis=0)
+    else: 
         sample.RDs = sample.squareRDs
         sample.RD = sample.squareRD
-    
+
 #Determine which unmeasured points of a sample should be scanned given the current E/RD
 def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cValue, percToScan):
     
@@ -1807,17 +1653,16 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
         
     elif sampleData.scanMethod == 'linewise':
         
-        #If all locations on a chosen line should be scanned, select the line with maximum sum physical ERD
-        if lineMethod =='fullLine':
-            lineToScanIdx = np.nanargmax(np.nansum(sample.processedERD, axis=1))
-            indexes = np.sort(np.argsort(sample.processedERD[lineToScanIdx])[::-1])
-            newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
+        #Select the line with maximum sum physical ERD to scan
+        lineToScanIdx = np.nanargmax(np.nansum(sample.processedERD, axis=1))
         
-        #If a group of locations should be chosen on a single line
+        #If all locations on a chosen line should be scanned
+        if lineMethod =='fullLine':
+            indexes = np.sort(np.argsort(sample.processedERD[lineToScanIdx])[::-1])
+            newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
+        
+        #If a group of locations should be chosen on a single line, but not neccessarily be in a signular segment
         elif lineMethod == 'percLine': 
-            
-            #Select line with maximum sum physical ERD
-            lineToScanIdx = np.nanargmax(np.nansum(sample.processedERD, axis=1))
             
             #SLADS/DLADS use reconstruction data for temporary measurement values, until specified number of locations have been found
             if erdModel != 'GLANDS':
@@ -1834,37 +1679,34 @@ def findNewMeasurementIdxs(sample, sampleData, tempScanData, result, model, cVal
             #GLANDS chooses all the locations in a single step
             else:
                 indexes = np.sort(np.argsort(sample.processedERD[lineToScanIdx])[::-1][:sampleData.pointsToScan[lineToScanIdx]])
-                newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
+                newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
             
-        #If a segment of a line should be scanned using a given percentage, choose the line with maximum sum physical ERD
+        #If only a given percentage of a line should be scanned as a segment
         elif lineMethod == 'segLine' and segLineMethod == 'minPerc': 
-           lineToScanIdx = np.nanargmax(np.nansum(sample.processedERD, axis=1))
            if np.nansum(sample.processedERD[lineToScanIdx]) == 0: startPos = ((sampleData.finalDim[1]-sampleData.pointsToScan[lineToScanIdx])//2)-1
            else: startPos = np.argmax(np.nansum(np.lib.stride_tricks.sliding_window_view(sample.processedERD[lineToScanIdx], sampleData.pointsToScan[lineToScanIdx]), axis=1))
-           newIdxs = np.column_stack([np.ones(sampleData.pointsToScan[lineToScanIdx], dtype=np.float32)*lineToScanIdx, np.arange(startPos,startPos+sampleData.pointsToScan[lineToScanIdx])]).astype(int)
+           newIdxs = np.column_stack([np.ones(sampleData.pointsToScan[lineToScanIdx])*lineToScanIdx, np.arange(startPos,startPos+sampleData.pointsToScan[lineToScanIdx])]).astype(int)
             
-        #If a segment of a line should be scanned using Otsu, choose the line with the most scannable positions
-        elif lineMethod == 'segLine' and segLineMethod == 'otsu': 
-            otsuMask = sample.processedERD>=skimage.filters.threshold_otsu(sample.processedERD, nbins=100)
-            lineToScanIdx = np.nanargmax(np.nansum(otsuMask, axis=1))
+        #If a segment of a line should be scanned using Otsu applied to the whole processedERD, scan all identified foreground locations 
+        elif lineMethod == 'segLine' and segLineMethod == 'otsu-whole': 
+            otsuMask = sample.processedERD >= threshold_otsu(sample.processedERD, nbins=100)
             indexes = np.sort(np.where(otsuMask[lineToScanIdx])[0])
             if len(indexes)>0: 
                 indexes = np.arange(indexes[0],indexes[-1]+1)
-                newIdxs = np.column_stack([np.ones(len(indexes), dtype=np.float32)*lineToScanIdx, indexes]).astype(int)
+                newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
+                
+        #If a segment of a line should be scanned using Otsu applied to the chosen line in the processedERD, scan all identified foreground locations 
+        elif lineMethod == 'segLine' and segLineMethod == 'otsu-line': 
+            otsuMask = sample.processedERD >= threshold_otsu(sample.processedERD[lineToScanIdx], nbins=100)
+            indexes = np.sort(np.where(otsuMask[lineToScanIdx])[0])
+            if len(indexes)>0: 
+                indexes = np.arange(indexes[0],indexes[-1]+1)
+                newIdxs = np.column_stack([np.ones(len(indexes))*lineToScanIdx, indexes]).astype(int)
         
         #If there are not enough locations selected, then return no new measurement locations which will terminate scanning
         if len(newIdxs) < int(round(0.01*sample.mask.shape[1])): return []
         
     return newIdxs
-
-#Re-index a set of m/z values to a common grid, all data should be or converted to float32 for numba acceleration to work correctly
-@jit(nopython=True, nogil=True)
-def mzFastIndex(mz, values, mzLowerIndex, mzPrecision, mzRound, mzInitialCount):
-    indices = np.empty(len(mz), dtype=np.float32)
-    mzValues = np.zeros(mzInitialCount, dtype=np.float32)
-    np.round(np.floor(mz/mzPrecision)*mzPrecision, mzRound, indices)
-    mzValues[(indices/mzPrecision).astype(np.int32)-mzLowerIndex] = values
-    return mzValues
 
 #Calculate k-nn and determine inverse distance weights
 def findNeighbors(tempScanData):
@@ -1923,17 +1765,17 @@ def processImages(baseFolder, filenames, label):
 #Manually define customized NRMSE metric to use specified data range in min-max normalization
 #Derived from: https://github.com/scikit-image/scikit-image/blob/v0.24.0/skimage/metrics/simple_metrics.py#L51-L109
 def compare_NRMSE(image_true, image_test, data_range):
-    skimage._shared.utils.check_shape_equality(image_true, image_test)
-    image_true, image_test = skimage.metrics.simple_metrics._as_floats(image_true, image_test)
-    return np.sqrt(compare_MSE(image_true, image_test))/data_range
+    if image_true.shape != image_test.shape: sys.exit('\nError - Input images for compare_NRMSE must have the same dimensions.')
+    image_true, image_test = image_true.astype(np.float64), image_test.astype(np.float64)
+    return np.sqrt(mean_squared_error(image_true, image_test))/data_range
     
 #Compare label and recon images after min-max rescaling
 def compareImages(label, recon, minValue, maxValue):
-    data_range=maxValue-minValue
-    score_PSNR = compare_PSNR(label, recon, data_range=data_range)
-    score_SSIM = compare_SSIM(label, recon, data_range=data_range)
+    data_range = maxValue-minValue
+    score_PSNR = peak_signal_noise_ratio(label, recon, data_range=data_range)
+    score_SSIM = structural_similarity(label, recon, data_range=data_range)
     score_NRMSE = compare_NRMSE(label, recon, data_range)    
-    return score_PSNR, score_SSIM, score_NRMSE, 
+    return score_PSNR, score_SSIM, score_NRMSE
 
 #Interpolate results to a given precision for averaging results
 def percResults(results, perc_testingResults, precision):
@@ -1977,10 +1819,146 @@ def basicPlot(xData, yData, saveLocation, xLabel='', yLabel=''):
     plt.savefig(saveLocation)
     plt.close(f)
 
+#Check for allowable filename extensions present in a location; ignore resevered filenames from consideration
+def checkLineExt(dataMSI, sampleType, format, location, name):
+    filenames = natsort.natsorted(glob.glob(location+os.path.sep+'*'), reverse=False)
+    #ignoreFiles = ['channels.csv', 'mask.csv', 'physicalLineNums.csv', 'measuredMask.csv', 'progressMap.csv']
+    #filenames = [filename for filename in filenames if filename not in ignoreFiles]
+    extensions = list(map(lambda x:x, np.unique([filename.split('.')[-1] for filename in filenames])))
+    if dataMSI and sampleType == 'DESI':
+        if 'd' in extensions: 
+            lineExt = '.d'
+            if format != 'Bruker-csv': format = 'Bruker'
+        elif 'D' in extensions: 
+            lineExt = '.D'
+            format = 'Agilent'
+        elif 'raw' in extensions: 
+            lineExt = '.raw'
+            format = 'Thermo'
+        elif 'RAW' in extensions: 
+            lineExt = '.RAW'
+            format = 'Thermo'
+        else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + name)
+    elif sampleType == 'MALDI':
+        format = 'MALDI'
+        if 'imzML' in extensions: lineExt = '.imzML'
+        else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + name)
+    elif sampleType == 'IMAGE':
+        format = 'IMAGE'
+        if 'png' in extensions: lineExt = '.tiff'
+        elif 'jpg' in extensions: lineExt = '.jpg'
+        elif 'tiff' in extensions: lineExt = '.tiff'
+        else: sys.exit('\nError - Either no files are present, or an unknown filetype being used for sample: ' + name)
+    return lineExt, format
+
 #Define how to reset the random seed for deterministic repeatable RNG
+#Keras utility sets random and numpy seeds as well
 def resetRandom():
     if manualSeedValue != -1:
-        if erdModel == 'DLADS-TF': tf.random.set_seed(manualSeedValue)
-        else: torch.manual_seed(manualSeedValue)        
         np.random.seed(manualSeedValue)
         random.seed(manualSeedValue)
+        if 'DLADS-TF' in erdModel: 
+            tf.keras.utils.set_random_seed(manualSeedValue)
+        elif 'DLADS-PY' in erdModel or 'GLANDS' in erdModel: 
+            torch.manual_seed(manualSeedValue)
+            torch.cuda.manual_seed_all(manualSeedValue)
+        
+#Read in a single DESI file
+def readDESI(scanFileName, format, chanValues, mzRanges, mzLowerBound, mzUpperBound, mzFinalBinEdges, readAllMSI, overwriteAllChanFiles, impFlag, postFlag, physicalLineNums, ignoreMissingLines, missingLines, unorderedNames):
+    
+    #Load the line data and flag errors during the process (primarily checking for files without data)
+    try: 
+        if format == 'Bruker-csv':
+            data = pd.read_csv(scanFileName + os.path.sep + 'ms-chromatograms.csv', sep=';', skiprows=[0, 1], encoding='latin1')
+            data = data.drop(columns=[' BPC,±All '], errors='ignore')
+            data.columns = np.asarray([name.replace(' ', '').replace(',±All', '').replace(',±0.01', '').replace('BPC:', '') for name in data.columns.values])
+        elif format == 'Bruker': 
+            data = OpenTIMS(scanFileName)
+        else: 
+            data = mzFile(scanFileName)
+    except: 
+        if debugMode: print('\nWarning - Failed to load any data from file: ' + scanFileName + ' This file will be ignored this iteration.')
+        return None
+    
+    #Extract the file number and if unordered find corresponding line number in LUT, otherwise line number is the file number minus 1
+    fileNum = int(scanFileName.split('line-')[1].split('.')[0].lstrip('0'))-1
+    if unorderedNames: 
+        try: 
+            lineNum = physicalLineNums[fileNum+1]
+        except: 
+            if debugMode: print('\nWarning - Failed to find the physical line number for the file: ' + scanFileName + ' This file will be ignored this iteration.')
+            return None
+    else: lineNum = fileNum
+    
+    #If ignoring missing lines and there are stored missing lines (simulation with ordered filenames only), then determine the offset for correct indexing
+    if ignoreMissingLines and len(missingLines) > 0: lineNum -= int(np.sum(lineNum > missingLines))
+    
+    #Extract original measurement times (seconds) (non-Bruker casts <U32 to string and then to original float64 to avoid value representation/mapping errors)
+    if format == 'Bruker': origTimes = data.frame2retention_time(data.ms1_frames)
+    elif format == 'Bruker-csv': origTimes = data['#time[sec]'].to_numpy(dtype=np.float64)
+    else: origTimes = np.asarray(data.scan_info(), dtype='str')[:,0].astype(np.float64)*60
+    
+    #Offset the original measurement times, such that the first position's time equals 0
+    origTimes -= np.min(origTimes)
+    
+    #If the data is being sparesly acquired in lines, then the listed times in the file need to be shifted
+    if (impFlag or postFlag) and impOffset and scanMethod == 'linewise' and (lineMethod == 'segLine' or lineMethod == 'fullLine'): origTimes += (np.argwhere(self.mask[lineNum]==1).min()/self.finalDim[1])*((self.sampleWidth*1e3)/self.scanRate)
+    elif (impFlag or postFlag) and impOffset: sys.exit('\nError - Using implementation or post-process modes with an offset but not segmented-linewise operation is not currently a supported configuration.')
+    
+    if format == 'Bruker': scanPositions = data.ms1_frames
+    elif format != 'Bruker-csv': scanPositions = range(data.scan_range()[0], data.scan_range()[1]+1)
+    
+    #Read in and process spectrum data for each location; only use 'centroid' spectrums (default for Bruker .tdf files)
+    #Initially load data as strings (avoid accuracy loss from direct 32-to-64-bit casting)
+    #CWT choice/parameters - https://pmc.ncbi.nlm.nih.gov/articles/PMC9865071/ and #https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-10-4
+    #If version > 0.10.1, delete this following comment; left for documentation regarding Bruker .tdf file loading evaluation
+    #  Average (100x) times for Alphatims, multiplierz, and OpenTIMS opening a single frame from 'timstof-on-tdf-DESI/timstof-on-line-0001.d'
+    #  Frame  1: (0.07629285399802029, 0.03875579399522394, 0.01943221300141886)
+    #  Frame 50: (0.12654090399853885, 0.07968416800489649, 0.030406135010998696)
+    mzDataLine = []
+    if format == 'Bruker-csv': 
+        sumImageLine = data['TIC'].to_numpy(dtype=np.float64)
+        chanDataLine = [data[str(mzValue)].to_numpy(dtype=np.float64) for mzValue in chanValues]
+    else:     
+        sumImageLine, chanDataLine, warned = [], [], False
+        for pos in scanPositions:
+            if format == 'Bruker':
+                spectrum = data_tims.query(pos, columns={'mz', 'intensity'})
+                mzs, ints = np.asarray(frame['mz'], dtype='str').astype(np.float64), np.asarray(frame['intensity'], dtype='str').astype(np.float64)
+                sortedIndices = np.argsort(mzs)
+                mzs, ints = mzs[sortedIndices], ints[sortedIndices]
+            elif format == 'Agilent': 
+                if not warned: 
+                    warned = True
+                    print('\nWarning - Agilent data processing has not been validated or evaluated.\n')
+                spectrum = data.source.GetSpectrum(data.source, pos, data.noFilter, data.noFilter, 'peak')
+                mzs, ints = np.asarray(spectrum.XArray, dtype='str').astype(np.float64), np.asarray(spectrum.YArray, dtype='str').astype(np.float64)
+            elif format == 'Thermo':
+                spectrum = data.source.GetCentroidStream(pos, False)
+                if spectrum.Masses is not None and spectrum.Intensities is not None: 
+                    mzs, ints = np.asarray(spectrum.Masses, dtype='str').astype(np.float64), np.asarray(spectrum.Intensities, dtype='str').astype(np.float64)
+                else: 
+                    if not warned: 
+                        warned = True
+                        print('\nWarning - Sample contains profile mode data that must be centroided. Given the computational expense/time, it is highly recommended that centroiding be done before using this program.\n')
+                    spectrum = data.source.GetSegmentedScanFromScanNumber(pos, data.source.GetScanStatsForScanNumber(pos))
+                    mzs, ints = np.asarray(spectrum.Positions, dtype='str').astype(np.float64), np.asarray(spectrum.Intensities, dtype='str').astype(np.float64)
+                    peakLocations = find_peaks_cwt(ints, np.arange(1,30), min_snr=3.0)
+                    mzs, ints = mzs[peakLocations], ints[peakLocations]
+            chanDataLine.append([np.sum(ints[bisect_left(mzs, mzRange[0]):bisect_right(mzs, mzRange[1])]) for mzRange in mzRanges])
+            sumImageLine.append(np.sum(ints))
+            if overwriteAllChanFiles and readAllMSI: mzDataLine.append(binned_statistic(mzs, ints, statistic='sum', bins=mzFinalBinEdges, range=(mzLowerBound, mzUpperBound))[0])
+            
+    #Close the file; avoid using multiplierz method: data.close() - it's really (oddly) slow for a method that doesn't appear to do anything...
+    del data
+    _ = cleanup()
+    
+    #Set any invalid values to 0 and convert data to numpy arrays; move axes as needed
+    sumImageLine = np.nan_to_num(sumImageLine, nan=0, posinf=0, neginf=0)
+    if format != 'Bruker-csv': chanDataLine = np.nan_to_num(chanDataLine, nan=0, posinf=0, neginf=0).T
+    else: chanDataLine = np.nan_to_num(chanDataLine, nan=0, posinf=0, neginf=0)
+    if format != 'Bruker-csv': mzDataLine = np.nan_to_num(mzDataLine, nan=0, posinf=0, neginf=0).T
+    else: mzDataLine = np.nan_to_num(mzDataLine, nan=0, posinf=0, neginf=0)
+    
+    #Return filename and data if successful
+    return scanFileName, lineNum, origTimes, chanDataLine, sumImageLine, mzDataLine

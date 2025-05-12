@@ -1,7 +1,7 @@
 #Define logging configuration setup
 def setupLogging():
     if not debugMode: 
-        if erdModel == 'DLADS-TF': 
+        if 'DLADS-TF' in erdModel: 
             tf.get_logger().setLevel('ERROR')
             tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
         warnings.filterwarnings("ignore")

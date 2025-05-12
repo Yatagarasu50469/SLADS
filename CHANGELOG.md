@@ -7,9 +7,9 @@
 
 ## Current Development
 
-**0.10.1**  Add NRMSE, RAM OOM patches, DLADSv2, unify TIC and profile-mode spectra, per-channel ERD metric
-**0.10.2**  Initial Generative Learning Adversarial Network for Dynamic Sampling (GLANDS) framework  
-**0.10.3**  Default configurations with overrides  
+**0.10.1**  NRMSE & per-m/z ERD metrics, OOM patches, centroid-only loading, deprecate .tsf, OpenTIMS replaces Alphatims, DESI-CSV format
+**0.10.2**  Generative Learning Adversarial Network for Dynamic Sampling (GLANDS) framework  
+**0.10.3**  Use defaults with overrides for custom configurations
 
 ## Future Development
 
@@ -23,7 +23,7 @@
 
 ## Prior Releases
 
-**0.10.0**  PyTorch Migration, patches for DESI import speed, parallel visualizations, and model saving/loading  
+**0.10.0**  PyTorch migration, patches for DESI import speed, parallel visualizations, and model saving/loading  
 **0.9.7**   Reload option for .hdf5 data, patch pointwise selection  
 **0.9.6**   Adjust ERD processing and visualizations, add progression map, compute times, and alphatims option  
 **0.9.5**   MALDI optical, input config, .tdf/.tsf compatibility, disable whole spectra metrics option, .imzML output  

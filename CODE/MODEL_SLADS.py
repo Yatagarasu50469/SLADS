@@ -20,7 +20,7 @@ def computePolyFeatures(sampleData, tempScanData, reconImages):
     neighborValues = measuredValues[tempScanData.neighborIndices]
     
     #Create array to hold features
-    feature = np.zeros((np.shape(tempScanData.squareUnMeasuredIdxs)[0],6), dtype=np.float32)
+    feature = np.zeros((np.shape(tempScanData.squareUnMeasuredIdxs)[0],6))
     
     #Compute std div features
     diffVect = abs(neighborValues-np.transpose(np.matlib.repmat(inputValues, np.shape(neighborValues)[1],1)))
@@ -51,19 +51,19 @@ class SLADS:
     
         #Extract polyFeatures and squareRDValues for each input channel in the sample
         polyFeatureStack, squareRDValueStack = [], []
-        for sample in trainingDatabase:
+        for index, sample in enumerate(trainingDatabase):
             for channelNum in range(0, len(sample.polyFeatures)):
                 polyFeatureStack.append(sample.polyFeatures[channelNum])
                 squareRDValueStack.append(sample.squareRDValues[channelNum])
+            trainingDatabase[index] = None
         
         #Collapse the stacks for regression
         self.bigPolyFeatures = np.row_stack(polyFeatureStack)
         self.bigRD = np.concatenate(squareRDValueStack)
-        
+    
+    #Create and save regression model based on user selection
     def train(self):
-        
-        #Create and save regression model based on user selection
         if erdModel == 'SLADS-LS': model = linear_model.LinearRegression()
-        elif erdModel == 'SLADS-Net': model = nnr(activation='identity', solver='adam', alpha=1e-4, hidden_layer_sizes=(50, 5), random_state=1, max_iter=500)
+        elif erdModel == 'SLADS-Net': model = nnr(activation='identity', solver='adam', alpha=1e-4, hidden_layer_sizes=(50, 5), random_state=1, max_iter=500, verbose=True)
         model.fit(self.bigPolyFeatures, self.bigRD)
         np.save(dir_TrainingResults + modelName, model)

@@ -19,12 +19,7 @@ if os.path.exists(destResultsFolder):
 
 #Set a base model name for the specified configuration; must specify/append c value during run
 modelName = 'model_'
-if erdModel == 'SLADS-LS': modelName += 'SLADS-LS_'
-elif erdModel == 'SLADS-Net': modelName += 'SLADS-Net_'
-elif erdModel == 'DLADS': modelName += 'DLADS_'
-elif erdModel == 'DLADS-TF': modelName += 'DLADS_TF_'
-elif erdModel == 'DLADS-PY': modelName += 'DLADS_PY_'
-elif erdModel == 'GLANDS': modelName += 'GLANDS_'
+modelName += erdModel.replace('-', '_') + '_'
 if chanSingle: modelName += 'chanSingle_'
 else: modelName += 'chanMultiple_'
 if staticWindow: modelName += 'statWin_' + str(staticWindowSize) + '_'

@@ -54,7 +54,6 @@ def optimizeC(sampleDataset):
                 time.sleep(0.1)
             computePool.join()
             results = np.split(np.asarray(results.get().copy(), dtype='object'), len(cValues))
-            
             del samplingProgress_Actor, futures
             resetRay(numberCPUS)
         else:
@@ -214,20 +213,19 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
     dataPrintout.append(['RD Compute Time (s)', np.mean(allRDTimes), '+/-', np.std(allRDTimes)])
     pd.DataFrame(dataPrintout).to_csv(dir_TrainingResults + 'trainingValidation_RDTimes.csv')
     
-    #Reference a result, call for result completion/printout, and sort into either training or validation sets; storing index for later lookup
+    #For each sampling result, call for completion/printout, sorting into either training or validation sets and storing sampleData index for reference in training
+    #Remove any variables not needed for training/validation to reduce memory and storage
     trainingDatabase, validationDatabase = [], []
-    for index in tqdm(range(0, len(results)), desc='Processing', leave=True, ascii=asciiFlag):
-        result = results[index]
+    for indexResult, result in tqdm(enumerate(results), total=len(results), desc='Processing', leave=True, ascii=asciiFlag):
         result.complete(trainingValidationSampleData[result.sampleDataNum])
-        for sample in results[index].samples: 
-            sample.sampleDataIndex = sampleDataIndexList[index]
-            if trainSampleBoolList[index]: trainingDatabase.append(sample)
-            else: validationDatabase.append(sample)
-    
-    #Store the complete databases to disk
-    pickle.dump(trainingDatabase, open(dir_TrainingResults + 'trainingDatabase.p', 'wb'))
-    pickle.dump(validationDatabase, open(dir_TrainingResults + 'validationDatabase.p', 'wb'))
-    
+        for indexSample, sample in enumerate(result.samples): 
+            sample.sampleDataIndex = sampleDataIndexList[indexResult]
+            sampleCopy = copy.deepcopy(sample)
+            del sampleCopy.mask, sampleCopy.progMap, sampleCopy.squareERD, sampleCopy.squareERDs, sampleCopy.chanImages, sampleCopy.sumImage, sampleCopy.iteration, sampleCopy.unMeasuredIdxs, sampleCopy.squareSumReconImage, sampleCopy.sumReconImage, sampleCopy.chanReconImages, sampleCopy.measuredIdxs, sampleCopy.RDPPs, sampleCopy.RDs, sampleCopy.RD, sampleCopy.ERD, sampleCopy.ERDs, sampleCopy.processedERDs, sampleCopy.processedERD
+            if trainSampleBoolList[indexResult]: trainingDatabase.append(sampleCopy)
+            else: validationDatabase.append(sampleCopy)
+            result.samples[indexSample] = None
+        results[indexResult] = None
     return trainingDatabase, validationDatabase
 
 #Given a training database, train a regression model
@@ -247,9 +245,9 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
     
     #Initiate the specified model
     if 'SLADS' in erdModel: model = SLADS(True)
-    elif erdModel == 'DLADS': model = DLADS(True, gpus)
-    elif erdModel == 'DLADS-TF': model = DLADS_TF(True, gpus)
-    elif erdModel == 'DLADS-PY': model = DLADS_PY(True, gpus)
+    elif erdModel == 'DLADS-TF-DEP': model = DLADS_TF_DEP(True, gpus)
+    elif erdModel == 'DLADS-TF-SYNC': model = DLADS_TF_SYNC(True, gpus)
+    elif erdModel == 'DLADS-PY-SYNC': model = DLADS_PY_SYNC(True, gpus)
     elif erdModel == 'GLANDS': sys.exit('\nError - GLANDS training procedure not yet defined')
     else: sys.exit('\nError - Specified model type does not exist')
     
