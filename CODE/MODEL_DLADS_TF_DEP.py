@@ -268,7 +268,7 @@ class DLADS_TF_DEP:
         with self.device: 
         
             #Setup learning rate and optimizer
-            self.learningRate = copy.deepcopy(learningRate)
+            self.learningRate = deepcopy(learningRate)
             self.setOptimizer()
             
             #Setup storage for losses/events
@@ -276,7 +276,7 @@ class DLADS_TF_DEP:
             
             #Setup variables for early stopping critera
             visualizeLastEpoch, self.loss_BST, self.epoch_BST, endTraining, patienceLost, modelStagnation = maxEpochs-1, np.inf, -1, False, False, False
-            if sepEpochs>0: self.sepEpochs, self.minEpochs = copy.deepcopy(sepEpochs), sepEpochs*2
+            if sepEpochs>0: self.sepEpochs, self.minEpochs = deepcopy(sepEpochs), sepEpochs*2
             else: self.sepEpochs, self.minEpochs = 0, 0
             
             #Create progress bar
@@ -306,7 +306,7 @@ class DLADS_TF_DEP:
                 else: loss_CUR = self.loss_TRN[-1]
                 
                 #If this model is the best performing, update the best model parameters and reset applicable variables; if not an improvement and not using mean early stopping, increase the patience counter
-                if (loss_CUR < self.loss_BST): self.model_BST, self.loss_BST, self.epoch_BST, self.patienceCounter, self.stagnationCounter = copy.deepcopy(self.model.get_weights()), loss_CUR, epoch, 0, 0
+                if (loss_CUR < self.loss_BST): self.model_BST, self.loss_BST, self.epoch_BST, self.patienceCounter, self.stagnationCounter = deepcopy(self.model.get_weights()), loss_CUR, epoch, 0, 0
                 elif (self.sepEpochs == 0) and (epoch >= self.minEpochs): self.patienceCounter += 1
                 
                 #If using mean early stopping, then evaluate/track training status by comparing historical and current moving averages; if below minEpochs, append nan as placeholder
@@ -369,9 +369,9 @@ class DLADS_TF_DEP:
             self.model.save(dir_TrainingResults + modelName, include_optimizer=False)
 
             #Save training history
-            history = np.vstack([np.array(range(0, epoch+1)), self.loss_TRN])
+            history = np.vstack([np.asarray(range(0, epoch+1)), self.loss_TRN])
             if self.valFlag: history = np.vstack([history, self.loss_VAL])
-            pd.DataFrame(history.T, columns=['Epoch','Loss_TRN', 'Loss_VAL']).to_csv(dir_TrainingResults+'trainingHistory.csv', index=False)
+            pd.DataFrame(np.transpose(history), columns=['Epoch','Loss_TRN', 'Loss_VAL']).to_csv(dir_TrainingResults+'trainingHistory.csv', index=False)
     
     def predict(self, input):
         with self.device: 

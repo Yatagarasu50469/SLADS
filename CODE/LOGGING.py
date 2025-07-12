@@ -7,6 +7,7 @@ def setupLogging():
         warnings.filterwarnings("ignore")
         logging.root.setLevel(logging.ERROR)
         logging.raiseExceptions = False
+        _ = np.seterr(divide='ignore', invalid='ignore')
 
 #Context manager to suppress outputs to stderr and stdout
 #Reference: https://stackoverflow.com/questions/11130156/suppress-stdout-stderr-print-from-python-functions

@@ -44,7 +44,7 @@ def optimizeC(sampleDataset):
             pbar.n = 0
             pbar.refresh()
             while (True):
-                pbar.n = np.clip(round(copy.deepcopy(ray.get(samplingProgress_Actor.getCurrent.remote())),2), 0, maxProgress)
+                pbar.n = np.clip(round(deepcopy(ray.get(samplingProgress_Actor.getCurrent.remote())),2), 0, maxProgress)
                 pbar.refresh()
                 if results.ready(): 
                     pbar.n = maxProgress
@@ -159,11 +159,7 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
         elif trainSampleBool: sampleDataIndex, trainSampleBool = -1, False
         sampleDataIndex+=1
         
-        for maskNum in tqdm(range(0,numMasks), desc = 'Masks', leave=False, ascii=asciiFlag, disable=parallelization):
-            
-            #Make a copy of the sampleData with a new initial measurement mask
-            sampleData = copy.deepcopy(trainingValidationSampleData[sampleDataNum])
-            sampleData.generateInitialSets(scanMethodTV)
+        for maskNum in tqdm(range(0, numMasks), desc = 'Masks', leave=False, ascii=asciiFlag, disable=parallelization):
             
             #Store training/validation sampleData index to identify the corresponding reference during training procedure
             sampleDataIndexList.append(sampleDataIndex)
@@ -173,13 +169,19 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
             if trainSampleBool: saveLocation = trainSaveLocations[maskNum]
             else: saveLocation = valSaveLocations[maskNum]
             
+            #Make a copy of the sampleData
+            sampleData = deepcopy(trainingValidationSampleData[sampleDataNum])
+            
+            #Generate a new initial measurement mask
+            sampleData.generateInitialSets(scanMethodTV)
+            
             #If parallel, then add job to list, otherwise just run and collect the result
             if parallelization: 
-                futures.append((sampleDataNum, sampleData, optimalC, False, percToScanTV, percToVizTV, lineVisitAll, saveLocation, True, samplingProgress_Actor, 0.01))
-                maxProgress+=sampleData.stopPerc
+                futures.append((sampleDataNum, sampleData, optimalC, False, percToScanTV, percToVizTV, lineVisitAll, saveLocation, True, samplingProgress_Actor, 0.01, maskNum))
+                maxProgress += sampleData.stopPerc
             else: 
-                results.append(runSampling(sampleDataNum, sampleData, optimalC, False, percToScanTV, percToVizTV, lineVisitAll, saveLocation, False))
-    
+                results.append(runSampling(sampleDataNum, sampleData, optimalC, False, percToScanTV, percToVizTV, lineVisitAll, saveLocation, False, None, None, maskNum))
+
     #If parallel, initialize a global progress bar, start jobs, and wait for results, regularly updating progress bar
     if parallelization: 
         
@@ -194,7 +196,7 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
         pbar.n = 0
         pbar.refresh()
         while (True):
-            pbar.n = np.clip(round(copy.deepcopy(ray.get(samplingProgress_Actor.getCurrent.remote())),2), 0, maxProgress)
+            pbar.n = np.clip(round(deepcopy(ray.get(samplingProgress_Actor.getCurrent.remote())),2), 0, maxProgress)
             pbar.refresh()
             if results.ready(): 
                 pbar.n = maxProgress
@@ -220,8 +222,8 @@ def genTrainValDatabases(trainingValidationSampleData, optimalC):
         result.complete(trainingValidationSampleData[result.sampleDataNum])
         for indexSample, sample in enumerate(result.samples): 
             sample.sampleDataIndex = sampleDataIndexList[indexResult]
-            sampleCopy = copy.deepcopy(sample)
-            del sampleCopy.mask, sampleCopy.progMap, sampleCopy.squareERD, sampleCopy.squareERDs, sampleCopy.chanImages, sampleCopy.sumImage, sampleCopy.iteration, sampleCopy.unMeasuredIdxs, sampleCopy.squareSumReconImage, sampleCopy.sumReconImage, sampleCopy.chanReconImages, sampleCopy.measuredIdxs, sampleCopy.RDPPs, sampleCopy.RDs, sampleCopy.RD, sampleCopy.ERD, sampleCopy.ERDs, sampleCopy.processedERDs, sampleCopy.processedERD
+            sampleCopy = deepcopy(sample)
+            del sampleCopy.mask, sampleCopy.progMap, sampleCopy.squareERD, sampleCopy.squareERDs, sampleCopy.chanImages, sampleCopy.sumImage, sampleCopy.iteration, sampleCopy.unMeasuredIdxs, sampleCopy.squareSumReconImage, sampleCopy.sumReconImage, sampleCopy.chanReconImages, sampleCopy.measuredIdxs, sampleCopy.RDPPs, sampleCopy.processedERDs, sampleCopy.processedERD
             if trainSampleBoolList[indexResult]: trainingDatabase.append(sampleCopy)
             else: validationDatabase.append(sampleCopy)
             result.samples[indexSample] = None
@@ -235,8 +237,8 @@ def trainModel(trainingDatabase, validationDatabase, trainingSampleData, validat
     if erdModel != 'GLANDS' and len(trainingDatabase) == 0: sys.exit('\nError - No training data available.')
     elif len(trainingSampleData) == 0: sys.exit('\nError - No training data available.')
     
-    #Delete any existing models from the training directory
-    for file in [file for file in glob.glob(dir_TrainingData+'*') if 'model_' in file]: 
+    #Delete any existing models from the training results directory
+    for file in [file for file in glob.glob(dir_TrainingResults+'*') if 'model_' in file]: 
         if os.path.isfile(file): os.remove(file)
         else: shutil.rmtree(file)
 

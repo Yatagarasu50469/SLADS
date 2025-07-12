@@ -35,6 +35,7 @@ def resetRay(numberCPUS):
 if 'DLADS-PY' in erdModel or 'GLANDS' in erdModel: systemGPUs = ", ".join(map(str, [*range(torch.cuda.device_count())]))
 elif 'DLADS-TF' in erdModel: systemGPUs = ", ".join(map(str, [*range(len(tf.config.list_physical_devices('GPU')))]))
 else: systemGPUs = ""
+
 #Note GPUs available/specified
 if 'DLADS-PY' in erdModel or 'GLANDS' in erdModel: 
     if not torch.cuda.is_available(): gpus = []

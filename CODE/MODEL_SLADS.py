@@ -23,7 +23,7 @@ def computePolyFeatures(sampleData, tempScanData, reconImages):
     feature = np.zeros((np.shape(tempScanData.squareUnMeasuredIdxs)[0],6))
     
     #Compute std div features
-    diffVect = abs(neighborValues-np.transpose(np.matlib.repmat(inputValues, np.shape(neighborValues)[1],1)))
+    diffVect = abs(neighborValues-transposeContiguous(np.matlib.repmat(inputValues, np.shape(neighborValues)[1],1)))
     feature[:,0] = np.sum(tempScanData.neighborWeights*diffVect, axis=1)
     feature[:,1] = np.sqrt(np.sum(np.power(diffVect,2),axis=1))
     

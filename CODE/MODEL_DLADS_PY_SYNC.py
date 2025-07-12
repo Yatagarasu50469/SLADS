@@ -61,36 +61,90 @@ class DataPreprocessing_DLADS(Dataset):
     def __len__(self):
         return len(self.data_Inputs)
 
-#Compute RDPPs, standardizing/normalizing input data, as done in operation (must use torch, as numpy arithmetic optimization yields slightly different values)
+#Compute RDPPs
 def computeRDPPs(labels, recons):
-    recons, labels = torch.from_numpy(recons).float(), torch.from_numpy(labels).float()
-    if processInputData == 'standardize': 
-        meanValue, stdValue = torch.mean(recons, dim=(-1, -2), keepdim=True), torch.std(recons, dim=(-1, -2), correction=0, keepdim=True)
-        recons, labels = torch.nan_to_num((recons-meanValue)/stdValue), torch.nan_to_num((labels-meanValue)/stdValue)
-    elif processInputData == 'normalize': 
-        minValue = torch.amin(recons, dim=(-1, -2), keepdim=True)
-        diffValue = torch.amax(recons, dim=(-1, -2), keepdim=True) - minValue
-        recons, labels = torch.nan_to_num((recons-minValue)/diffValue), torch.nan_to_num((labels-minValue)/diffValue)
-    elif processInputData != 'None': 
-        sys.exit('\nError - Specified processInputData method was not supported.')
-    return abs(labels.numpy()-recons.numpy())
-
-#Prepare data for DLADS/GLANDS model input, standardizing/normalizing input data, as done in operation
-def prepareInput(recons, squareMask, squareOpticalImage=None):
-    recons = torch.from_numpy(recons).float()
-    if processInputData == 'standardize': 
-        meanValue = torch.mean(recons, dim=(-1, -2), keepdim=True)
-        stdValue = torch.std(recons, dim=(-1, -2), correction=0, keepdim=True)
-        recons = torch.nan_to_num((recons-meanValue)/stdValue)
-    elif processInputData == 'normalize': 
-        minValue = torch.amin(recons, dim=(-1, -2), keepdim=True)
-        diffValue = torch.amax(recons, dim=(-1, -2), keepdim=True) - minValue
-        recons = torch.nan_to_num((recons-minValue)/diffValue)
-    elif processInputData != 'None': 
-        sys.exit('\nError - Specified processInputData method was not supported.')
-    recons = recons.numpy()
     
+    #Ensure inputs are 3 dimensional
     if recons.ndim==2: recons = np.expand_dims(recons, 0)
+    if labels.ndim==2: labels = np.expand_dims(labels, 0)
+    
+    #Process the inputs
+    if processInputRDPP == 'normalize' or processInputRDPP == 'normalize2': 
+        minValue, maxValue = np.min(recons, axis=processAxis), np.max(recons, axis=processAxis)
+        recons = normalizeSafe(recons, minValue, maxValue)
+        labels = normalizeSafe(labels, minValue, maxValue)
+        if processInputRDPP == 'normalize2': 
+            recons = (recons*2)-1
+            labels = (labels*2)-1
+    elif processInputRDPP == 'standardize': 
+        meanValue, stdValue = np.mean(recons, axis=processAxis), np.std(recons, axis=processAxis)
+        recons = standardizeSafe(recons, meanValue, stdValue)
+        labels = standardizeSafe(labels, meanValue, stdValue)
+    elif processInputRDPP == 'center': 
+        meanValue = np.mean(recons, axis=processAxis)
+        recons = centerSafe(recons, meanValue)
+        labels = centerSafe(labels, meanValue)
+    elif processInputRDPP == 'logInvLogit':
+        recons = divideSafe(recons, (1+recons))
+        labels = divideSafe(labels, (1+labels))
+    elif processInputRDPP == 'normalizeLabels':
+        minValue, maxValue = np.min(labels, axis=processAxis), np.max(labels, axis=processAxis)
+        recons = normalizeSafe(recons, minValue, maxValue)
+        labels = normalizeSafe(labels, minValue, maxValue)
+    elif processInputRDPP == 'standardizeLabels': 
+        meanValue, stdValue = np.mean(labels, axis=processAxis), np.std(labels, axis=processAxis)
+        recons = standardizeSafe(recons, meanValue, stdValue)
+        labels = standardizeSafe(labels, meanValue, stdValue)
+    elif processInputRDPP == 'normalizeAsym':
+        minValue, maxValue = np.min(recons, axis=processAxis), np.max(recons, axis=processAxis)
+        recons = normalizeSafe(recons, minValue, maxValue)
+        minValue, maxValue = np.min(labels, axis=processAxis), np.max(labels, axis=processAxis)
+        labels = normalizeSafe(labels, minValue, maxValue)
+    elif processInputRDPP == 'standardizeAsym': 
+        meanValue, stdValue = np.mean(recons, axis=processAxis), np.std(recons, axis=processAxis)
+        recons = standardizeSafe(recons, meanValue, stdValue)
+        meanValue, stdValue = np.mean(labels, axis=processAxis), np.std(labels, axis=processAxis)
+        labels = standardizeSafe(labels, meanValue, stdValue)
+    elif processInputRDPP != 'None': 
+        sys.exit('\nError - Specified processInputRDPP method was not supported.')
+    
+    #Compute absolute difference
+    RDPPs = np.abs(labels-recons)
+    
+    #Process the outputs
+    if processRDPP == 'normalize' or processRDPP == 'normalize2': 
+        minValue, maxValue = np.min(RDPPs, processAxis), np.max(RDPPs, axis=processAxis)
+        RDPPs = normalizeSafe(RDPPs, minValue, maxValue)
+        if processRDPP == 'normalize2': RDPPs = (RDPPs*2)-1
+    elif processRDPP == 'standardize': 
+        meanValue, stdValue = np.mean(RDPPs, axis=processAxis), np.std(RDPPs, axis=processAxis)
+        RDPPs = standardizeSafe(RDPPs, meanValue, stdValue)
+    elif processRDPP == 'logInvLogit':
+        RDPPs = divideSafe(RDPPs, (1+RDPPs))
+    elif processRDPP == 'scale': 
+        RDPPs = divideSafe(RDPPs, np.max(labels, axis=processAxis))
+    elif processRDPP != 'None': 
+        sys.exit('\nError - Specified processRDPP method was not supported.')
+    
+    return RDPPs
+
+#Prepare data for DLADS/GLANDS model input, standardizing/normalizing input data
+def prepareInput(recons, squareMask, squareOpticalImage=None):
+    if recons.ndim==2: recons = np.expand_dims(recons, 0)
+    if processInputData == 'normalize' or processInputData == 'normalize2': 
+        minValue, maxValue = np.min(recons, axis=processAxis), np.max(recons, axis=processAxis)
+        recons = normalizeSafe(recons, minValue, maxValue)
+        if processInputData == 'normalize2': recons = (recons*2)-1
+    elif processInputData == 'standardize': 
+        meanValue, stdValue = np.mean(recons, axis=processAxis), np.std(recons, axis=processAxis)
+        recons = standardizeSafe(recons, meanValue, stdValue)
+    elif processInputData == 'center': 
+        meanValue = np.mean(recons, axis=processAxis)
+        recons = centerSafe(recons, meanValue)
+    elif processInputData == 'logInvLogit':
+        recons = divideSafe(recons, (1+recons))
+    elif processInputData != 'None': 
+        sys.exit('\nError - Specified processInputData method was not supported.')
     inputStack = []
     if 'measureData' in inputChannels: inputStack.append(recons*squareMask)
     if 'reconData' in inputChannels: inputStack.append(recons*(1-squareMask))
@@ -98,7 +152,7 @@ def prepareInput(recons, squareMask, squareOpticalImage=None):
     if 'opticalData' in inputChannels: inputStack.append(np.repeat(np.expand_dims(squareOpticalImage, 0), len(recons), axis=0))
     if 'mask' in inputChannels: inputStack.append(np.repeat(np.expand_dims(squareMask, 0), len(recons), axis=0))
     if len(inputStack) != len(inputChannels): sys.exit('\nError - The number of intended input channels did not match with the number added to the input stack. Please verify that the specified inputChannels are valid.')
-    return np.moveaxis(np.stack(inputStack, axis=-1), -1, 1)
+    return np.ascontiguousarray(np.moveaxis(np.stack(inputStack, axis=-1), -1, 1))
 
 #Custom definition of bilinear interpolation to force deterministic backpropogation
 #Default behavior follows the default Bilinear arguments used by TensorFlow (tf.image.resize) and PyTorch (torch.nn.functional.interpolate)
@@ -194,9 +248,9 @@ class Conv_BF_DLADS(nn.Module):
         super().__init__()
         self.in_channels = in_channels
         self.stride = stride
-        if sigma == 1: filter = np.array([1., 2., 1.])
-        elif sigma == 2: filter = np.array([1., 4., 6., 4., 1.])
-        elif sigma == 3: filter = np.array([1., 6., 15., 20., 15., 6., 1.])
+        if sigma == 1: filter = np.ascontiguousarray([1., 2., 1.])
+        elif sigma == 2: filter = np.ascontiguousarray([1., 4., 6., 4., 1.])
+        elif sigma == 3: filter = np.ascontiguousarray([1., 6., 15., 20., 15., 6., 1.])
         else: sys.exit('\nError - Specified sigma value for binomial filter not supported')
         filter = torch.Tensor(filter[:,None]*filter[None,:])
         filter = filter/torch.sum(filter)
@@ -238,6 +292,12 @@ class Conv_SC_DLADS(nn.Module):
         elif non_linearity=='relu': self.act, negative_slope = nn.ReLU(inplace=True), 0.0
         elif non_linearity=='linear': self.act, negative_slope = lambda inputs:inputs, 1.0
         elif non_linearity=='prelu': self.act, negative_slope, non_linearity = nn.PReLU(init=leakySlope), leakySlope, 'leaky_relu'
+        elif non_linearity=='selu':  self.act, negative_slope = nn.SELU(inplace=True), 0.0
+        elif non_linearity=='seluSN': self.act, negative_slope, non_linearity = nn.SELU(inplace=True), 0.0, 'linear'
+        elif non_linearity=='silu': self.act, negative_slope, non_linearity = nn.SiLU(inplace=True), 0.0, 'relu'
+        elif non_linearity=='gelu': self.act, negative_slope, non_linearity = nn.GELU(), 0.0, 'relu'
+        elif non_linearity=='mish': self.act, negative_slope, non_linearity = nn.Mish(inplace=True), 0.0, 'relu'
+        elif non_linearity=='sigmoid': self.act, negative_slope = nn.Sigmoid(), 0.0
         else: sys.exit('\nError - Unexpected activation function specified.')
         
         #Setup initialization for base convolution layer
@@ -323,7 +383,7 @@ class Model_DLADS(nn.Module):
         self.layersDN, self.layersUP, self.numFiltInList, self.numFiltOutList = nn.ModuleList([]), nn.ModuleList([]), [], []
         self.convIn = Conv_IN_DLADS(numFiltIn, numFiltOut)
         for depthNum in range(0, networkDepth):
-            numFiltIn = copy.deepcopy(numFiltOut)
+            numFiltIn = deepcopy(numFiltOut)
             if doubleFilters: numFiltOut = numFiltIn*2
             else: numFiltOut = numFiltIn
             self.numFiltInList.append(numFiltIn)
@@ -374,7 +434,7 @@ class DLADS_PY_SYNC:
         #Upcoming compile function might improve speed even further; not currently working 2.2.0
         #https://github.com/pytorch/pytorch/pull/119750
         #self.model = torch.compile(self.model, dynamic=True, mode="reduce-overhead")
-    
+        
     def loadData(self, trainingDatabase, validationDatabase):
     
         #Extract and prepare training data
@@ -460,7 +520,7 @@ class DLADS_PY_SYNC:
                 else: input = self.inputs_Viz[vizSampleNum]
                 
                 squareRD = self.labels_Viz[vizSampleNum]
-                with torch.inference_mode(): squareERD = torch.mean(self.model(input), 0).detach().cpu().numpy()[0]
+                with torch.inference_mode(): squareERD = np.mean(np.ascontiguousarray(np.moveaxis(self.model(input).detach().cpu().numpy(), 1, 0))[0], axis=0)
                 ERD_PSNR, ERD_SSIM, ERD_NRMSE = compareImages(squareRD, squareERD, np.min(squareRD), np.max(squareRD))
                 
                 ax = plt.subplot2grid((3,2), (vizSampleNum+1,0))
@@ -494,9 +554,6 @@ class DLADS_PY_SYNC:
         
     def computeLoss(self, data, label, trainFlag=False, epoch=None, step=None):
         
-        #Zero network gradients
-        if trainFlag: self.model.zero_grad()
-        
         #Move data to device if not already there
         if not storeOnDevice: data, label = data.to(self.device), label.to(self.device)
         
@@ -507,8 +564,9 @@ class DLADS_PY_SYNC:
         #If network returned all 0s, then can use this line to enter model (in combination with other relevent commented line); useful for debugging
         #if torch.sum(pred).item() == 0: self.model(data, True)
         
-        #Compute loss gradients and update network parameters
+        #Zero the gradients, perform backpropogation, and update the optimizer/scheduler
         if trainFlag:# and torch.sum(pred).item() != 0: #Skip any updates where predictions would crash training
+            self.model.zero_grad()
             loss.backward()
             self.opt.step()
             if scheduler_CAWR: self.scheduler.step(epoch+step/self.numTRN)
@@ -527,7 +585,7 @@ class DLADS_PY_SYNC:
     def train(self):
         
         #Setup initial learning rate, optimizer, loss, and scheduler
-        self.learningRate = copy.deepcopy(learningRate)
+        self.learningRate = deepcopy(learningRate)
         self.setOptimizer()
         if lossFunction == 'MAE': self.lossFunc = nn.L1Loss()
         elif lossFunction == 'MSE': self.lossFunc = nn.MSELoss()
@@ -539,7 +597,7 @@ class DLADS_PY_SYNC:
         
         #Setup variables for early stopping critera
         visualizeLastEpoch, self.loss_BST, self.epoch_BST, endTraining, patienceLost, modelStagnation = maxEpochs-1, np.inf, -1, False, False, False
-        if sepEpochs>0: self.sepEpochs, self.minEpochs = copy.deepcopy(sepEpochs), sepEpochs*2
+        if sepEpochs>0: self.sepEpochs, self.minEpochs = deepcopy(sepEpochs), sepEpochs*2
         else: self.sepEpochs, self.minEpochs = 0, 0
         
         #Create progress bar
@@ -562,7 +620,7 @@ class DLADS_PY_SYNC:
             else: loss_CUR = self.loss_TRN[-1]
             
             #If this model is the best performing, update the best model parameters and reset applicable variables; if not an improvement and not using mean early stopping, increase the patience counter
-            if (loss_CUR < self.loss_BST): self.model_BST, self.loss_BST, self.epoch_BST, self.patienceCounter, self.stagnationCounter = copy.deepcopy(self.model.state_dict()), loss_CUR, epoch, 0, 0
+            if (loss_CUR < self.loss_BST): self.model_BST, self.loss_BST, self.epoch_BST, self.patienceCounter, self.stagnationCounter = deepcopy(self.model.state_dict()), loss_CUR, epoch, 0, 0
             elif (self.sepEpochs == 0) and (epoch >= self.minEpochs): self.patienceCounter += 1
             
             #If using mean early stopping, then evaluate/track training status by comparing historical and current moving averages; if below minEpochs, append nan as placeholder
@@ -605,7 +663,7 @@ class DLADS_PY_SYNC:
             if trainingProgressionVisuals and ((epoch == 0) or (epoch%trainingVizSteps == 0) or (epoch == self.epoch_BST) or (epoch == visualizeLastEpoch) or endTraining): self.visualizeTraining(epoch)
             
             #If the model has stagnated, exit the program
-            if modelStagnation: sys.exit('\nError - The model was unable to be trained; this is most likely due to the learning rate being set too high.')
+            if modelStagnation: sys.exit('\nError - The model was unable to be trained; learning rate may be too high or alternate activation function(s) might be needed.')
             
             #As applicable, terminate the training loop
             if endTraining: break
@@ -633,14 +691,14 @@ class DLADS_PY_SYNC:
         os.remove(modelPath + '.pt')
         
         #Save training history
-        history = np.vstack([np.array(range(0, epoch+1)), self.loss_TRN])
+        history = np.vstack([np.asarray(range(0, epoch+1)), self.loss_TRN])
         if self.valFlag: history = np.vstack([history, self.loss_VAL])
-        pd.DataFrame(history.T, columns=['Epoch','Loss_TRN', 'Loss_VAL']).to_csv(dir_TrainingResults+'trainingHistory.csv', index=False)
+        pd.DataFrame(np.transpose(history), columns=['Epoch','Loss_TRN', 'Loss_VAL']).to_csv(dir_TrainingResults+'trainingHistory.csv', index=False)
         
     def predict(self, input):
         if len(input.shape) == 3: input = np.expand_dims(input, 0)
         input = torch.from_numpy(input).float()
         input = input.to(self.device)
-        with torch.inference_mode(): squareERDs = np.moveaxis(self.model(input).detach().cpu().numpy(), 1, 0)[0]
+        with torch.inference_mode(): squareERDs = np.ascontiguousarray(np.moveaxis(self.model(input).detach().cpu().numpy(), 1, 0))[0]
         return squareERDs
         

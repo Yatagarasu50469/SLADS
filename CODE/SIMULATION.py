@@ -18,15 +18,16 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         #Ray sends warning as error message regarding size; temporarily redirect output during model loading to prevent spurious output(s); https://github.com/ray-project/ray/issues/43264
         with suppressSTD() if not debugMode else nullcontext():
             
-            #Create a model for each GPU available (provided there is a job for it)
+            #If not using an oracle create a model for each GPU available (provided there is a job for it), sequentially setting up models to prevent file conflicts
             numJobs = len(sortedSampleFolders)
-            if numGPUs > 0: 
-                models = [Model_Actor.remote(erdModel, dir_TrainingResults, modelName, gpus[gpuNum]) for gpuNum in range(0, np.clip(numGPUs, 0, numJobs))]
-            else: models = [Model_Actor.remote(erdModel, dir_TrainingResults, modelName)]
+            if not oracleTesting:
+                if numGPUs > 0: models = [Model_Actor.remote(erdModel, dir_TrainingResults, modelName, gpus[gpuNum]) for gpuNum in range(0, np.clip(numGPUs, 0, numJobs))]
+                else: models = [Model_Actor.remote(erdModel, dir_TrainingResults, modelName)]
+                for model in models: _ = ray.get(model.setup.remote())
+            else:
+                if numGPUs > 0: models = [None for gpuNum in range(0, np.clip(numGPUs, 0, numJobs))]
+                else: models = [None]
             numModels = len(models)
-            
-            #Setup model on each GPU sequentially (prevents potential file conflicts)
-            for model in models: _ = ray.get(model.setup.remote())
         
         #Run algorithm for each of the samples, in parallel if possible, timing and storing metric progression for each; (1 less CPU in pool for model server deployment)
         if parallelization and numJobs>1: 
@@ -39,15 +40,16 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
             #Start parallel sampling operations
             if numGPUs > 0: futures = [(sampleNum, sampleDataset[sampleNum], optimalC, models[sampleNum%numModels], percToScan, percToViz, lineVisitAll, dir_Results, True, samplingProgress_Actor, 0.01) for sampleNum in range(0, numJobs)]
             else: futures = [(sampleNum, sampleDataset[sampleNum], optimalC, models[0], percToScan, percToViz, lineVisitAll, dir_Results, True, samplingProgress_Actor, 0.01) for sampleNum in range(0, numJobs)]
-            computePool = Pool(numberCPUS-numModels)
+            if not oracleTesting: computePool = Pool(numberCPUS-numModels)
+            else: computePool = Pool(numberCPUS)
             results = computePool.starmap_async(runSampling, futures)
             computePool.close()
             
             #While some results have yet to be returned, regularly update the global progress bar, then retrieve results, and purge/reset ray (actors and server)
             pbar.n = 0
             pbar.refresh()
-            while (True):
-                pbar.n = np.clip(round(copy.deepcopy(ray.get(samplingProgress_Actor.getCurrent.remote())),2), 0, maxProgress)
+            while True:
+                pbar.n = np.clip(round(deepcopy(ray.get(samplingProgress_Actor.getCurrent.remote())),2), 0, maxProgress)
                 pbar.refresh()
                 if results.ready(): 
                     pbar.n = maxProgress
@@ -86,11 +88,11 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
     warningOOM = False
     
     for index in tqdm(range(0, len(resultLocations)), desc='Processing', position=0, leave=True, ascii=asciiFlag):
-    
+        
         #Load pickled result and sampleData from disk
         result = pickle.load(open(resultLocations[index], "rb" ))
         sampleData = pickle.load(open(sampleDataLocations[index], "rb" ))
-    
+        
         #Export metrics and perform final analysis for the result
         result.complete(sampleData)
         
@@ -314,14 +316,14 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
             lastAvgERD_NRMSE = [avgERD_NRMSE_Results[i][-1] for i in range(0, numJobs)]
             lastAvgChanERD_NRMSE = [avgChanERD_NRMSE_Results[i][-1] for i in range(0, numJobs)]
         #==========================================================================================================================================================================
-        
+    
     #Setup to print/save final results 
     dataPrintout = [['','Average', '', 'Standard Deviation']]
     dataPrintout.append(['Final %:', np.mean(lastQuantityMeasured), '+/-', np.std(lastQuantityMeasured)])
     
     #If not performing a benchmark where processing is not needed and was not performed
     if not benchmarkNoProcessing:
-    
+        
         #==========================================================================================================================================================================
         #Format averaged metrics
         #==========================================================================================================================================================================
@@ -388,4 +390,5 @@ def simulateSampling(sortedSampleFolders, dir_Results, optimalC, modelName):
         for sampleDataLocation in sampleDataLocations: os.remove(sampleDataLocation)  
         os.remove(dir_TestingResults + 'resultLocations.p')
         os.remove(dir_TestingResults + 'sampleDataLocations.p')
+    
     

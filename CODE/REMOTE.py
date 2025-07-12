@@ -75,23 +75,8 @@ class Recon_Actor:
             for index in range(0, len(self.indexes)): self.reconImages[index] = computeReconIDW(self.reconImages[index], tempScanData)
         elif self.sampleType == 'DESI': 
             self.reconImages = np.zeros((len(self.indexes), self.finalDim[0], self.finalDim[1]))
-            for index in range(0, len(self.indexes)): self.reconImages[index] = resize(computeReconIDW(resize(self.allImages[index], tuple(self.squareDim), order=0)*squareMask, tempScanData), tuple(self.finalDim), order=0)
+            for index in range(0, len(self.indexes)): self.reconImages[index] = resizeData(computeReconIDW(resizeData(self.allImages[index], self.squareDim, False)*squareMask, tempScanData), self.finalDim, False)
             self.reconImages = (self.reconImages*(1-mask)) + (self.allImages*mask)
-        
-        #
-        #elif self.sampleType == 'DESI': self.reconImages = self.squareAllImages*squareMask
-        #self.reconImages = np.moveaxis(resize(np.moveaxis(self.allImages, 0, -1), tuple(squareDim), order=0), -1, 0)*squareMask
-        #
-        #Compute IDW reconstructions
-        #for index in range(0, len(self.indexes)): self.reconImages[index] = computeReconIDW(self.reconImages[index], tempScanData)
-        #
-        #Resize DESI data back to physical dimensions and copy back the original measured values to reconstructions; creating new holding array for resized results and looping is needed for memory efficiency
-        #if self.sampleType == 'DESI': 
-        #    
-        #    for index in range(0, len(self.indexes)): resizedReconImages[index] = resize(self.reconImages[index], tuple(self.finalDim), order=0)
-        #    self.reconImages = resizedReconImages
-        #    del resizedReconImages
-        #    self.reconImages = (self.reconImages*(1-mask)) + (self.allImages*mask)
         
     #Compute NRMSE/SSIM for reconstructions
     def computeMetrics(self):
@@ -240,7 +225,7 @@ def msi_parhelper(allImagesActor, format, readAllMSI, scanFileNames, indexData, 
         #CWT choice/parameters - https://pmc.ncbi.nlm.nih.gov/articles/PMC9865071/ and #https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-10-4
         for index in indexData:
             mzs, ints = data.getspectrum(index)
-            mzs, ints = np.asarray(mzs, dtype='str').astype(np.float64), np.asarray(ints, dtype='str').astype(np.float64)
+            mzs, ints = np.asarray(mzs, dtype='str').astype(np.float64), np.ascontiguousarray(ints, dtype='str').astype(np.float64)
             if data.spectrum_mode == 'profile':
                 peakLocations = find_peaks_cwt(ints, np.arange(1,30), min_snr=3.0)
                 mzs, ints = mzs[peakLocations], ints[peakLocations]
@@ -298,7 +283,7 @@ def msi_parhelper(allImagesActor, format, readAllMSI, scanFileNames, indexData, 
         
         #If there was new data, transfer information to shared memory actor
         if len(readScanFiles) > 0: 
-            _ = ray.get(allImagesActor.setValues.remote(indexData, mzDataTotal, chanDataTotal, sumDataTotal, origTimesTotal, np.array(lineNumTotal), readScanFiles, allDataInterpFailTotal))
+            _ = ray.get(allImagesActor.setValues.remote(indexData, mzDataTotal, chanDataTotal, sumDataTotal, origTimesTotal, np.asarray(lineNumTotal), readScanFiles, allDataInterpFailTotal))
 
 #If version > 0.10.1, delete this comment block; left for documentation 
 #================================================================================================================================

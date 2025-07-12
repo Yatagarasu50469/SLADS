@@ -11,7 +11,7 @@ if os.path.exists(destResultsFolder):
         shutil.rmtree(destResultsFolder)
     else: 
         destinationNameValue = 0
-        destResultsFolder_Base = copy.deepcopy(destResultsFolder)
+        destResultsFolder_Base = deepcopy(destResultsFolder)
         while True:
             destResultsFolder = destResultsFolder_Base + '_' + str(destinationNameValue)
             if not os.path.exists(destResultsFolder): break

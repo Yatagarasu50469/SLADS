@@ -20,10 +20,10 @@ environmentalVariables["HDF5_USE_FILE_LOCKING"] = "FALSE"
 environmentalVariables["MPLBACKEND"] = "agg"
 
 #Allocate memory for CUDA in an asynchronous manner when using TensorFlow; disable this line if GPU compute is < 6.1 (Maxwell and previous)
-if 'DLADS-TF' in erdModel : environmentalVariables["TF_GPU_ALLOCATOR"]="cuda_malloc_async"
+if 'DLADS-TF' in erdModel: environmentalVariables["TF_GPU_ALLOCATOR"] = "cuda_malloc_async"
 
 #Enable deterministic operations in TensorFlow as applicable; may only make `tf.nn.bias_add` operate deterministically
-if manualSeedValue != -1 and erdModel == 'DLADS-TF': environmentalVariables["TF_DETERMINISTIC_OPS"] = "1"
+if manualSeedValue != -1 and 'DLADS-TF' in erdModel: environmentalVariables["TF_DETERMINISTIC_OPS"] = "1"
 
 #Increase memory usage threshold for Ray from the default 95%
 environmentalVariables["RAY_memory_usage_threshold"] = "0.99"
@@ -61,7 +61,6 @@ for var, value in environmentalVariables.items(): os.environ[var] = value
 #==================================================================
 
 import contextlib
-import copy
 import ctypes
 import cv2
 import datetime
@@ -79,7 +78,8 @@ import natsort
 import numpy as np
 import opentimspy
 import pandas as pd
-import pickle
+#import pickle
+import _pickle as pickle
 import PIL
 import platform
 import psutil
@@ -98,6 +98,7 @@ import warnings
 from bisect import bisect_left, bisect_right, bisect
 from collections import defaultdict
 from contextlib import nullcontext
+from copy import deepcopy
 from IPython.core.debugger import set_trace as Tracer
 from joblib import Parallel, delayed
 from matplotlib.pyplot import figure
@@ -163,7 +164,7 @@ setupLogging()
 sys.coinit_flags = 0 
 
 #Setup deterministic behavior
-if (manualSeedValue != -1): 
+if manualSeedValue != -1: 
     if 'DLADS-TF' in erdModel: tf.config.experimental.enable_op_determinism()
     if 'DLADS-PY' in erdModel or 'GLANDS' in erdModel: torch.use_deterministic_algorithms(True, warn_only=False)
 

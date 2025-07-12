@@ -6,8 +6,8 @@
 # PROGRAM
 
     NAME:           SLADS/DLADS/GLANDS
-    MODIFIED:       12 May 2025
-    VERSION:        0.10.1
+    MODIFIED:       12 July 2025
+    VERSION:        0.10.2
     LICENSE:        GNU General Public License v3.0
     DESCRIPTION:    Dynamic sampling algorithms with updated/developing implementations of:
                        -SLADS       Supervised Learning Approach for Dynamic Sampling, using Least-Squares (LS) regression or a Multi-Layer Perceptron (MLP) neural Network (Net)
@@ -498,6 +498,9 @@ Multiplierz relies on vendor-provided, proprietary .dll files to read MSI data a
 ### Why is manual installation of the mutliplierz package needed?
 Compatibility support for Bruker .tsf MSI files is not currently available in the main package (Reference: https://github.com/BlaisProteomics/multiplierz/issues/10). Additionally, a required overhead bypass flag has not yet been validated as functional (Reference: https://github.com/BlaisProteomics/multiplierz/issues/9). While support for .tsf files and the required bypass flag is currently being deprecated, this note will remain until functionality with the primary repository has been confirmed.  
 
+### Why are only some numpy arrays forced to be contiguous?
+If array float data is ever used in a summary computation where order can change the result (sum, mean, var, std, etc.) then it should be made contiguous to ensure repeatable behavior. Saving and loading data forces data to be contiguous, which previously was not ensured and has been observed to result in inconsistencies between sampling and evaluation. These differences were far too small to make a difference to resulting behaviors, but were/are frustrating when debugging/validating functionality. Some examples of regularly used numpy operations that affect C-contiguous formatting include: moveaxis(), transpose(), asarray(), and array(); copy() tries to adopt the source format. Setting values from a non-contiguous array source into a target contiguous array does not change the format of the target. Data in h5py files are contiguous by default.
+
 ### Why has the framework been switched to PyTorch?
 The short answer is that TensorFlow, as of v2.10.1, has dropped support for GPU acceleration on Windows and Agilent .D files can only be read/used on native Windows. Older model variants (referenced as 'DLADS-TF' during configuration) have been included (principally for benchmarking and historical reference) and should be functional if a TensorFlow installation (lower than v2.16) is available/desirable. Theoretically, installation of TensorFlow v2.10.1 would enable the model to run with CUDA acceleration on native Windows, though issues with keras augmentation layers in that release would be expected to significantly hamper model training performance. Legacy model variants have been successfully installed and run in an Ubuntu 22.04 guest, on a Windows 11 host, through WSL2 (Windows Subsystem for Linux), using the directions below. 
 
@@ -617,32 +620,32 @@ Ray/Python pin objects in memory if any reference to them still exists; referenc
 **Simulatated Acquisition of MALDI MSI with DLADS**  
 **Version(s):** v0.9.5  
 **Subject:** MALDI MSI  
-**Citation(s):** D. Helminiak, T. Boskamp, and D. H. Ye, “Multimodal Deep Learning Approach for Dynamic Sampling with Automatic Feature Selection in Matrix-Assisted Laser Desorption/Ionization Mass Spectrometry Imaging,” Electronic Imaging, vol. 36, no. 15. Society for Imaging Science & Technology, pp. 143-1-143–6, Jan. 21, 2024. doi: 10.2352/ei.2024.36.15.coimg-143.   
+**Citation(s):** D. Helminiak, T. Boskamp, and D. H. Ye, “Multimodal Deep Learning Approach for Dynamic Sampling with Automatic Feature Selection in Matrix-Assisted Laser Desorption/Ionization Mass Spectrometry Imaging,” Electronic Imaging, vol. 36, no. 15, pp. 143–1143–6, Jan. 2024, doi: doi.org/10.2352/ei.2024.36.15.coimg-143.  
 **Available:** (https://library.imaging.org/admin/apis/public/api/ist/website/downloadArticle/ei/36/15/COIMG-143)
 
 **Updated Simulatated Acquisition of DESI MSI with DLADS**  
 **Version(s):** v0.9.2  
 **Subject:** DESI MSI  
-**Citation(s):** D. Helminiak, H. Hu, J. Laskin, D. Ye. “Deep Learning Approach for Dynamic Sparse Sampling for Multi-Channel Mass Spectrometry Imaging“, IEEE Transactions on Computational Imaging, 9, 250-259 (2023). DOI:10.1109/TCI.2023.3248947  
+**Citation(s):** D. Helminiak, H. Hu, J. Laskin, and Dong Hye Ye, “Deep Learning Approach for Dynamic Sampling for Multichannel Mass Spectrometry Imaging,” vol. 9, pp. 250–259, Jan. 2023, doi: doi.org/10.1109/tci.2023.3248947.  
 **Available:** (https://ieeexplore.ieee.org/document/10052699), (https://arxiv.org/abs/2210.13415)   
 
 **Experimental DESI MSI Integration with DLADS**  
 **Version(s):** Experimental results were determined with v0.8.9, and simulation results with v0.9.1  
 **Subject:** DESI MSI  
-**Citation(s):** H. Hu, D. Helminiak, M. Yang, D. Unsihuay, R.T. Hilger, D. H. Ye, and J. Laskin, "High-throughput mass spectrometry imaging with dynamic sparse sampling," ACS Measurement Science Au, Aug. 2022.   
+**Citation(s):** H. Hu et al., “High-Throughput Mass Spectrometry Imaging with Dynamic Sparse Sampling,” vol. 2, no. 5, pp. 466–474, Aug. 2022, doi: doi.org/10.1021/acsmeasuresciau.2c00031.  
 **Available:** (https://pubs.acs.org/doi/10.1021/acsmeasuresciau.2c00031)
 
 **Development for Simulatated Acquisition of DESI MSI with DLADS - Master's Thesis**  
 **Version(s):** v0.8.6  
 **Subject:** DESI MSI  
-**Citation(s):**  D. S. Helminiak, “Deep Learning Approach for Dynamic Sampling for High-Throughput Nano-DESI MSI,” Master’s Thesis, Marquette University, 2021.   
+**Citation(s):**  D. S. Helminiak, “Deep Learning Approach for Dynamic Sampling for High-Throughput Nano-DESI MSI,” Master’s Thesis, Marquette University, 2021.  
 **Available:** (https://epublications.marquette.edu/theses_open/710)  
 **Presentation:** (https://www.youtube.com/watch?v=WY5Ae19pmiE)
 
 **Initial Simulatated Acquisition of with DLADS**  
 **Version(s):** v0.6.9 and v0.7.3  
 **Subject:**  DESI MSI  
-**Citation(s):** D. Helminiak, H. Hu, J. Laskin, and D. H. Ye, “Deep learning approach for dynamic sparse sampling for high-throughput mass spectrometry imaging,” Electronic Imaging, vol. 2021, no. 15, pp. 290–1–290–7, Jan. 2021.  
+**Citation(s):** D. Helminiak, H. Hu, J. Laskin, and D. H. Ye, “Deep Learning Approach for Dynamic Sparse Sampling for High-Throughput Mass Spectrometry Imaging,” Electronic Imaging, 2021, doi: doi.org/10.2352/issn.2470-1173.2021.15.coimg-290.  
 **Available:** (https://doi.org/10.2352/issn.2470-1173.2021.15.coimg-290)
 
 ### SIMILAR & PRECEEDING RESEARCH
@@ -650,39 +653,49 @@ Ray/Python pin objects in memory if any reference to them still exists; referenc
 **Original SLADS-Net**  
 **Version(s):** (https://github.com/saugatkandel/fast_smart_scanning)  
 **Subject:** Scanning Electron Microscopy and Fast Autonomous Scanning Toolkit (FAST)
-**Citation(s):** Kandel, S., Zhou, T., Babu, A.V. et al. Demonstration of an AI-driven workflow for autonomous high-resolution scanning microscopy. Nat Commun 14, 5501 (2023). https://doi.org/10.1038/s41467-023-40339-1
+**Citation(s):** S. Kandel et al., “Demonstration of an AI-driven workflow for autonomous high-resolution scanning microscopy,” Nature Communications, vol. 14, no. 1, Sep. 2023, doi: doi.org/10.1038/s41467-023-40339-1.  
 **Available:** (https://www.nature.com/articles/s41467-023-40339-1), (https://arxiv.org/pdf/2301.05286)
 
 **Original SLADS-Net**  
 **Version(s):** (https://github.com/cphatak/SLADS-Net), (https://github.com/anl-msd/SLADS-Net)  
 **Subject:**  Scanning Electron Microscopy  
-**Citation(s):** Y. Zhang, G. Godaliyadda, N. Ferrier, E. Gulsoy, C. Bouman, and C. Phatak, “Slads-net: Supervised learning approach for dynamic sampling using deep neural networks,” 2018.  
+**Citation(s):** Y. Zhang, G. M. Dilshan Godaliyadda, N. Ferrier, E. B. Gulsoy, C. A. Bouman, and C. Phatak, “SLADS-Net: Supervised Learning Approach for Dynamic Sampling using Deep Neural Networks,” Electronic Imaging, vol. 30, no. 15, pp. 131–1316, Jan. 2018, doi: doi.org/10.2352/issn.2470-1173.2018.15.coimg-131.  
 **Available:** (https://doi.org/10.2352/ISSN.2470-1173.2018.15.COIMG-131)
 
 **Unsupervised-SLADS (U-SLADS)**  
 **Subject:**  Metal Dendrite Sampling  
-**Citation(s):** Y. Zhang, X. Huang, N. Ferrier, E. Gulsoy, and C. Phatak, “U-slads: Unsupervised learning approach for dynamic dendrite sampling,” 2018  
+**Citation(s):** Y. Zhang, X. Huang, N. J. Ferrier, Emine Begum Gulsoy, and C. Phatak, “U-SLADS: Unsupervised Learning Approach for Dynamic Dendrite Sampling,” arXiv (Cornell University), Jan. 2018, doi: doi.org/10.48550/arxiv.1807.02233.  
 **Available:** (https://arxiv.org/abs/1807.02233)
 
 **Original SLADS-LS**  
 **Subject:**  Energy Dispersive X-Ray Spectroscopy  
-**Citation(s):** Y. Zhang, G. Godaliyadda, N. Ferrier, E. Gulsoy, C. Bouman, and C. Phatak, “Reduced electron exposure for energy-dispersive spectroscopy using dynamic sampling,” Ultramicroscopy, vol. 184, pp. 90 – 97, 2018.  
+**Citation(s):** Y. Zhang, G. M. D. Godaliyadda, N. Ferrier, E. B. Gulsoy, C. A. Bouman, and C. Phatak, “Reduced electron exposure for energy-dispersive spectroscopy using dynamic sampling,” Ultramicroscopy, vol. 184, pp. 90–97, Jan. 2018, doi: doi.org/10.1016/j.ultramic.2017.10.015.  
 **Available:** (https://sciencedirect.com/science/article/pii/S0304399117303157)
 
 **Original SLADS-LS**  
 **Subject:** Electron Back Scatter Diffraction  
-**Citation(s):** G. Godaliyadda, D. Ye, M. Uchic, M. Groeber, G. Buzzard, and C. Bouman, “A framework for dynamic image sampling based on supervised learning,” IEEE Transactions on Computational Imaging, vol. 4, no. 1, pp. 1–16, mar 2018.  
+**Citation(s):** G. M. Dilshan P. Godaliyadda, D. H. Ye, M. D. Uchic, M. A. Groeber, G. T. Buzzard, and C. A. Bouman, “A Framework for Dynamic Image Sampling Based on Supervised Learning,” IEEE Transactions on Computational Imaging, vol. 4, no. 1, pp. 1–16, Nov. 2017, doi: doi.org/10.1109/tci.2017.2777482.  
 **Available:** (https://doi.org/10.1109/tci.2017.2777482)
 
-**Original SLADS-Net**
+**Original SLADS-LS**
 **Subject:** Confocal Raman Microscopy  
-**Citation(s):** S. Zhang, Z. Song, G. Godaliyadda, D. Ye, A. Chowdhury, A. Sengupta, G. Buzzard, C. Bouman, and G. Simpson, “Dynamic sparse sampling for confocal raman microscopy,” Analytical Chemistry, vol. 90, no. 7, pp. 4461–4469, mar 2018.  
+**Citation(s):** S. Zhang et al., “Dynamic Sparse Sampling for Confocal Raman Microscopy,” vol. 90, no. 7, pp. 4461–4469, Mar. 2018, doi: doi.org/10.1021/acs.analchem.7b04749.  
 **Available:** (https://doi.org/10.1021/acs.analchem.7b04749)
+
+**Original SLADS-LS**
+**Subject:** Confocal Raman Microscopy  
+**Citation(s):** S. Zhang et al., “A Supervised Learning Approach for Dynamic Sampling (SLADS) in Raman Hyperspectral Imaging,” Electronic Imaging, vol. 30, no. 15, pp. 132–1323, Jan. 2018, doi: doi.org/10.2352/issn.2470-1173.2018.15.coimg-132.  
+**Available:** (https://doi.org/10.2352/issn.2470-1173.2018.15.coimg-132)
 
 **Original SLADS-LS**  
 **Subject:** X-Ray Diffraction  
-**Citation(s):** N. Scarborough, G. Godaliyadda, D. Ye, D. Kissick, S. Zhang, J. Newman, M. Sheedlo, A. Chowdhury, R. Fischetti, C. Das, G. Buzzard, C. Bouman, and G. Simpson, “Dynamic x-ray diffraction sampling for protein crystal positioning,” Journal of Synchrotron Radiation, vol. 24, no. 1, pp. 188–195, jan 2017.  
+**Citation(s):** N. M. Scarborough et al., “Dynamic X-ray diffraction sampling for protein crystal positioning,” Journal of Synchrotron Radiation, vol. 24, no. 1, pp. 188–195, Jan. 2017, doi: doi.org/10.1107/s160057751601612x.  
 **Available:** (https://doi.org/10.1107/s160057751601612x)
+
+**Original SLADS-LS**  
+**Subject:** X-Ray Diffraction  
+**Citation(s):** N. M. Scarborough et al., “Synchrotron X-Ray Diffraction Dynamic Sampling for Protein Crystal Centering,” Electronic Imaging, vol. 29, no. 17, pp. 6–9, Jan. 2017, doi: doi.org/10.2352/issn.2470-1173.2017.17.coimg-415.  
+**Available:** (https://doi.org/10.2352/issn.2470-1173.2017.17.coimg-415)
 
 **Original SLADS-LS - Dissertation**  
 **Subject:** Scanning Electron Microscopy, X-Ray Diffraction, Energy Dispersive Spectroscopy, Confocal Raman Microscopy  
@@ -691,5 +704,5 @@ Ray/Python pin objects in memory if any reference to them still exists; referenc
 
 **Original SLADS-LS**  
 **Subject:** Electron Backscatter Diffraction Microscopy  
-**Citation(s):** G. M. D. Godaliyadda, D. Ye, M. D. Uchic, M. A. Groeber, G. T. Buzzard, C. A. Bouman, "A Supervised Learning Approach for Dynamic Sampling" in Proc. IS&T Int’l. Symp. on Electronic Imaging: Computational Imaging XIV, 2016  
+**Citation(s):** G. M. D. Godaliyadda, D. H. Ye, M. D. Uchic, M. A. Groeber, G. T. Buzzard, and C. A. Bouman, “A Supervised Learning Approach for Dynamic Sampling,” Electronic Imaging, vol. 28, no. 19, pp. 1–8, Feb. 2016, doi: doi.org/10.2352/issn.2470-1173.2016.19.coimg-153.  
 **Available:** (https://doi.org/10.2352/ISSN.2470-1173.2016.19.COIMG-153)
